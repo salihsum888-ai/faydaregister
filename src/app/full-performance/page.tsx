@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -58,10 +57,52 @@ const COLORS = {
 };
 
 const getThresholdColor = (value: number) => {
-  if (value >= 85) return '#10b981';
-  if (value >= 80) return '#f59e0b';
-  return '#ef4444';
+  if (value >= 85) return '#10b981'; // Elite (Green)
+  if (value >= 80) return '#f59e0b'; // Caution (Yellow)
+  return '#ef4444'; // Critical (Red)
 };
+
+function MetricGauge({ label, value, color, icon: Icon, trend, description, inverseTrend = false }: any) {
+  const data = [{ name: label, value: value, fill: color }];
+  const isUp = trend > 0;
+  const isNeutral = trend === 0;
+  
+  // If inverseTrend is true (like Error or Rejection), Down is GOOD, Up is BAD.
+  const isGood = inverseTrend ? trend < 0 : trend > 0;
+
+  return (
+    <Card className="border border-border bg-card shadow-sm rounded-[2.5rem] overflow-hidden flex flex-col items-center justify-center p-8 relative group transition-all hover:shadow-2xl">
+      <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-10 transition-opacity">
+        <Icon className="h-32 w-32" />
+      </div>
+      
+      <div className="h-[180px] w-full relative z-10">
+        <ResponsiveContainer width="100%" height="100%">
+          <RadialBarChart cx="50%" cy="50%" innerRadius="70%" outerRadius="100%" barSize={15} data={data} startAngle={180} endAngle={0}>
+            <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+            <RadialBar background dataKey="value" cornerRadius={30} />
+          </RadialBarChart>
+        </ResponsiveContainer>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pt-10">
+           <span className="text-4xl font-mono font-black text-foreground tracking-tighter tabular-nums">{value}%</span>
+           <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em] mt-1">{label}</p>
+        </div>
+      </div>
+
+      <div className="w-full text-center relative z-10 mt-2 space-y-2">
+         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{description}</p>
+         <div className={cn(
+           "flex items-center justify-center gap-1 text-[9px] font-mono font-black uppercase tracking-tighter px-2 py-0.5 rounded-full w-fit mx-auto",
+           isNeutral ? "bg-muted text-muted-foreground" :
+           isGood ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"
+         )}>
+           {!isNeutral && (isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />)}
+           {isNeutral ? 'Stable' : `${Math.abs(trend).toFixed(1)}% MoM`}
+         </div>
+      </div>
+    </Card>
+  );
+}
 
 export default function FullPerformancePage() {
   const { user, isUserLoading } = useUser();
@@ -285,6 +326,7 @@ export default function FullPerformancePage() {
               icon={CheckCircle2} 
               trend={stats.trends.processed}
               description="Finalized Documents"
+              inverseTrend={false}
             />
             <MetricGauge 
               label="Triage Rate" 
@@ -293,6 +335,7 @@ export default function FullPerformancePage() {
               icon={Activity} 
               trend={stats.trends.processing}
               description="Active Pipeline"
+              inverseTrend={true}
             />
             <MetricGauge 
               label="Purge Rate" 
@@ -301,6 +344,7 @@ export default function FullPerformancePage() {
               icon={ShieldAlert} 
               trend={stats.trends.rejected}
               description="Protocol Rejections"
+              inverseTrend={true}
             />
             <MetricGauge 
               label="Error Rate" 
@@ -309,6 +353,7 @@ export default function FullPerformancePage() {
               icon={AlertCircle} 
               trend={stats.trends.failed}
               description="System Failures"
+              inverseTrend={true}
             />
           </section>
 
@@ -521,42 +566,5 @@ export default function FullPerformancePage() {
         </div>
       )}
     </div>
-  );
-}
-
-function MetricGauge({ label, value, color, icon: Icon, trend, description }: any) {
-  const data = [{ name: label, value: value, fill: color }];
-  const isPositive = trend >= 0;
-
-  return (
-    <Card className="border border-border bg-card shadow-sm rounded-[2.5rem] overflow-hidden flex flex-col items-center justify-center p-8 relative group transition-all hover:shadow-2xl">
-      <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-10 transition-opacity">
-        <Icon className="h-32 w-32" />
-      </div>
-      
-      <div className="h-[180px] w-full relative z-10">
-        <ResponsiveContainer width="100%" height="100%">
-          <RadialBarChart cx="50%" cy="50%" innerRadius="70%" outerRadius="100%" barSize={15} data={data} startAngle={180} endAngle={0}>
-            <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-            <RadialBar background dataKey="value" cornerRadius={30} />
-          </RadialBarChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pt-10">
-           <span className="text-4xl font-mono font-black text-foreground tracking-tighter tabular-nums">{value}%</span>
-           <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em] mt-1">{label}</p>
-        </div>
-      </div>
-
-      <div className="w-full text-center relative z-10 mt-2 space-y-2">
-         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{description}</p>
-         <div className={cn(
-           "flex items-center justify-center gap-1 text-[9px] font-mono font-black uppercase tracking-tighter px-2 py-0.5 rounded-full w-fit mx-auto",
-           isPositive ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"
-         )}>
-           {isPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-           {Math.abs(trend).toFixed(1)}% MoM
-         </div>
-      </div>
-    </Card>
   );
 }

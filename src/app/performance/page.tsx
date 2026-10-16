@@ -94,14 +94,18 @@ const COLORS = {
 };
 
 const getThresholdColor = (value: number) => {
-  if (value >= 85) return '#10b981';
-  if (value >= 80) return '#f59e0b';
-  return '#ef4444';
+  if (value >= 85) return '#10b981'; // Good (Green)
+  if (value >= 80) return '#f59e0b'; // Middle (Yellow)
+  return '#ef4444'; // Bad (Red)
 };
 
-function MetricGauge({ label, value, color, icon: Icon, trend, description }: any) {
+function MetricGauge({ label, value, color, icon: Icon, trend, description, inverseTrend = false }: any) {
   const data = [{ name: label, value: value, fill: color }];
-  const isPositive = trend >= 0;
+  const isUp = trend > 0;
+  const isNeutral = trend === 0;
+  
+  // If inverseTrend is true (like Error or Rejection), Up is BAD, Down is GOOD.
+  const isGood = inverseTrend ? trend < 0 : trend > 0;
 
   return (
     <Card className="border border-border bg-card shadow-sm rounded-[2.5rem] overflow-hidden flex flex-col items-center justify-center p-8 relative group transition-all hover:shadow-2xl">
@@ -126,10 +130,11 @@ function MetricGauge({ label, value, color, icon: Icon, trend, description }: an
          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{description}</p>
          <div className={cn(
            "flex items-center justify-center gap-1 text-[9px] font-mono font-black uppercase tracking-tighter px-2 py-0.5 rounded-full w-fit mx-auto",
-           isPositive ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"
+           isNeutral ? "bg-muted text-muted-foreground" :
+           isGood ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"
          )}>
-           {isPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-           {Math.abs(trend).toFixed(1)}% MoM
+           {!isNeutral && (isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />)}
+           {isNeutral ? 'Steady' : `${Math.abs(trend).toFixed(1)}% MoM`}
          </div>
       </div>
     </Card>
@@ -419,6 +424,7 @@ function PerformanceContent() {
               icon={CheckCircle2} 
               trend={stats.trends.processed}
               description="Finalized Documents"
+              inverseTrend={false}
             />
             <MetricGauge 
               label="Triage Rate" 
@@ -427,6 +433,7 @@ function PerformanceContent() {
               icon={Activity} 
               trend={stats.trends.processing}
               description="Active Pipeline"
+              inverseTrend={true}
             />
             <MetricGauge 
               label="Purge Rate" 
@@ -435,6 +442,7 @@ function PerformanceContent() {
               icon={ShieldAlert} 
               trend={stats.trends.rejected}
               description="Protocol Rejections"
+              inverseTrend={true}
             />
             <MetricGauge 
               label="Error Rate" 
@@ -443,6 +451,7 @@ function PerformanceContent() {
               icon={AlertCircle} 
               trend={stats.trends.failed}
               description="System Failures"
+              inverseTrend={true}
             />
           </section>
 
