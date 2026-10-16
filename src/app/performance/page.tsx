@@ -99,16 +99,19 @@ const getThresholdColor = (value: number) => {
   return '#ef4444'; // Bad (Red)
 };
 
-function MetricGauge({ label, value, color, icon: Icon, trend, description, inverseTrend = false }: any) {
+function MetricGauge({ label, value, color, icon: Icon, trend, description, inverseTrend = false, statusColorClass }: any) {
   const data = [{ name: label, value: value, fill: color }];
   const isUp = trend > 0;
   const isNeutral = trend === 0;
   
-  // If inverseTrend is true (like Error or Rejection), Up is BAD, Down is GOOD.
+  // If inverseTrend is true (like Error or Rejection), Down is GOOD, Up is BAD.
   const isGood = inverseTrend ? trend < 0 : trend > 0;
 
   return (
-    <Card className="border border-border bg-card shadow-sm rounded-[2.5rem] overflow-hidden flex flex-col items-center justify-center p-8 relative group transition-all hover:shadow-2xl">
+    <Card className={cn(
+      "border bg-card shadow-sm rounded-[2.5rem] overflow-hidden flex flex-col items-center justify-center p-8 relative group transition-all hover:shadow-2xl",
+      statusColorClass || "border-border"
+    )}>
       <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-10 transition-opacity">
         <Icon className="h-32 w-32" />
       </div>
@@ -425,6 +428,11 @@ function PerformanceContent() {
               trend={stats.trends.processed}
               description="Finalized Documents"
               inverseTrend={false}
+              statusColorClass={
+                stats.successRate >= 85 ? "border-emerald-500/50 bg-emerald-500/[0.01]" : 
+                stats.successRate >= 80 ? "border-amber-500/50 bg-amber-500/[0.01]" : 
+                "border-rose-500/50 bg-rose-500/[0.01]"
+              }
             />
             <MetricGauge 
               label="Triage Rate" 
