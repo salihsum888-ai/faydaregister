@@ -15,7 +15,7 @@ import {
   Megaphone,
   CalendarPlus,
   MessageSquare,
-  ClipboardEdit,
+  FilePenLine,
   Sun,
   Moon,
   Settings,
@@ -30,7 +30,7 @@ import {
   Wifi,
   WifiOff,
   MoreHorizontal,
-  ClipboardText,
+  ClipboardList,
   LayoutGrid
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -147,7 +147,7 @@ export function Navbar() {
     { name: 'Status Check', href: '/status-check', icon: Search },
     { name: 'Printing', href: '/printing', icon: Printer },
     { name: 'Personnel', href: '/admin/officers', icon: Users },
-    { name: 'Proxy Entry', href: '/admin/reports-entry', icon: ClipboardEdit },
+    { name: 'Proxy Entry', href: '/admin/reports-entry', icon: FilePenLine },
     { name: 'Broadcasts', href: '/admin/announcements', icon: Megaphone },
     { name: 'Branding', href: '/admin/settings', icon: Settings },
   ] : [
@@ -158,7 +158,7 @@ export function Navbar() {
     { name: 'Daily Reports', href: '/daily-registrations', icon: CalendarPlus },
     { name: 'Records', href: '/registrations', icon: FileCheck },
     { name: 'History', href: '/historical', icon: Database },
-    { name: 'Analytics', href: '/reports', icon: ClipboardText },
+    { name: 'Analytics', href: '/reports', icon: ClipboardList },
     { name: 'Ranks', href: '/leaderboard', icon: Trophy },
   ];
 
@@ -313,7 +313,7 @@ export function Navbar() {
         </div>
       </header>
 
-      {/* High-Fidelity Mobile Tab Bar (Active Box Design) */}
+      {/* High-Fidelity Mobile Floating Navbar (Active Box Design) */}
       {user && (
         <nav className={cn(
           "lg:hidden fixed bottom-6 left-4 right-4 z-50 transition-all duration-500 ease-in-out",
@@ -386,7 +386,7 @@ export function Navbar() {
                         pathname === item.href ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border hover:bg-muted"
                       )}
                     >
-                      <item.icon className="h-4 w-4" />
+                      {item.icon && <item.icon className="h-4 w-4" />}
                       <span className="text-[10px] font-black uppercase tracking-widest">{item.name}</span>
                     </Link>
                   ))}
