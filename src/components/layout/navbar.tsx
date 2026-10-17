@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { 
   LayoutDashboard, 
   FileCheck, 
-  Database as DatabaseIcon, 
+  Database, 
   Bell, 
   Trophy,
   LogOut,
@@ -24,13 +24,14 @@ import {
   TrendingUp,
   Printer,
   ShieldCheck,
-  History as HistoryIcon,
+  History,
   ChevronDown,
   LineChart,
   Wifi,
   WifiOff,
   MoreHorizontal,
-  ClipboardText
+  ClipboardText,
+  LayoutGrid
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -46,15 +47,15 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { useAuth, useUser, useDoc, useMemoFirebase, useFirestore, useCollection } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { doc, collection, query, where } from 'firebase/firestore';
-import { UserProfile, Notification, Announcement, SystemSettings } from '@/lib/types';
+import { UserProfile, Notification, SystemSettings } from '@/lib/types';
 import { useEffect, useState, useRef } from 'react';
 import { useTheme } from 'next-themes';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Tooltip,
-  TooltipContent,
   TooltipProvider,
   TooltipTrigger,
+  TooltipContent,
 } from "@/components/ui/tooltip"
 
 const DEFAULT_LOGO = "https://services.eaes.et/NID-Logos/Fayda%20For%20Ethiopia%20logo-%20english-2-01.png";
@@ -69,8 +70,6 @@ export function Navbar() {
   const [mounted, setMounted] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  
-  // Collapsible Navigation Logic
   const [isNavVisible, setIsNavVisible] = useState(true);
   const lastScrollY = useRef(0);
 
@@ -127,46 +126,41 @@ export function Navbar() {
 
   const isAdmin = profile?.role === 'admin';
 
-  const OFFICER_PRIMARY_NAV = [
-    { name: 'Home', href: '/dashboard', icon: LayoutDashboard },
+  const PRIMARY_NAV = [
+    { name: 'Home', href: isAdmin ? '/admin' : '/dashboard', icon: LayoutDashboard },
     { name: 'Intel', href: '/full-performance', icon: LineChart },
     { name: 'Pulse', href: '/full-registration', icon: Activity },
     { name: 'Chat', href: '/communication', icon: MessageSquare },
   ];
 
-  const OFFICER_SECONDARY_NAV = [
-    { name: 'Performance', href: '/performance', icon: TrendingUp },
-    { name: 'Comparison', href: '/previous', icon: HistoryIcon },
-    { name: 'Status Check', href: '/status-check', icon: Search },
-    { name: 'Printing', href: '/printing', icon: Printer },
-    { name: 'Daily Reports', href: '/daily-registrations', icon: CalendarPlus },
-    { name: 'Records', href: '/registrations', icon: FileCheck },
-    { name: 'History', href: '/historical', icon: DatabaseIcon },
-    { name: 'Analytics', href: '/reports', icon: ClipboardText },
-    { name: 'Ranks', href: '/leaderboard', icon: Trophy },
+  const MOBILE_NAV = [
+    { name: 'HOME', href: isAdmin ? '/admin' : '/dashboard', icon: LayoutGrid },
+    { name: 'INTEL', href: '/full-performance', icon: LineChart },
+    { name: 'PULSE', href: '/full-registration', icon: Activity },
+    { name: 'CHAT', href: '/communication', icon: MessageSquare },
   ];
 
-  const ADMIN_PRIMARY_NAV = [
-    { name: 'Home', href: '/admin', icon: LayoutDashboard },
-    { name: 'Intel', href: '/full-performance', icon: LineChart },
-    { name: 'Pulse', href: '/full-registration', icon: Activity },
-    { name: 'Chat', href: '/communication', icon: MessageSquare },
-  ];
-
-  const ADMIN_SECONDARY_NAV = [
+  const SECONDARY_NAV = isAdmin ? [
     { name: 'Audit', href: '/admin/audit-ledger', icon: ShieldCheck },
     { name: 'Performance', href: '/performance', icon: TrendingUp },
-    { name: 'Comparison', href: '/previous', icon: HistoryIcon },
+    { name: 'Comparison', href: '/previous', icon: History },
     { name: 'Status Check', href: '/status-check', icon: Search },
     { name: 'Printing', href: '/printing', icon: Printer },
     { name: 'Personnel', href: '/admin/officers', icon: Users },
     { name: 'Proxy Entry', href: '/admin/reports-entry', icon: ClipboardEdit },
     { name: 'Broadcasts', href: '/admin/announcements', icon: Megaphone },
     { name: 'Branding', href: '/admin/settings', icon: Settings },
+  ] : [
+    { name: 'Performance', href: '/performance', icon: TrendingUp },
+    { name: 'Comparison', href: '/previous', icon: History },
+    { name: 'Status Check', href: '/status-check', icon: Search },
+    { name: 'Printing', href: '/printing', icon: Printer },
+    { name: 'Daily Reports', href: '/daily-registrations', icon: CalendarPlus },
+    { name: 'Records', href: '/registrations', icon: FileCheck },
+    { name: 'History', href: '/historical', icon: Database },
+    { name: 'Analytics', href: '/reports', icon: ClipboardText },
+    { name: 'Ranks', href: '/leaderboard', icon: Trophy },
   ];
-
-  const primaryItems = isAdmin ? ADMIN_PRIMARY_NAV : OFFICER_PRIMARY_NAV;
-  const secondaryItems = isAdmin ? ADMIN_SECONDARY_NAV : OFFICER_SECONDARY_NAV;
 
   const handleLogout = async () => {
     sessionStorage.removeItem('fayda_mfa_verified');
@@ -192,7 +186,7 @@ export function Navbar() {
             </Link>
 
             <nav className="hidden lg:flex items-center space-x-1">
-              {user && primaryItems.map((item) => (
+              {user && PRIMARY_NAV.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -216,7 +210,7 @@ export function Navbar() {
                   <DropdownMenuContent align="start" className="w-56 p-1 rounded-2xl shadow-2xl border-border bg-popover">
                     <DropdownMenuLabel className="text-[9px] font-black text-muted-foreground uppercase px-2 py-2 tracking-widest">Operational Terminals</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {secondaryItems.map((item) => (
+                    {SECONDARY_NAV.map((item) => (
                       <DropdownMenuItem key={item.href} onClick={() => router.push(item.href)} className="rounded-xl text-[10px] font-bold uppercase tracking-widest cursor-pointer py-3">
                         <item.icon className="mr-2 h-3.5 w-3.5 opacity-60" /> {item.name}
                       </DropdownMenuItem>
@@ -319,13 +313,14 @@ export function Navbar() {
         </div>
       </header>
 
+      {/* High-Fidelity Mobile Tab Bar (Active Box Design) */}
       {user && (
         <nav className={cn(
           "lg:hidden fixed bottom-6 left-4 right-4 z-50 transition-all duration-500 ease-in-out",
           isNavVisible ? "translate-y-0 opacity-100" : "translate-y-[120%] opacity-0"
         )}>
           <div className="relative h-20 w-full bg-slate-100/95 dark:bg-slate-900/95 border border-[#e2e8f0] dark:border-slate-800 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] flex items-center justify-around px-2 backdrop-blur-xl">
-            {primaryItems.map((item) => {
+            {MOBILE_NAV.map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link 
@@ -349,6 +344,7 @@ export function Navbar() {
               );
             })}
 
+            {/* Tactical "More" Sheet Trigger */}
             <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
               <SheetTrigger asChild>
                 <div className="flex-1 h-full flex items-center justify-center p-1 cursor-pointer">
@@ -380,7 +376,7 @@ export function Navbar() {
                   </div>
                 </SheetHeader>
                 <div className="p-4 grid grid-cols-2 gap-3 overflow-y-auto max-h-[calc(70vh-140px)]">
-                  {secondaryItems.map((item) => (
+                  {SECONDARY_NAV.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
