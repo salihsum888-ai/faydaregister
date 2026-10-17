@@ -429,9 +429,9 @@ function PerformanceContent() {
               description="Finalized Documents"
               inverseTrend={false}
               statusColorClass={
-                stats.successRate >= 85 ? "border-emerald-500/50 bg-emerald-500/[0.03] shadow-[0_0_30px_-5px_rgba(16,185,129,0.4)]" : 
-                stats.successRate >= 80 ? "border-amber-500/50 bg-amber-500/[0.03] shadow-[0_0_30px_-5px_rgba(245,158,11,0.4)]" : 
-                "border-rose-500/50 bg-rose-500/[0.03] shadow-[0_0_30px_-5px_rgba(239,68,68,0.4)]"
+                stats.successRate >= 85 ? "border-emerald-500/50 bg-emerald-500/[0.08] shadow-[0_0_50px_-10px_rgba(16,185,129,0.5)]" : 
+                stats.successRate >= 80 ? "border-amber-500/50 bg-amber-500/[0.08] shadow-[0_0_50px_-10px_rgba(245,158,11,0.5)]" : 
+                "border-rose-500/50 bg-rose-500/[0.08] shadow-[0_0_50px_-10px_rgba(239,68,68,0.5)]"
               }
             />
             <MetricGauge 
