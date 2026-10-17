@@ -75,6 +75,16 @@ function MetricGauge({ label, value, color, icon: Icon, trend, description, inve
       "border bg-card shadow-sm rounded-[2.5rem] overflow-hidden flex flex-col items-center justify-center p-8 relative group transition-all duration-500",
       statusColorClass || "border-border hover:shadow-2xl"
     )}>
+      {/* Internal Glow Protocol - Dynamic Chromatic Architecture */}
+      {statusColorClass && (
+        <div className={cn(
+          "absolute inset-0 pointer-events-none transition-colors duration-500",
+          statusColorClass.includes('emerald') ? "bg-emerald-500/[0.03] dark:bg-emerald-500/[0.12]" :
+          statusColorClass.includes('amber') ? "bg-amber-500/[0.03] dark:bg-amber-500/[0.12]" :
+          "bg-rose-500/[0.03] dark:bg-rose-500/[0.12]"
+        )} />
+      )}
+      
       <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-10 transition-opacity">
         <Icon className="h-32 w-32" />
       </div>
@@ -331,9 +341,9 @@ export default function FullPerformancePage() {
               description="Finalized Documents"
               inverseTrend={false}
               statusColorClass={
-                stats.rates.processed >= 85 ? "border-emerald-500/50 bg-emerald-500/[0.08] shadow-[0_0_50px_-10px_rgba(16,185,129,0.5)]" : 
-                stats.rates.processed >= 80 ? "border-amber-500/50 bg-amber-500/[0.08] shadow-[0_0_50px_-10px_rgba(245,158,11,0.5)]" : 
-                "border-rose-500/50 bg-rose-500/[0.08] shadow-[0_0_50px_-10px_rgba(239,68,68,0.5)]"
+                stats.rates.processed >= 85 ? "border-emerald-500/60 shadow-[0_0_50px_-12px_rgba(16,185,129,0.5)]" : 
+                stats.rates.processed >= 80 ? "border-amber-500/60 shadow-[0_0_50px_-12px_rgba(245,158,11,0.5)]" : 
+                "border-rose-500/60 shadow-[0_0_50px_-12px_rgba(239,68,68,0.5)]"
               }
             />
             <MetricGauge 
