@@ -1,4 +1,3 @@
-
 "use client"
 
 import Link from 'next/link';
@@ -49,6 +48,12 @@ import { UserProfile, Notification, Announcement, SystemSettings } from '@/lib/t
 import { useEffect, useState, useRef } from 'react';
 import { useTheme } from 'next-themes';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 const OFFICER_PRIMARY_NAV = [
   { name: 'Home', href: '/dashboard', icon: LayoutDashboard },
@@ -171,7 +176,7 @@ export function Navbar() {
   const activeIndex = primaryItems.findIndex(item => item.href === pathname);
 
   return (
-    <>
+    <TooltipProvider>
       <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-xl transition-all duration-300">
         <div className="container mx-auto flex h-14 items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-6">
@@ -222,30 +227,39 @@ export function Navbar() {
 
           <div className="flex items-center gap-3">
             {user && (
-              <div className={cn(
-                "flex items-center gap-2.5 px-3 py-1.5 rounded-full border transition-all duration-500 shadow-sm",
-                isOnline 
-                  ? "bg-emerald-500/[0.03] border-emerald-500/20 text-emerald-600" 
-                  : "bg-rose-500/[0.03] border-rose-500/20 text-rose-600"
-              )}>
-                <div className="relative flex items-center justify-center h-3 w-3">
-                  {isOnline ? (
-                    <>
-                      <Wifi className="h-3 w-3 relative z-10" strokeWidth={3} />
-                      <span className="absolute h-full w-full bg-emerald-500 rounded-full opacity-30 animate-ping" />
-                      <span className="absolute h-1 w-1 bg-emerald-500 rounded-full -top-0.5 -right-0.5 border border-background animate-pulse" />
-                    </>
-                  ) : (
-                    <>
-                      <WifiOff className="h-3 w-3 relative z-10" />
-                      <span className="absolute h-1 w-1 bg-rose-500 rounded-full -top-0.5 -right-0.5 border border-background" />
-                    </>
-                  )}
-                </div>
-                <span className="text-[8px] font-black font-mono uppercase tracking-[0.15em] hidden sm:inline leading-none">
-                  {isOnline ? 'Active' : 'Isolated'}
-                </span>
-              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className={cn(
+                    "flex items-center gap-2.5 px-3 py-1.5 rounded-full border transition-all duration-500 shadow-sm cursor-help",
+                    isOnline 
+                      ? "bg-emerald-500/[0.03] border-emerald-500/20 text-emerald-600" 
+                      : "bg-rose-500/[0.03] border-rose-500/20 text-rose-600"
+                  )}>
+                    <div className="relative flex items-center justify-center h-3 w-3">
+                      {isOnline ? (
+                        <>
+                          <Wifi className="h-3 w-3 relative z-10" strokeWidth={3} />
+                          <span className="absolute h-full w-full bg-emerald-500 rounded-full opacity-30 animate-ping" />
+                          <span className="absolute h-1 w-1 bg-emerald-500 rounded-full -top-0.5 -right-0.5 border border-background animate-pulse" />
+                        </>
+                      ) : (
+                        <>
+                          <WifiOff className="h-3 w-3 relative z-10" />
+                          <span className="absolute h-1 w-1 bg-rose-500 rounded-full -top-0.5 -right-0.5 border border-background" />
+                        </>
+                      )}
+                    </div>
+                    <span className="text-[8px] font-black font-mono uppercase tracking-[0.15em] hidden sm:inline leading-none">
+                      {isOnline ? 'Synced' : 'Isolated'}
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="bg-popover border-border p-2 rounded-lg">
+                  <p className="text-[9px] font-black uppercase tracking-widest">
+                    {isOnline ? 'Real-time Protocol Active' : 'Offline: Local Cache Mode'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
             )}
 
             {mounted && (
@@ -391,6 +405,6 @@ export function Navbar() {
           </div>
         </nav>
       )}
-    </>
+    </TooltipProvider>
   );
 }

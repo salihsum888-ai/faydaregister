@@ -33,7 +33,8 @@ import {
   Activity,
   Layers,
   AlertTriangle,
-  Award
+  Award,
+  Copy
 } from 'lucide-react';
 import { Registration, UserProfile } from '@/lib/types';
 import { StatusBadge } from '@/components/dashboard/status-badge';
@@ -77,6 +78,12 @@ import {
   DialogTitle,
   DialogDescription
 } from '@/components/ui/dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { useToast } from '@/hooks/use-toast';
 import { logAuditAction } from '@/lib/audit';
 import * as XLSX from 'xlsx';
@@ -104,53 +111,64 @@ function MetricGauge({ label, value, color, icon: Icon, trend, description, inve
   const isUp = trend > 0;
   const isNeutral = trend === 0;
   
-  // If inverseTrend is true (like Error or Rejection), Down is GOOD, Up is BAD.
   const isGood = inverseTrend ? trend < 0 : trend > 0;
 
-  return (
-    <Card className={cn(
-      "border bg-card shadow-sm rounded-[2.5rem] overflow-hidden flex flex-col items-center justify-center p-8 relative group transition-all duration-500",
-      statusColorClass || "border-border hover:shadow-2xl"
-    )}>
-      {/* Internal Glow Protocol - Amplified for Dark Mode */}
-      {statusColorClass && (
-        <div className={cn(
-          "absolute inset-0 pointer-events-none transition-colors duration-500",
-          statusColorClass.includes('emerald') ? "bg-emerald-500/[0.03] dark:bg-emerald-500/[0.12]" :
-          statusColorClass.includes('amber') ? "bg-amber-500/[0.03] dark:bg-amber-500/[0.12]" :
-          "bg-rose-500/[0.03] dark:bg-rose-500/[0.12]"
-        )} />
-      )}
-      
-      <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-10 transition-opacity">
-        <Icon className="h-32 w-32" />
-      </div>
-      
-      <div className="h-[180px] w-full relative z-10">
-        <ResponsiveContainer width="100%" height="100%">
-          <RadialBarChart cx="50%" cy="50%" innerRadius="70%" outerRadius="100%" barSize={15} data={data} startAngle={180} endAngle={0}>
-            <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-            <RadialBar background dataKey="value" cornerRadius={30} />
-          </RadialBarChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pt-10">
-           <span className="text-4xl font-mono font-black text-foreground tracking-tighter tabular-nums">{value}%</span>
-           <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em] mt-1">{label}</p>
-        </div>
-      </div>
+  const tooltipText = label === "Success Rate" 
+    ? (value >= 85 ? "Elite Status: Protocol efficiency exceeding 85%." : value >= 80 ? "Cautionary: Quality dipped below 85% threshold." : "Critical Alert: Success rate below minimum 80% protocol.")
+    : description;
 
-      <div className="w-full text-center relative z-10 mt-2 space-y-2">
-         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{description}</p>
-         <div className={cn(
-           "flex items-center justify-center gap-1 text-[9px] font-mono font-black uppercase tracking-tighter px-2 py-0.5 rounded-full w-fit mx-auto",
-           isNeutral ? "bg-muted text-muted-foreground" :
-           isGood ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"
-         )}>
-           {!isNeutral && (isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />)}
-           {isNeutral ? 'Steady' : `${Math.abs(trend).toFixed(1)}% MoM`}
-         </div>
-      </div>
-    </Card>
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Card className={cn(
+            "border bg-card shadow-sm rounded-[2.5rem] overflow-hidden flex flex-col items-center justify-center p-8 relative group transition-all duration-500 cursor-help",
+            statusColorClass || "border-border hover:shadow-2xl"
+          )}>
+            {statusColorClass && (
+              <div className={cn(
+                "absolute inset-0 pointer-events-none transition-colors duration-500",
+                statusColorClass.includes('emerald') ? "bg-emerald-500/[0.03] dark:bg-emerald-500/[0.12]" :
+                statusColorClass.includes('amber') ? "bg-amber-500/[0.03] dark:bg-amber-500/[0.12]" :
+                "bg-rose-500/[0.03] dark:bg-rose-500/[0.12]"
+              )} />
+            )}
+            
+            <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-10 transition-opacity">
+              <Icon className="h-32 w-32" />
+            </div>
+            
+            <div className="h-[180px] w-full relative z-10">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadialBarChart cx="50%" cy="50%" innerRadius="70%" outerRadius="100%" barSize={15} data={data} startAngle={180} endAngle={0}>
+                  <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+                  <RadialBar background dataKey="value" cornerRadius={30} />
+                </RadialBarChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pt-10">
+                 <span className="text-4xl font-mono font-black text-foreground tracking-tighter tabular-nums">{value}%</span>
+                 <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em] mt-1">{label}</p>
+              </div>
+            </div>
+
+            <div className="w-full text-center relative z-10 mt-2 space-y-2">
+               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{description}</p>
+               <div className={cn(
+                 "flex items-center justify-center gap-1 text-[9px] font-mono font-black uppercase tracking-tighter px-2 py-0.5 rounded-full w-fit mx-auto",
+                 isNeutral ? "bg-muted text-muted-foreground" :
+                 isGood ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"
+               )}>
+                 {!isNeutral && (isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />)}
+                 {isNeutral ? 'Steady' : `${Math.abs(trend).toFixed(1)}% MoM`}
+               </div>
+            </div>
+          </Card>
+        </TooltipTrigger>
+        <TooltipContent className="bg-popover border-border p-3 rounded-xl shadow-xl max-w-[200px]">
+          <p className="text-[10px] font-bold text-foreground leading-relaxed uppercase tracking-tight">{tooltipText}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -605,7 +623,17 @@ function PerformanceContent() {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell><span className="text-[10px] font-mono font-black text-muted-foreground/30">{reg.id.substring(0, 15)}...</span></TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2 group/copy">
+                            <span className="text-[10px] font-mono font-black text-muted-foreground/30">{reg.id.substring(0, 15)}...</span>
+                            <button 
+                              onClick={() => { navigator.clipboard.writeText(reg.id); toast({ title: "RID Copied", description: "Registration ID ready for terminal check." }); }}
+                              className="opacity-0 group-hover/copy:opacity-100 p-1 rounded hover:bg-primary/10 text-primary transition-all"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-center"><StatusBadge status="Rejected" className="scale-75" /></TableCell>
                         <TableCell className="pr-10 text-right"><Button variant="ghost" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-all" onClick={() => setSelectedRejection(reg)}><Eye className="mr-2 h-4 w-4" /> View</Button></TableCell>
                       </TableRow>

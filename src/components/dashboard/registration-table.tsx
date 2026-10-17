@@ -29,7 +29,8 @@ import {
   RefreshCcw,
   X,
   ShieldAlert,
-  Loader2
+  Loader2,
+  Copy
 } from 'lucide-react';
 import { StatusBadge } from './status-badge';
 import { AiSuggestionModal } from './ai-suggestion-modal';
@@ -50,6 +51,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface RegistrationTableProps {
   registrations: Registration[];
@@ -96,6 +103,14 @@ export function RegistrationTable({ registrations, isDashboardView = false }: Re
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelectedIds(next);
+  };
+
+  const handleCopyRid = (id: string) => {
+    navigator.clipboard.writeText(id);
+    toast({
+      title: "RID Copied",
+      description: "Registration ID ready for terminal verification.",
+    });
   };
 
   const handleBulkStatusUpdate = async (newStatus: RegistrationStatus) => {
@@ -187,7 +202,6 @@ export function RegistrationTable({ registrations, isDashboardView = false }: Re
       "relative",
       isDashboardView ? "" : "rounded-xl border border-border bg-card shadow-sm overflow-hidden"
     )}>
-      {/* Bulk Action Overlay - Responsive Refinement */}
       {selectedIds.size > 0 && (
         <div className="absolute top-0 left-0 right-0 z-20 min-h-[3rem] h-auto bg-primary text-primary-foreground flex flex-col sm:flex-row items-center px-4 sm:px-6 py-2 sm:py-0 gap-3 sm:gap-4 animate-in slide-in-from-top duration-300 shadow-lg">
           <p className="text-[10px] font-black uppercase tracking-widest flex-1">
@@ -246,10 +260,10 @@ export function RegistrationTable({ registrations, isDashboardView = false }: Re
                   className="border-muted-foreground/30"
                 />
               </TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground">Name</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground">Date</TableHead>
+              <TableHead className="text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground">Applicant Registry</TableHead>
+              <TableHead className="text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground">Submission</TableHead>
               <TableHead className="text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground">Status</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground hidden sm:table-cell">Location</TableHead>
+              <TableHead className="text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground hidden sm:table-cell">Region</TableHead>
               {!isDashboardView && <TableHead className="text-right text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground">Actions</TableHead>}
             </TableRow>
           </TableHeader>
@@ -269,17 +283,35 @@ export function RegistrationTable({ registrations, isDashboardView = false }: Re
                     className="border-muted-foreground/30"
                   />
                 </TableCell>
-                <TableCell className="py-4 font-medium text-foreground text-sm">
-                  {reg.applicantName}
+                <TableCell className="py-4">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-foreground">{reg.applicantName}</span>
+                    <div className="flex items-center gap-1 group/rid">
+                      <span className="text-[9px] font-mono font-bold text-muted-foreground/30">{reg.id.substring(0, 15)}...</span>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button 
+                              onClick={() => handleCopyRid(reg.id)}
+                              className="opacity-0 group-hover/rid:opacity-100 p-0.5 rounded hover:bg-primary/10 text-primary transition-all"
+                            >
+                              <Copy className="h-2.5 w-2.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="bg-popover border-border p-1.5 text-[9px] font-black uppercase tracking-widest">Copy Full RID</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </div>
                 </TableCell>
-                <TableCell className="py-4 text-muted-foreground text-sm">
+                <TableCell className="py-4 text-muted-foreground text-xs font-bold uppercase">
                   {format(new Date(reg.submissionDate), 'MMM dd, yyyy')}
                 </TableCell>
                 <TableCell className="py-4">
-                  <StatusBadge status={reg.status} className="scale-90 origin-left" />
+                  <StatusBadge status={reg.status} className="scale-75 origin-left" />
                 </TableCell>
-                <TableCell className="py-4 text-muted-foreground text-sm hidden sm:table-cell">
-                  {reg.location}
+                <TableCell className="py-4 text-muted-foreground text-[10px] font-black uppercase tracking-widest hidden sm:table-cell">
+                  {reg.location.split(',')[0]}
                 </TableCell>
                 {!isDashboardView && (
                   <TableCell className="text-right py-4 pr-6">
@@ -343,7 +375,6 @@ export function RegistrationTable({ registrations, isDashboardView = false }: Re
         </div>
       )}
 
-      {/* Bulk Purge Confirmation Dialog */}
       <AlertDialog open={isConfirmDeleteDialogOpen} onOpenChange={setIsConfirmDeleteDialogOpen}>
         <AlertDialogContent className="rounded-[32px] border-none shadow-2xl bg-popover max-w-md p-0 overflow-hidden mx-4">
           <div className="p-10 text-center space-y-6">

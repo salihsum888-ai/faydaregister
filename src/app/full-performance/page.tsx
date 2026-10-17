@@ -36,7 +36,7 @@ import {
   XAxis, 
   YAxis, 
   CartesianGrid, 
-  Tooltip, 
+  Tooltip as RechartsTooltip, 
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -45,6 +45,12 @@ import {
   RadialBar,
   PolarAngleAxis
 } from 'recharts';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { cn } from '@/lib/utils';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -67,53 +73,64 @@ function MetricGauge({ label, value, color, icon: Icon, trend, description, inve
   const isUp = trend > 0;
   const isNeutral = trend === 0;
   
-  // If inverseTrend is true (like Error or Rejection), Down is GOOD, Up is BAD.
   const isGood = inverseTrend ? trend < 0 : trend > 0;
 
-  return (
-    <Card className={cn(
-      "border bg-card shadow-sm rounded-[2.5rem] overflow-hidden flex flex-col items-center justify-center p-8 relative group transition-all duration-500",
-      statusColorClass || "border-border hover:shadow-2xl"
-    )}>
-      {/* Internal Glow Protocol - Dynamic Chromatic Architecture */}
-      {statusColorClass && (
-        <div className={cn(
-          "absolute inset-0 pointer-events-none transition-colors duration-500",
-          statusColorClass.includes('emerald') ? "bg-emerald-500/[0.03] dark:bg-emerald-500/[0.12]" :
-          statusColorClass.includes('amber') ? "bg-amber-500/[0.03] dark:bg-amber-500/[0.12]" :
-          "bg-rose-500/[0.03] dark:bg-rose-500/[0.12]"
-        )} />
-      )}
-      
-      <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-10 transition-opacity">
-        <Icon className="h-32 w-32" />
-      </div>
-      
-      <div className="h-[180px] w-full relative z-10">
-        <ResponsiveContainer width="100%" height="100%">
-          <RadialBarChart cx="50%" cy="50%" innerRadius="70%" outerRadius="100%" barSize={15} data={data} startAngle={180} endAngle={0}>
-            <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-            <RadialBar background dataKey="value" cornerRadius={30} />
-          </RadialBarChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pt-10">
-           <span className="text-4xl font-mono font-black text-foreground tracking-tighter tabular-nums">{value}%</span>
-           <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em] mt-1">{label}</p>
-        </div>
-      </div>
+  const tooltipText = label === "Success Rate" 
+    ? (value >= 85 ? "Elite Status: Protocol efficiency exceeding 85%." : value >= 80 ? "Cautionary: Quality dipped below 85% threshold." : "Critical Alert: Success rate below minimum 80% protocol.")
+    : description;
 
-      <div className="w-full text-center relative z-10 mt-2 space-y-2">
-         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{description}</p>
-         <div className={cn(
-           "flex items-center justify-center gap-1 text-[9px] font-mono font-black uppercase tracking-tighter px-2 py-0.5 rounded-full w-fit mx-auto",
-           isNeutral ? "bg-muted text-muted-foreground" :
-           isGood ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"
-         )}>
-           {!isNeutral && (isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />)}
-           {isNeutral ? 'Stable' : `${Math.abs(trend).toFixed(1)}% MoM`}
-         </div>
-      </div>
-    </Card>
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Card className={cn(
+            "border bg-card shadow-sm rounded-[2.5rem] overflow-hidden flex flex-col items-center justify-center p-8 relative group transition-all duration-500 cursor-help",
+            statusColorClass || "border-border hover:shadow-2xl"
+          )}>
+            {statusColorClass && (
+              <div className={cn(
+                "absolute inset-0 pointer-events-none transition-colors duration-500",
+                statusColorClass.includes('emerald') ? "bg-emerald-500/[0.03] dark:bg-emerald-500/[0.12]" :
+                statusColorClass.includes('amber') ? "bg-amber-500/[0.03] dark:bg-amber-500/[0.12]" :
+                "bg-rose-500/[0.03] dark:bg-rose-500/[0.12]"
+              )} />
+            )}
+            
+            <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-10 transition-opacity">
+              <Icon className="h-32 w-32" />
+            </div>
+            
+            <div className="h-[180px] w-full relative z-10">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadialBarChart cx="50%" cy="50%" innerRadius="70%" outerRadius="100%" barSize={15} data={data} startAngle={180} endAngle={0}>
+                  <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+                  <RadialBar background dataKey="value" cornerRadius={30} />
+                </RadialBarChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pt-10">
+                 <span className="text-4xl font-mono font-black text-foreground tracking-tighter tabular-nums">{value}%</span>
+                 <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em] mt-1">{label}</p>
+              </div>
+            </div>
+
+            <div className="w-full text-center relative z-10 mt-2 space-y-2">
+               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{description}</p>
+               <div className={cn(
+                 "flex items-center justify-center gap-1 text-[9px] font-mono font-black uppercase tracking-tighter px-2 py-0.5 rounded-full w-fit mx-auto",
+                 isNeutral ? "bg-muted text-muted-foreground" :
+                 isGood ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600"
+               )}>
+                 {!isNeutral && (isUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />)}
+                 {isNeutral ? 'Stable' : `${Math.abs(trend).toFixed(1)}% MoM`}
+               </div>
+            </div>
+          </Card>
+        </TooltipTrigger>
+        <TooltipContent className="bg-popover border-border p-3 rounded-xl shadow-xl max-w-[200px]">
+          <p className="text-[10px] font-bold text-foreground leading-relaxed uppercase tracking-tight">{tooltipText}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -467,7 +484,7 @@ export default function FullPerformancePage() {
                               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                               <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 900, fill: 'hsl(var(--muted-foreground))' }} />
                               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 900, fill: 'hsl(var(--muted-foreground))' }} />
-                              <Tooltip content={({ active, payload }) => {
+                              <RechartsTooltip content={({ active, payload }) => {
                                 if (active && payload?.length) {
                                   return (
                                     <div className="bg-card border border-border shadow-2xl p-4 rounded-2xl">
