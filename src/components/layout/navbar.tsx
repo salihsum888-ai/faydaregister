@@ -1,3 +1,4 @@
+
 "use client"
 
 import Link from 'next/link';
@@ -6,7 +7,7 @@ import Image from 'next/image';
 import { 
   LayoutDashboard, 
   FileCheck, 
-  Database, 
+  Database as DatabaseIcon, 
   Bell, 
   Trophy,
   LogOut,
@@ -28,7 +29,8 @@ import {
   LineChart,
   Wifi,
   WifiOff,
-  MoreHorizontal
+  MoreHorizontal,
+  ClipboardText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -55,44 +57,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-const OFFICER_PRIMARY_NAV = [
-  { name: 'Home', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Intel', href: '/full-performance', icon: LineChart },
-  { name: 'Registry', href: '/full-registration', icon: Activity },
-  { name: 'Comm', href: '/communication', icon: MessageSquare },
-];
-
-const OFFICER_SECONDARY_NAV = [
-  { name: 'Performance', href: '/performance', icon: TrendingUp },
-  { name: 'Comparison', href: '/previous', icon: HistoryIcon },
-  { name: 'Status Check', href: '/status-check', icon: Search },
-  { name: 'Printing', href: '/printing', icon: Printer },
-  { name: 'Daily Reports', href: '/daily-registrations', icon: CalendarPlus },
-  { name: 'Records', href: '/registrations', icon: FileCheck },
-  { name: 'History Ledger', href: '/historical', icon: Database },
-  { name: 'Analytics', href: '/reports', icon: Database },
-  { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
-];
-
-const ADMIN_PRIMARY_NAV = [
-  { name: 'Home', href: '/admin', icon: LayoutDashboard },
-  { name: 'Intel', href: '/full-performance', icon: LineChart },
-  { name: 'Registry', href: '/full-registration', icon: Activity },
-  { name: 'Comm', href: '/communication', icon: MessageSquare },
-];
-
-const ADMIN_SECONDARY_NAV = [
-  { name: 'Audit', href: '/admin/audit-ledger', icon: ShieldCheck },
-  { name: 'Performance', href: '/performance', icon: TrendingUp },
-  { name: 'Comparison', href: '/previous', icon: HistoryIcon },
-  { name: 'Status Check', href: '/status-check', icon: Search },
-  { name: 'Printing', href: '/printing', icon: Printer },
-  { name: 'Personnel', href: '/admin/officers', icon: Users },
-  { name: 'Proxy Entry', href: '/admin/reports-entry', icon: ClipboardEdit },
-  { name: 'Broadcasts', href: '/admin/announcements', icon: Megaphone },
-  { name: 'Branding', href: '/admin/settings', icon: Settings },
-];
-
 const DEFAULT_LOGO = "https://services.eaes.et/NID-Logos/Fayda%20For%20Ethiopia%20logo-%20english-2-01.png";
 
 export function Navbar() {
@@ -104,6 +68,7 @@ export function Navbar() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
   
   // Collapsible Navigation Logic
   const [isNavVisible, setIsNavVisible] = useState(true);
@@ -161,6 +126,45 @@ export function Navbar() {
   if (pathname === '/login') return null;
 
   const isAdmin = profile?.role === 'admin';
+
+  const OFFICER_PRIMARY_NAV = [
+    { name: 'Home', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Intel', href: '/full-performance', icon: LineChart },
+    { name: 'Pulse', href: '/full-registration', icon: Activity },
+    { name: 'Chat', href: '/communication', icon: MessageSquare },
+  ];
+
+  const OFFICER_SECONDARY_NAV = [
+    { name: 'Performance', href: '/performance', icon: TrendingUp },
+    { name: 'Comparison', href: '/previous', icon: HistoryIcon },
+    { name: 'Status Check', href: '/status-check', icon: Search },
+    { name: 'Printing', href: '/printing', icon: Printer },
+    { name: 'Daily Reports', href: '/daily-registrations', icon: CalendarPlus },
+    { name: 'Records', href: '/registrations', icon: FileCheck },
+    { name: 'History', href: '/historical', icon: DatabaseIcon },
+    { name: 'Analytics', href: '/reports', icon: ClipboardText },
+    { name: 'Ranks', href: '/leaderboard', icon: Trophy },
+  ];
+
+  const ADMIN_PRIMARY_NAV = [
+    { name: 'Home', href: '/admin', icon: LayoutDashboard },
+    { name: 'Intel', href: '/full-performance', icon: LineChart },
+    { name: 'Pulse', href: '/full-registration', icon: Activity },
+    { name: 'Chat', href: '/communication', icon: MessageSquare },
+  ];
+
+  const ADMIN_SECONDARY_NAV = [
+    { name: 'Audit', href: '/admin/audit-ledger', icon: ShieldCheck },
+    { name: 'Performance', href: '/performance', icon: TrendingUp },
+    { name: 'Comparison', href: '/previous', icon: HistoryIcon },
+    { name: 'Status Check', href: '/status-check', icon: Search },
+    { name: 'Printing', href: '/printing', icon: Printer },
+    { name: 'Personnel', href: '/admin/officers', icon: Users },
+    { name: 'Proxy Entry', href: '/admin/reports-entry', icon: ClipboardEdit },
+    { name: 'Broadcasts', href: '/admin/announcements', icon: Megaphone },
+    { name: 'Branding', href: '/admin/settings', icon: Settings },
+  ];
+
   const primaryItems = isAdmin ? ADMIN_PRIMARY_NAV : OFFICER_PRIMARY_NAV;
   const secondaryItems = isAdmin ? ADMIN_SECONDARY_NAV : OFFICER_SECONDARY_NAV;
 
@@ -172,8 +176,6 @@ export function Navbar() {
 
   const bureauName = branding?.bureauName || 'FaydaTrack';
   const logoUrl = branding?.logoUrl || DEFAULT_LOGO;
-
-  const activeIndex = primaryItems.findIndex(item => item.href === pathname);
 
   return (
     <TooltipProvider>
@@ -322,52 +324,47 @@ export function Navbar() {
           "lg:hidden fixed bottom-6 left-4 right-4 z-50 transition-all duration-500 ease-in-out",
           isNavVisible ? "translate-y-0 opacity-100" : "translate-y-[120%] opacity-0"
         )}>
-          <div className="relative h-20 w-full bg-card rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.2)] flex items-center justify-around px-2 border border-white/5">
-            {activeIndex !== -1 && (
-              <div 
-                className="absolute top-[-1px] h-10 w-[20%] transition-all duration-500 ease-in-out pointer-events-none"
-                style={{ left: `${activeIndex * 20}%` }}
-              >
-                <div className="relative h-full w-full flex justify-center">
-                  <svg 
-                    width="100" 
-                    height="40" 
-                    viewBox="0 0 100 40" 
-                    className="absolute top-0 text-background fill-current"
-                  >
-                    <path d="M0 0 Q 25 0 35 15 A 15 15 0 0 0 65 15 Q 75 0 100 0 L 100 40 L 0 40 Z" />
-                  </svg>
-                  <div className="absolute top-[-8px] h-2 w-2 bg-primary rounded-full shadow-[0_0_15px_rgba(var(--primary),0.5)] animate-bounce" />
-                </div>
-              </div>
-            )}
-
-            {primaryItems.map((item, idx) => {
+          <div className="relative h-20 w-full bg-slate-100/95 dark:bg-slate-900/95 border border-[#e2e8f0] dark:border-slate-800 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] flex items-center justify-around px-2 backdrop-blur-xl">
+            {primaryItems.map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link 
                   key={item.href} 
                   href={item.href}
-                  className={cn(
-                    "flex flex-col items-center justify-center gap-1.5 w-[20%] h-full transition-all duration-500 z-10",
-                    isActive ? "text-primary -translate-y-2" : "text-muted-foreground/60 hover:text-foreground"
-                  )}
+                  className="flex-1 h-full flex items-center justify-center p-1"
                 >
-                  <item.icon className={cn("h-6 w-6 transition-transform duration-500", isActive && "scale-110")} strokeWidth={isActive ? 2.5 : 2} />
-                  <span className={cn(
-                    "text-[8px] font-black uppercase tracking-tighter transition-all duration-500",
-                    isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
-                  )}>{item.name}</span>
+                  <div className={cn(
+                    "flex flex-col items-center justify-center w-full h-[70px] rounded-2xl transition-all duration-300",
+                    isActive ? "bg-white dark:bg-slate-800 shadow-sm text-[#2563eb]" : "text-slate-500/60 hover:text-slate-700"
+                  )}>
+                    <item.icon className={cn("h-6 w-6 mb-1 transition-transform duration-300", isActive && "scale-110")} strokeWidth={2.5} />
+                    <span className={cn(
+                      "text-[9px] font-black uppercase tracking-[0.05em] transition-all duration-300",
+                      isActive ? "opacity-100 translate-y-0" : "opacity-40"
+                    )}>
+                      {item.name}
+                    </span>
+                  </div>
                 </Link>
               );
             })}
 
-            <Sheet>
+            <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
               <SheetTrigger asChild>
-                <button className="flex flex-col items-center justify-center gap-1.5 w-[20%] h-full text-muted-foreground/60 hover:text-primary z-10">
-                  <MoreHorizontal className="h-6 w-6" />
-                  <span className="text-[8px] font-black uppercase tracking-tighter opacity-0 translate-y-2">Menu</span>
-                </button>
+                <div className="flex-1 h-full flex items-center justify-center p-1 cursor-pointer">
+                  <div className={cn(
+                    "flex flex-col items-center justify-center w-full h-[70px] rounded-2xl transition-all duration-300",
+                    isSheetOpen ? "bg-white dark:bg-slate-800 shadow-sm text-[#2563eb]" : "text-slate-500/60 hover:text-slate-700"
+                  )}>
+                    <MoreHorizontal className={cn("h-6 w-6 mb-1 transition-transform duration-300", isSheetOpen && "scale-110")} strokeWidth={2.5} />
+                    <span className={cn(
+                      "text-[9px] font-black uppercase tracking-[0.05em] transition-all duration-300",
+                      isSheetOpen ? "opacity-100 translate-y-0" : "opacity-40"
+                    )}>
+                      More
+                    </span>
+                  </div>
+                </div>
               </SheetTrigger>
               <SheetContent side="bottom" className="rounded-t-[32px] h-[70vh] border-none shadow-2xl bg-popover p-0 overflow-hidden">
                 <SheetHeader className="p-8 border-b bg-muted/20">
@@ -382,11 +379,12 @@ export function Navbar() {
                     </div>
                   </div>
                 </SheetHeader>
-                <div className="p-4 grid grid-cols-2 gap-3">
+                <div className="p-4 grid grid-cols-2 gap-3 overflow-y-auto max-h-[calc(70vh-140px)]">
                   {secondaryItems.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
+                      onClick={() => setIsSheetOpen(false)}
                       className={cn(
                         "flex items-center gap-3 p-4 rounded-2xl border transition-all",
                         pathname === item.href ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border hover:bg-muted"
