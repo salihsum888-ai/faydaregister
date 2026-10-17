@@ -109,8 +109,8 @@ function MetricGauge({ label, value, color, icon: Icon, trend, description, inve
 
   return (
     <Card className={cn(
-      "border bg-card shadow-sm rounded-[2.5rem] overflow-hidden flex flex-col items-center justify-center p-8 relative group transition-all hover:shadow-2xl",
-      statusColorClass || "border-border"
+      "border bg-card shadow-sm rounded-[2.5rem] overflow-hidden flex flex-col items-center justify-center p-8 relative group transition-all duration-500",
+      statusColorClass || "border-border hover:shadow-2xl"
     )}>
       <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-10 transition-opacity">
         <Icon className="h-32 w-32" />
@@ -429,9 +429,9 @@ function PerformanceContent() {
               description="Finalized Documents"
               inverseTrend={false}
               statusColorClass={
-                stats.successRate >= 85 ? "border-emerald-500/50 bg-emerald-500/[0.01]" : 
-                stats.successRate >= 80 ? "border-amber-500/50 bg-amber-500/[0.01]" : 
-                "border-rose-500/50 bg-rose-500/[0.01]"
+                stats.successRate >= 85 ? "border-emerald-500/50 bg-emerald-500/[0.03] shadow-[0_0_30px_-5px_rgba(16,185,129,0.4)]" : 
+                stats.successRate >= 80 ? "border-amber-500/50 bg-amber-500/[0.03] shadow-[0_0_30px_-5px_rgba(245,158,11,0.4)]" : 
+                "border-rose-500/50 bg-rose-500/[0.03] shadow-[0_0_30px_-5px_rgba(239,68,68,0.4)]"
               }
             />
             <MetricGauge 
