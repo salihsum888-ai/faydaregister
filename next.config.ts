@@ -2,8 +2,7 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
-  distDir: process.env.NODE_ENV === 'production' ? '.next-prod' : '.next',
+  output: process.env.VERCEL ? undefined : 'standalone',
   serverExternalPackages: [
     'genkit',
     '@genkit-ai/core',
@@ -84,7 +83,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), payment=()',
+            value: 'camera=(self), microphone=(self), payment=()',
           },
         ],
       },

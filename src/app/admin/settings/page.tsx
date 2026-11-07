@@ -137,7 +137,7 @@ export default function AdminSettingsPage() {
       const dailyRows = (allDailyBackup || []).map((d, i) => ({
         'No.': i + 1,
         Date: d.date,
-        Officer: d.officerName || d.officerId,
+        'Officer ID': d.officerId,
         'Ethio Count': d.ethioCount,
         'Safaricom Count': d.safaricomCount,
         Total: d.total,
@@ -154,10 +154,11 @@ export default function AdminSettingsPage() {
         'No.': i + 1,
         Month: m.month,
         Year: m.year,
-        Officer: m.officerName || m.officerId,
-        'Ethio Total': m.ethioTotal,
-        'Safaricom Total': m.safaricomTotal,
-        'Grand Total': m.grandTotal,
+        'Officer ID': m.officerId,
+        'Ethio Total': m.ethio,
+        'Safaricom Total': m.safaricom,
+        'Grand Total': m.total,
+        Processed: m.processed,
       }));
       XLSX.utils.book_append_sheet(
         wb,
@@ -172,8 +173,8 @@ export default function AdminSettingsPage() {
         'Full Name': u.fullName,
         Email: u.email,
         Role: u.role,
-        Phone: u.phoneNumber || '',
-        Address: u.address || '',
+        Region: u.region || '',
+        Cluster: u.cluster || '',
       }));
       XLSX.utils.book_append_sheet(
         wb,
