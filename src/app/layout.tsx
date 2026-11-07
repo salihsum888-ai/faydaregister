@@ -11,7 +11,11 @@ const INSTITUTIONAL_ICON = "https://services.eaes.et/NID-Logos/Fayda%20For%20Eth
 
 export const metadata: Metadata = {
   title: 'FaydaTrack | Professional Registration Tracking',
-  description: 'High-fidelity terminal for institutional registration tracking and field coordination.',
+  description: 'High-fidelity terminal for institutional registration tracking, real-time field coordination, and operational triage.',
+  openGraph: {
+    title: 'FaydaTrack | Professional Registration Tracking',
+    description: 'High-fidelity terminal for institutional registration tracking, real-time field coordination, and operational triage.',
+  },
   icons: {
     icon: INSTITUTIONAL_ICON,
     shortcut: INSTITUTIONAL_ICON,
@@ -49,17 +53,24 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&family=JetBrains+Mono:wght@400..800&display=swap" rel="stylesheet" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      <body className="font-sans antialiased bg-background text-foreground min-h-screen flex flex-col transition-colors duration-300">
+      <body className="font-sans antialiased bg-background text-foreground min-h-screen flex flex-col overflow-x-hidden transition-colors duration-300 relative">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
         >
+          {/* Ambient Refraction Backdrop for Glassmorphic Cards & Graphs */}
+          <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden no-print">
+            <div className="absolute -top-28 -left-24 h-[420px] w-[420px] rounded-full bg-primary/15 dark:bg-primary/12 blur-[110px] animate-orb-1" />
+            <div className="absolute top-1/3 -right-28 h-[380px] w-[380px] rounded-full bg-sky-400/15 dark:bg-sky-500/10 blur-[110px] animate-orb-2" />
+            <div className="absolute -bottom-32 left-1/4 h-[360px] w-[360px] rounded-full bg-emerald-400/12 dark:bg-indigo-500/10 blur-[110px] animate-orb-3" />
+          </div>
+
           <FirebaseClientProvider>
             <MfaGuard>
               <Navbar />
-              <main className="flex-1 container mx-auto pt-8 pb-32 lg:pb-8 px-4 sm:px-6 lg:px-8">
+              <main className="flex-1 w-full max-w-7xl mx-auto pt-6 sm:pt-8 pb-32 md:pb-12 px-4 sm:px-6 lg:px-8 min-w-0 relative z-0">
                 {children}
               </main>
             </MfaGuard>

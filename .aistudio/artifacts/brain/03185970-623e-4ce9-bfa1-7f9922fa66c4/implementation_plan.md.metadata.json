@@ -1,0 +1,6 @@
+{
+  "summary": "Implementation plan for the Schools & Students registration workflow, including a School Registration toggle and autocomplete School Name input in the Registration record form, a Glassmorphic Schools & Students directory and drill-down page, and per-school PDF/Excel report generation.",
+  "updatedAt": "2026-11-02T16:55:57.202758305Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

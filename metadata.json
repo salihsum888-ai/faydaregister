@@ -1,4 +1,9 @@
 {
-  "name": "studio-1481975330",
-  "description": "App imported from Firebase Studio"
+  "name": "FaydaTrack",
+  "description": "High-fidelity terminal for institutional registration tracking, real-time field coordination, and operational triage.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "display-capture"
+  ]
 }

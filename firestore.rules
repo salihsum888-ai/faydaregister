@@ -1,75 +1,132 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     function isSignedIn() {
       return request.auth != null;
     }
+
     function isAdmin() {
       return isSignedIn() && exists(/databases/$(database)/documents/admin_users/$(request.auth.uid));
     }
 
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      // Users can create their own profile (or admins can provision any profile).
+      allow create: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      // Non-admin users cannot escalate their own role, change their official email, or alter their ID.
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        request.auth.uid == userId &&
+        (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
+        (!('email' in request.resource.data) || request.resource.data.email == resource.data.email) &&
+        (!('id' in request.resource.data) || request.resource.data.id == resource.data.id)
+      );
       allow delete: if isAdmin();
 
       match /notifications/{notificationId} {
-        allow read, write: if isSignedIn() && request.auth.uid == userId;
+        allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       }
     }
+
     match /admin_users/{userId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      // Only existing admins or initial bootstrap admin registration can create admin_users entries.
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.auth.uid == userId &&
+        getAfter(/databases/$(database)/documents/users/$(userId)).data.role == 'admin'
+      );
       allow update, delete: if isAdmin();
     }
+
     match /registrations/{regId} {
-      allow read, create, update: if isSignedIn();
-      allow delete: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (
+        isAdmin() ||
+        request.resource.data.assignedReviewerId == request.auth.uid
+      );
+      allow update, delete: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.assignedReviewerId == request.auth.uid ||
+        !('assignedReviewerId' in resource.data)
+      );
     }
+
     match /daily_reports/{reportId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && (isAdmin() || request.resource.data.officerId == request.auth.uid);
       allow update, delete: if isAdmin() || (isSignedIn() && resource.data.officerId == request.auth.uid);
     }
+
     match /monthly_summaries/{summaryId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && (isAdmin() || request.resource.data.officerId == request.auth.uid);
       allow update, delete: if isAdmin() || (isSignedIn() && resource.data.officerId == request.auth.uid);
     }
+
     match /announcements/{annId} {
       allow read: if isSignedIn();
       allow write, delete: if isAdmin();
     }
+
     match /conversations/{convId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (request.auth.uid in resource.data.members);
+      allow read: if isSignedIn() && (isAdmin() || (request.auth.uid in resource.data.members));
+      allow create: if isSignedIn() && (request.auth.uid in request.resource.data.members);
+      allow update: if isSignedIn() && (isAdmin() || (request.auth.uid in resource.data.members));
       allow delete: if isAdmin();
     }
+
     match /messages/{messageId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
       allow update: if isAdmin() || 
-                    (isSignedIn() && request.auth.uid == resource.data.senderId) ||
+                    (isSignedIn() && request.auth.uid == resource.data.senderId && request.resource.data.senderId == resource.data.senderId) ||
                     (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedFor']));
       allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.senderId);
     }
+
     match /system_settings/{configId} {
       allow read: if true;
       allow write: if isAdmin();
     }
+
     match /audit_logs/{logId} {
       allow read: if isAdmin();
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.officerId == request.auth.uid;
       allow update: if false;
       allow delete: if isAdmin();
     }
-    match /audit_logs/{logId} {
-      allow read: if isAdmin();
-      allow create: if isSignedIn();
-      allow update: if false;
+
+    match /call_sessions/{callId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.callerId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.callerId ||
+        (request.auth.uid in resource.data.targetMemberIds) ||
+        (request.auth.uid in resource.data.activeParticipantIds)
+      );
+      allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.callerId);
+    }
+
+    match /meetings/{meetingId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.hostId == request.auth.uid;
+      allow update: if isSignedIn();
+      allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.hostId);
+    }
+
+    match /meeting_exam_submissions/{submissionId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.officerId == request.auth.uid;
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.officerId);
       allow delete: if isAdmin();
     }
   }
 }
+

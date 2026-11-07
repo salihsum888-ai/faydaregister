@@ -83,7 +83,7 @@ export default function AdminAnnouncementsPage() {
 
   const regions = useMemo(() => {
     if (!announcements) return ['Global'];
-    const dynamic = Array.from(new Set(announcements.map(a => a.targetRegion).filter(Boolean)));
+    const dynamic = Array.from(new Set(announcements.map(a => a.targetRegion).filter((r): r is string => Boolean(r))));
     return ['Global', ...dynamic, 'Headquarters', 'Regional North', 'Regional South'];
   }, [announcements]);
 

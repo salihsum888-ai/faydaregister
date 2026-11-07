@@ -2,7 +2,15 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: 'standalone',
+  distDir: process.env.NODE_ENV === 'production' ? '.next-prod' : '.next',
+  serverExternalPackages: [
+    'genkit',
+    '@genkit-ai/core',
+    '@genkit-ai/google-genai',
+    '@opentelemetry/sdk-node',
+    '@opentelemetry/api',
+  ],
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -60,6 +68,27 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
     ],
+  },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), payment=()',
+          },
+        ],
+      },
+    ];
   },
 };
 

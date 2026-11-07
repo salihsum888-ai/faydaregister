@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -6,12 +5,12 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { UserProfile } from '@/lib/types';
-import { Loader2 } from 'lucide-react';
+import { VerificationAnimation } from '@/components/auth/verification-animation';
 
 /**
- * MFA Guard Component
- * Enforces mandatory OTP verification for all authenticated users.
- * Redirects to /login if the session MFA handshake is missing.
+ * MFA & Role Guard Component
+ * Enforces mandatory UID-bound OTP verification for all authenticated users
+ * and restricts /admin/* routes strictly to administrators.
  */
 export function MfaGuard({ children }: { children: React.ReactNode }) {
   const { user, isUserLoading } = useUser();
@@ -26,13 +25,15 @@ export function MfaGuard({ children }: { children: React.ReactNode }) {
   }, [db, user?.uid]);
   const { data: profile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileRef);
 
+  const isAdminRoute = pathname.startsWith('/admin');
+  const isPublicPage = pathname === '/login' || pathname === '/';
+
   useEffect(() => {
     if (isUserLoading) return;
 
-    // Public pages exception
-    const isPublicPage = pathname === '/login' || pathname === '/';
-    
     if (!user) {
+      sessionStorage.removeItem('fayda_mfa_verified');
+      sessionStorage.removeItem('fayda_mfa_verified_uid');
       if (!isPublicPage) {
         router.push('/login');
       }
@@ -40,26 +41,45 @@ export function MfaGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Authenticated user check
-    const mfaSatisfied = sessionStorage.getItem('fayda_mfa_verified') === 'true';
-    
+    // Authenticated user check: bind MFA verification to the active user's UID
+    const mfaFlag = sessionStorage.getItem('fayda_mfa_verified') === 'true';
+    const mfaUid = sessionStorage.getItem('fayda_mfa_verified_uid');
+    const mfaSatisfied = mfaFlag && (!mfaUid || mfaUid === user.uid);
+
     if (!mfaSatisfied && !isPublicPage) {
-      // Redirect back to login to handle the OTP challenge mode
       router.push('/login');
       setIsVerified(false);
-    } else {
-      setIsVerified(true);
+      return;
     }
-  }, [user, isUserLoading, pathname, router]);
 
-  const isChecking = isUserLoading || (user && isVerified === null);
+    // Role-based access control for /admin/* routes
+    if (isAdminRoute && !isProfileLoading) {
+      if (!profile || profile.role !== 'admin') {
+        router.replace('/dashboard');
+        setIsVerified(false);
+        return;
+      }
+    }
 
-  if (isChecking && pathname !== '/' && pathname !== '/login') {
+    setIsVerified(true);
+  }, [user, isUserLoading, isProfileLoading, profile, pathname, isPublicPage, isAdminRoute, router]);
+
+  const isChecking =
+    isUserLoading ||
+    (user && isVerified === null) ||
+    (user && isAdminRoute && (isProfileLoading || profile?.role !== 'admin'));
+
+  if (isChecking && !isPublicPage) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
-          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground">Validating Security Session...</p>
+      <div className="flex h-screen items-center justify-center bg-background px-4">
+        <div className="w-full max-w-sm rounded-[32px] border border-border bg-card shadow-xl">
+          <VerificationAnimation
+            variant="session"
+            userName={profile?.fullName}
+            userRole={profile?.role === 'admin' ? 'Bureau Administrator' : profile?.role ? 'Field Officer' : undefined}
+            durationMs={600}
+            compact
+          />
         </div>
       </div>
     );

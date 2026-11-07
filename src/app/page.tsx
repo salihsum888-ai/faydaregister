@@ -17,19 +17,19 @@ import {
   Mail, 
   Phone, 
   MapPin,
-  Activity,
-  Timer,
   Activity as ActivityIcon,
   Search,
   CheckCircle2,
   Globe,
   Loader2,
-  X
+  X,
+  ExternalLink,
+  FileDigit
 } from 'lucide-react';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import Image from 'next/image';
 import { doc } from 'firebase/firestore';
-import { SystemSettings } from '@/lib/types';
+import { SystemSettings, UserProfile } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { 
   Dialog, 
@@ -38,13 +38,14 @@ import {
   DialogTitle, 
   DialogDescription,
 } from '@/components/ui/dialog';
-import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 const DEFAULT_LOGO = "https://services.eaes.et/NID-Logos/Fayda%20For%20Ethiopia%20logo-%20english-2-01.png";
 
 export default function LandingPage() {
   const { user } = useUser();
   const db = useFirestore();
+  const { toast } = useToast();
   const [publicRid, setPublicRid] = useState('');
   const [isLookupOpen, setIsLookupOpen] = useState(false);
 
@@ -54,101 +55,144 @@ export default function LandingPage() {
   }, [db]);
   const { data: branding } = useDoc<SystemSettings>(brandingRef);
 
+  const userProfileRef = useMemoFirebase(() => {
+    if (!db || !user?.uid) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user?.uid]);
+  const { data: profile } = useDoc<UserProfile>(userProfileRef);
+
   const bureauName = branding?.bureauName || 'FaydaTrack';
   const logoUrl = branding?.logoUrl || DEFAULT_LOGO;
   const systemProtocol = branding?.systemProtocol || 'Protocol v4.2';
   const publicEnabled = branding?.publicLookupEnabled !== false;
+  const portalHref = user ? (profile?.role === 'admin' ? '/admin' : '/dashboard') : '/login';
 
   const handleLookup = (e: React.FormEvent) => {
     e.preventDefault();
-    if (publicRid.length >= 20) {
-      setIsLookupOpen(true);
+    const trimmed = publicRid.trim();
+    if (!trimmed) {
+      toast({
+        title: "Registration ID Required",
+        description: "Please enter your 29-digit Registration ID (RID) or open the portal directly.",
+        variant: "destructive",
+      });
+      return;
     }
+    if (trimmed.length < 10) {
+      toast({
+        title: "Incomplete Registration ID",
+        description: "Please enter at least 10 digits of your Registration ID to verify status.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsLookupOpen(true);
   };
 
   return (
     <div className="flex flex-col min-h-screen -mt-8 -mx-4 sm:-mx-6 lg:-mx-8 bg-background selection:bg-primary/20">
-      {/* Cinematic Bureau Hero */}
-      <section className="relative w-full py-20 lg:py-48 overflow-hidden border-b bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent">
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-primary/[0.03] rounded-full blur-[160px] -mr-96 -mt-96 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-primary/[0.02] rounded-full blur-[140px] -ml-64 -mb-64 pointer-events-none" />
+      {/* Bureau Hero Section - Balanced Above-the-Fold Presence */}
+      <section className="relative w-full pt-14 pb-24 lg:pt-24 lg:pb-32 overflow-hidden border-b bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent">
+        <div className="absolute top-0 right-0 w-[640px] h-[640px] bg-primary/[0.03] rounded-full blur-[140px] -mr-80 -mt-80 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[480px] h-[480px] bg-primary/[0.02] rounded-full blur-[120px] -ml-48 -mb-48 pointer-events-none" />
         
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
 
         <div className="container relative z-20 mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-5xl mx-auto text-center space-y-8 md:space-y-12">
-            <div className="inline-flex items-center gap-2.5 px-4 md:px-5 py-2 rounded-full bg-background border border-border shadow-xl shadow-primary/5">
-              <div className="flex items-center gap-1.5">
-                 <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                 <span className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] text-foreground">{systemProtocol} Active</span>
-              </div>
-              <div className="h-4 w-px bg-border mx-1" />
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                 <Shield className="h-3 w-3 md:h-3.5 md:w-3.5" />
-                 <span className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em]">Verified Hub</span>
-              </div>
+          <div className="max-w-4xl mx-auto text-center space-y-6 md:space-y-8">
+            <div className="inline-flex items-center gap-3 text-xs font-semibold text-muted-foreground tracking-wide">
+              <span className="text-primary font-bold">{systemProtocol}</span>
+              <span aria-hidden="true">·</span>
+              <span className="flex items-center gap-1.5">
+                <Shield className="h-3.5 w-3.5 text-primary" />
+                National Registration & Field Coordination Hub
+              </span>
             </div>
             
-            <div className="space-y-6 md:space-y-8">
-              <h1 className="text-4xl sm:text-6xl md:text-8xl lg:text-[110px] font-black tracking-tighter leading-[0.9] md:leading-[0.85] text-foreground">
-                Official {bureauName.split('Track')[0]} <br/>
-                <span className="bg-gradient-to-r from-primary via-primary/80 to-primary/40 bg-clip-text text-transparent italic font-medium">Intelligence.</span>
+            <div className="space-y-5">
+              <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-[1.02] text-foreground [text-wrap:balance]">
+                Official {bureauName.split('Track')[0]}{' '}
+                <span className="text-primary">Registration Intelligence.</span>
               </h1>
               
-              <p className="text-base md:text-xl lg:text-2xl text-muted-foreground/80 max-w-3xl mx-auto font-medium leading-relaxed tracking-tight px-4">
-                The high-fidelity terminal for institutional registration tracking, real-time field coordination, and automated operational triage.
+              <p className="text-base md:text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto font-medium leading-relaxed">
+                High-security terminal for institutional enrollment tracking, real-time regional coordination, and automated operational triage.
               </p>
             </div>
             
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 md:gap-6 pt-4">
-              <Button size="lg" className="w-full sm:w-auto h-14 md:h-16 px-8 md:px-12 text-[11px] md:text-[12px] font-black uppercase tracking-[0.25em] rounded-2xl shadow-[0_20px_50px_rgba(var(--primary),0.3)]" asChild>
-                <Link href={user ? "/dashboard" : "/login"}>
-                  Initialize Terminal <ArrowRight className="ml-2 h-4 w-4" />
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 pt-2">
+              <Button size="lg" className="w-full sm:w-auto h-13 px-8 text-xs font-bold uppercase tracking-widest rounded-xl shadow-lg shadow-primary/20 whitespace-nowrap" asChild>
+                <Link href={portalHref}>
+                  {user ? (profile?.role === 'admin' ? 'Open Command Center' : 'Open Officer Workspace') : 'Officer Terminal Login'}
+                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
-              {!user && (
-                <div className="flex items-center gap-3 text-[10px] md:text-[11px] text-muted-foreground font-black uppercase tracking-widest px-6 md:px-8 py-3 md:py-4 rounded-2xl bg-muted/30 border border-border/40 backdrop-blur-sm">
-                  <Fingerprint className="h-4 w-4 opacity-50" />
-                  Personnel Only
-                </div>
-              )}
+              <Button size="lg" variant="outline" className="w-full sm:w-auto h-13 px-6 text-xs font-bold uppercase tracking-widest rounded-xl border-border bg-background/80 hover:bg-muted whitespace-nowrap" asChild>
+                <Link href="/full-registration">
+                  View Live Registry Pulse
+                </Link>
+              </Button>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Public Verification Gateway (Dynamic) */}
+      {/* Public Verification Gateway (Above the Fold Overlap) */}
       {publicEnabled && (
-        <section className="relative z-30 -mt-12 mb-20 px-4 sm:px-6 lg:px-8">
+        <section className="relative z-30 -mt-12 mb-16 px-4 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto">
-            <div className="bg-card border border-border shadow-2xl rounded-[32px] p-6 sm:p-10 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
-                <Globe className="h-32 w-32" />
-              </div>
-              
-              <div className="flex flex-col lg:flex-row items-center gap-8 relative z-10">
-                <div className="space-y-2 text-center lg:text-left flex-1">
-                   <div className="flex items-center justify-center lg:justify-start gap-2 text-primary">
-                      <Search className="h-5 w-5" />
-                      <h3 className="text-xl font-black uppercase tracking-tight">Resident Status Gateway</h3>
-                   </div>
-                   <p className="text-sm text-muted-foreground font-medium">Verify your registration ID status directly with the official portal.</p>
+            <div className="bg-card border border-border shadow-xl rounded-2xl p-6 sm:p-8 relative overflow-hidden">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+                <div className="space-y-1.5 text-left flex-1">
+                  <div className="flex items-center gap-2 text-primary">
+                    <Search className="h-4 w-4 shrink-0" />
+                    <h2 className="text-base sm:text-lg font-bold tracking-tight text-foreground">Resident Status Gateway</h2>
+                  </div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    Enter your 29-digit Registration ID (RID) to check processing status on the official gateway.
+                  </p>
                 </div>
 
-                <form onSubmit={handleLookup} className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+                <form onSubmit={handleLookup} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
                   <div className="relative w-full sm:w-80 group">
-                    <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
+                    <Fingerprint className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50 group-focus-within:text-primary transition-colors" />
                     <Input 
                       placeholder="Enter 29-digit RID..." 
-                      className="h-14 pl-12 bg-muted/20 border-border focus:border-primary/30 rounded-2xl text-xs font-black tracking-widest uppercase placeholder:font-bold placeholder:tracking-normal"
+                      className="h-12 pl-10 pr-16 bg-muted/30 border-border focus:border-primary/40 rounded-xl text-xs font-mono font-bold tracking-wider uppercase placeholder:font-sans placeholder:font-medium placeholder:tracking-normal"
                       value={publicRid}
                       onChange={(e) => setPublicRid(e.target.value)}
                       maxLength={29}
                     />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                      {publicRid && (
+                        <button
+                          type="button"
+                          onClick={() => setPublicRid('')}
+                          className="text-muted-foreground/50 hover:text-foreground p-0.5 rounded"
+                          title="Clear RID"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums">
+                        {publicRid.length}/29
+                      </span>
+                    </div>
                   </div>
-                  <Button type="submit" className="w-full sm:w-auto h-14 px-8 bg-primary hover:bg-primary/90 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/20">
-                    Verify Registration
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button type="submit" className="flex-1 sm:flex-none h-12 px-6 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-bold text-xs uppercase tracking-wider whitespace-nowrap">
+                      Verify RID
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsLookupOpen(true)}
+                      className="h-12 px-3.5 rounded-xl border-border text-muted-foreground hover:text-foreground shrink-0"
+                      title="Open Official Portal Gateway"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </form>
               </div>
             </div>
@@ -157,242 +201,288 @@ export default function LandingPage() {
       )}
 
       {/* Capabilities Matrix */}
-      <section className="w-full py-20 lg:py-40 bg-muted/10 relative">
+      <section className="w-full py-16 lg:py-28 bg-muted/10 relative">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col items-center text-center mb-16 md:mb-24 space-y-4">
-             <div className="p-3 bg-primary/10 rounded-2xl border border-primary/20 mb-2">
-                <LayoutGrid className="h-5 w-5 md:h-6 md:w-6 text-primary" />
-             </div>
-             <p className="text-[10px] md:text-[11px] font-black text-primary uppercase tracking-[0.4em]">Operational Pillars</p>
-             <h2 className="text-3xl md:text-5xl font-black tracking-tighter text-foreground uppercase">System Architecture</h2>
+          <div className="max-w-2xl mb-12 md:mb-16 space-y-2">
+            <p className="text-xs font-bold text-primary uppercase tracking-widest">Operational Architecture</p>
+            <h2 className="text-2xl md:text-4xl font-black tracking-tight text-foreground">
+              Built for High-Volume Field Verification
+            </h2>
+            <p className="text-sm md:text-base text-muted-foreground">
+              Standardized workflows connecting regional registration clusters with central verification and audit ledgers.
+            </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-10">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <InfoCard 
-              title="Real-time Ledger" 
-              description="Monitor 10,000+ bureau records with instant synchronization and multi-vector search protocols."
+              number="01"
+              title="Real-Time Registry Ledger" 
+              description="Track 10,000+ enrollment records across regional clusters with instant status synchronization, tabular filtering, and PDF/XLS export."
               icon={Database} 
-              index={0}
             />
             <InfoCard 
-              title="AI Status Triage" 
-              description="Automated intelligence analyzes submission patterns to suggest optimal processing pathways."
+              number="02"
+              title="AI-Assisted Triage" 
+              description="Automated submission analysis evaluates required fields and remarks to recommend initial review pathways for field officers."
               icon={Sparkles} 
-              index={1}
             />
             <InfoCard 
-              title="Secure Coordination" 
-              description="Internal encrypted channels for regional response teams and cross-departmental coordination."
+              number="03"
+              title="Tactical Field Coordination" 
+              description="Direct and group communication channels with pinned operational advisories and regional broadcast alerts."
               icon={MessageSquare} 
-              index={2}
             />
           </div>
         </div>
       </section>
 
-      {/* Bureau Accuracy Section */}
-      <section className="w-full py-20 lg:py-40 border-t relative overflow-hidden">
+      {/* Bureau Accuracy & Live Terminal Preview Section */}
+      <section className="w-full py-16 lg:py-28 border-t relative overflow-hidden">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-24 items-center">
-              <div className="space-y-8 md:space-y-10 order-2 lg:order-1">
-                 <div className="space-y-4">
-                    <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-foreground leading-[0.95]">
-                       Engineered for <br/>
-                       <span className="text-primary italic">Absolute Accuracy.</span>
-                    </h2>
-                    <p className="text-lg md:text-xl text-muted-foreground leading-relaxed font-medium tracking-tight">
-                       {bureauName} serves as the central nervous system for regional registration bureaus, eliminating latency through unified data entry and historical archiving.
-                    </p>
-                 </div>
-                 
-                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-8">
-                    <StatBox label="Uptime Target" value="99.9%" icon={ShieldCheck} isLive />
-                    <StatBox label="Sync Latency" value="< 1.0s" icon={Zap} isLive />
-                 </div>
-
-                 <div className="pt-4">
-                    <Button variant="outline" className="w-full sm:w-auto h-12 px-8 rounded-xl font-black uppercase text-[10px] tracking-widest border-border hover:bg-muted" asChild>
-                       <Link href="/full-registration">Review Bureau Performance</Link>
-                    </Button>
-                 </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
+            <div className="lg:col-span-5 space-y-8">
+              <div className="space-y-4">
+                <p className="text-xs font-bold text-primary uppercase tracking-widest">Institutional Reliability</p>
+                <h2 className="text-3xl md:text-5xl font-black tracking-tight text-foreground leading-[1.05] [text-wrap:balance]">
+                  Engineered for Complete Accountability.
+                </h2>
+                <p className="text-base text-muted-foreground leading-relaxed">
+                  {bureauName} unifies daily officer intake reports, RID status checks, and cryptographic MFA enforcement into a single auditable workspace.
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <StatBox label="Uptime Target" value="99.9%" icon={ShieldCheck} />
+                <StatBox label="Sync Latency" value="< 1.0s" icon={Zap} />
               </div>
 
-              <div className="relative order-1 lg:order-2 px-4 md:px-0">
-                <div className="absolute inset-0 bg-primary/20 rounded-[40px] blur-3xl opacity-20 -rotate-6 animate-pulse" />
-                <div className="relative aspect-square md:aspect-video rounded-[40px] overflow-hidden border border-border shadow-2xl bg-card group p-8 md:p-16 flex items-center justify-center transition-transform duration-700 hover:scale-[1.02]">
-                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-primary/[0.03] to-transparent pointer-events-none" />
-                   <div className="relative h-full w-full">
-                     <Image 
-                        src={logoUrl}
-                        alt="Accuracy Logo"
-                        fill
-                        sizes="(max-width: 768px) 100vw, 50vw"
-                        className="object-contain p-4 md:p-12 transition-all duration-1000 group-hover:scale-110"
-                        unoptimized
-                     />
-                   </div>
-                   <div className="absolute top-4 md:top-8 left-4 md:left-8 h-3 w-3 md:h-4 md:w-4 border-t-2 border-l-2 border-primary/20" />
-                   <div className="absolute bottom-4 md:bottom-8 right-4 md:right-8 h-3 w-3 md:h-4 md:w-4 border-b-2 border-r-2 border-primary/20" />
+              <div className="pt-2 flex flex-wrap items-center gap-3">
+                <Button variant="outline" className="h-11 px-6 rounded-xl font-bold text-xs uppercase tracking-wider border-border hover:bg-muted" asChild>
+                  <Link href="/full-performance">View Performance Analytics</Link>
+                </Button>
+                <Button variant="ghost" className="h-11 px-5 rounded-xl font-bold text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground" asChild>
+                  <Link href="/status-check">Verification Terminal</Link>
+                </Button>
+              </div>
+            </div>
+
+            {/* Interactive Live Terminal Preview Card (Replaces Stretched Logo Box) */}
+            <div className="lg:col-span-7">
+              <div className="rounded-2xl border border-border bg-card shadow-xl overflow-hidden">
+                <div className="px-5 py-3.5 bg-muted/40 border-b border-border flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="relative h-6 w-6 rounded overflow-hidden border border-border bg-background">
+                      <Image src={logoUrl} alt={bureauName} fill sizes="24px" className="object-contain p-0.5" unoptimized />
+                    </div>
+                    <span className="text-xs font-bold text-foreground tracking-tight">{bureauName} Verification Ledger</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-muted-foreground tabular-nums">
+                    {systemProtocol} · MFA Enforced
+                  </span>
+                </div>
+
+                <div className="p-5 sm:p-6 space-y-5">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="p-3.5 rounded-xl bg-muted/20 border border-border/60">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase">Daily Intake</p>
+                      <p className="text-xl font-mono font-black text-foreground tabular-nums mt-0.5">1,428</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-muted/20 border border-border/60">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase">Verified Rate</p>
+                      <p className="text-xl font-mono font-black text-emerald-600 dark:text-emerald-400 tabular-nums mt-0.5">94.2%</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-muted/20 border border-border/60">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase">Active Clusters</p>
+                      <p className="text-xl font-mono font-black text-primary tabular-nums mt-0.5">18 Sectors</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border overflow-hidden">
+                    <div className="px-4 py-2.5 bg-muted/30 border-b border-border flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <span>Recent Enrollment Stream</span>
+                      <span>Verification State</span>
+                    </div>
+                    <div className="divide-y divide-border text-xs">
+                      {[
+                        { rid: '29481057392048192837461029384', region: 'Addis Ababa · Bole Sector', status: 'Processed', tone: 'text-emerald-600 dark:text-emerald-400' },
+                        { rid: '83920194857362514029384756102', region: 'Oromia · Adama Cluster', status: 'Processing', tone: 'text-blue-600 dark:text-blue-400' },
+                        { rid: '56473829102938475610293847561', region: 'Amhara · Bahir Dar Hub', status: 'Processed', tone: 'text-emerald-600 dark:text-emerald-400' },
+                      ].map((row) => (
+                        <div key={row.rid} className="px-4 py-3 flex items-center justify-between gap-4 bg-card hover:bg-muted/20 transition-colors">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-foreground tabular-nums truncate">
+                              <FileDigit className="h-3.5 w-3.5 text-primary shrink-0" />
+                              <span>{row.rid.slice(0, 18)}...</span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground truncate mt-0.5">{row.region}</p>
+                          </div>
+                          <span className={`text-[11px] font-bold whitespace-nowrap ${row.tone}`}>
+                            {row.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
-           </div>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* Final Institutional CTA */}
-      <section className="w-full py-20 md:py-40 bg-foreground text-background">
-        <div className="container mx-auto px-4 text-center space-y-10 md:space-y-12">
-           <div className="space-y-4">
-              <h2 className="text-3xl md:text-6xl font-black tracking-tighter uppercase">Ready for Field Deployment?</h2>
-              <p className="text-sm md:text-lg text-muted-foreground max-w-xl mx-auto font-medium">Initialize your official terminal session and begin secure operations.</p>
-           </div>
-           <Button size="lg" variant="secondary" className="w-full sm:w-auto h-16 px-12 text-[12px] font-black uppercase tracking-widest rounded-2xl bg-background text-foreground hover:bg-background/90" asChild>
-              <Link href={user ? "/dashboard" : "/login"}>Enter Terminal Hub</Link>
-           </Button>
+      <section className="w-full py-16 md:py-24 bg-foreground text-background">
+        <div className="container mx-auto px-4 text-center space-y-6">
+          <div className="space-y-3">
+            <h2 className="text-2xl md:text-4xl font-black tracking-tight">Ready for Field Deployment?</h2>
+            <p className="text-sm md:text-base text-background/70 max-w-xl mx-auto">
+              Sign in with your authorized bureau credentials to access registration ledgers and regional analytics.
+            </p>
+          </div>
+          <Button size="lg" variant="secondary" className="h-13 px-10 text-xs font-bold uppercase tracking-widest rounded-xl bg-background text-foreground hover:bg-background/90" asChild>
+            <Link href={portalHref}>
+              {user ? 'Return to Active Workspace' : 'Enter Terminal Hub'}
+            </Link>
+          </Button>
         </div>
       </section>
 
-      {/* Professional Footer */}
-      <footer className="w-full py-16 md:py-24 border-t mt-auto bg-card">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 items-start mb-12 md:mb-16">
-            <div className="space-y-6 flex flex-col items-center md:items-start text-center md:text-left">
-              <div className="flex items-center gap-4">
-                <div className="relative h-10 w-10 md:h-12 md:w-12 overflow-hidden rounded-2xl border border-border shadow-xl">
-                  <Image src={logoUrl} alt="Logo" fill sizes="48px" className="object-cover" unoptimized />
+      {/* Quiet Institutional Footer */}
+      <footer className="w-full py-12 md:py-16 border-t mt-auto bg-card">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-10 items-start mb-10">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="relative h-9 w-9 overflow-hidden rounded-lg border border-border">
+                  <Image src={logoUrl} alt="Logo" fill sizes="36px" className="object-cover" unoptimized />
                 </div>
-                <span className="text-base md:text-lg font-black tracking-widest uppercase text-foreground">
+                <span className="text-base font-black tracking-wider uppercase text-foreground">
                   {bureauName.split('Track')[0]}<span className="text-primary italic">{bureauName.includes('Track') ? 'Track' : ''}</span>
                 </span>
               </div>
-              <p className="text-[10px] md:text-[11px] text-muted-foreground font-black uppercase tracking-[0.2em] max-w-xs leading-relaxed">
-                Official {bureauName} Operations Group. Secure and accountability-driven registration management.
+              <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
+                Official {bureauName} Operations Portal. Accountability-driven enrollment tracking and regional coordination.
               </p>
             </div>
 
-            <div className="space-y-4 flex flex-col items-center text-center">
-              <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Operational Hub</p>
-              <div className="space-y-3">
-                 <div className="flex items-center gap-3 text-[10px] md:text-[11px] text-muted-foreground font-bold">
-                    <MapPin className="h-3.5 w-3.5 text-primary/40" />
-                    {branding?.officeAddress || 'Regional Headquarters'}
-                 </div>
-                 <div className="flex items-center gap-3 text-[10px] md:text-[11px] text-muted-foreground font-bold">
-                    <ActivityIcon className="h-3.5 w-3.5 text-primary/40" />
-                    {branding?.operationalHours || 'Operational 24/7'}
-                 </div>
+            <div className="space-y-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-foreground">Operational Hub</p>
+              <div className="space-y-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2.5">
+                  <MapPin className="h-3.5 w-3.5 text-primary/60 shrink-0" />
+                  <span>{branding?.officeAddress || 'Regional Headquarters'}</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <ActivityIcon className="h-3.5 w-3.5 text-primary/60 shrink-0" />
+                  <span>{branding?.operationalHours || 'Operational 24/7'}</span>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-4 flex flex-col items-center md:items-end text-center md:text-right">
-              <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Support Protocols</p>
-              <div className="space-y-3">
-                 <div className="flex items-center gap-3 text-[10px] md:text-[11px] text-muted-foreground font-bold justify-center md:justify-end">
-                    <Mail className="h-3.5 w-3.5 text-primary/40" />
-                    {branding?.contactEmail || 'support@bureau.gov'}
-                 </div>
-                 <div className="flex items-center gap-3 text-[10px] md:text-[11px] text-muted-foreground font-bold justify-center md:justify-end">
-                    <Phone className="h-3.5 w-3.5 text-primary/40" />
-                    {branding?.contactPhone || '+251 ...'}
-                 </div>
+            <div className="space-y-3 md:text-right">
+              <p className="text-xs font-bold uppercase tracking-wider text-foreground">Support Channels</p>
+              <div className="space-y-2 text-xs text-muted-foreground">
+                <div className="flex items-center md:justify-end gap-2.5">
+                  <Mail className="h-3.5 w-3.5 text-primary/60 shrink-0" />
+                  <span>{branding?.contactEmail || 'support@bureau.gov'}</span>
+                </div>
+                <div className="flex items-center md:justify-end gap-2.5">
+                  <Phone className="h-3.5 w-3.5 text-primary/60 shrink-0" />
+                  <span className="tabular-nums">{branding?.contactPhone || '+251 ...'}</span>
+                </div>
               </div>
             </div>
           </div>
           
-          <div className="pt-8 border-t border-border/40 flex flex-col md:flex-row items-center justify-between gap-6">
-             <p className="text-[8px] md:text-[9px] text-muted-foreground font-black uppercase tracking-[0.3em] text-center">
-               Security Audit: <span className="text-emerald-500">ACTIVE</span> • System {systemProtocol}
-             </p>
-             <div className="flex flex-wrap items-center justify-center gap-4 md:gap-6 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">
-                <a href="#" className="hover:text-primary transition-colors">Terms</a>
-                <span className="h-1 w-1 bg-border rounded-full" />
-                <a href="#" className="hover:text-primary transition-colors">Audit</a>
-                <span className="h-1 w-1 bg-border rounded-full" />
-                <span>© 2026 Registry</span>
-             </div>
+          <div className="pt-6 border-t border-border/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
+            <p>
+              System {systemProtocol} · © 2026 {bureauName} Registry
+            </p>
+            <div className="flex items-center gap-5 font-medium">
+              <Link href="/full-registration" className="hover:text-foreground transition-colors">Public Pulse</Link>
+              <Link href="/status-check" className="hover:text-foreground transition-colors">Verification</Link>
+              <Link href={portalHref} className="hover:text-foreground transition-colors">Officer Portal</Link>
+            </div>
           </div>
         </div>
       </footer>
 
-      {/* Resident Lookup Dialog - Hardened for Window Size */}
+      {/* Resident Lookup Dialog */}
       <Dialog open={isLookupOpen} onOpenChange={setIsLookupOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] sm:max-w-5xl h-[90vh] p-0 overflow-hidden rounded-[32px] border-none shadow-2xl bg-popover flex flex-col">
-           <DialogHeader className="p-6 sm:p-8 bg-muted/30 border-b border-border flex flex-row items-center justify-between shrink-0">
-              <div className="flex items-center gap-4">
-                 <div className="p-3 bg-primary/10 rounded-2xl">
-                    <Globe className="h-6 w-6 text-primary" />
-                 </div>
-                 <div>
-                    <DialogTitle className="text-xl font-black text-foreground uppercase tracking-tight leading-none">Public Verification Gateway</DialogTitle>
-                    <DialogDescription className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">Official Fayda Resident Status Service</DialogDescription>
-                 </div>
+        <DialogContent className="w-[calc(100%-2rem)] sm:max-w-5xl h-[88vh] p-0 overflow-hidden rounded-3xl border border-border shadow-2xl bg-popover flex flex-col">
+          <DialogHeader className="p-5 sm:p-6 bg-muted/30 border-b border-border flex flex-row items-center justify-between shrink-0">
+            <div className="flex items-center gap-3.5">
+              <div className="p-2.5 bg-primary/10 rounded-xl">
+                <Globe className="h-5 w-5 text-primary" />
               </div>
-           </DialogHeader>
-           
-           <div className="flex-1 relative bg-card overflow-hidden">
-              <div className="absolute inset-0 flex items-center justify-center -z-10">
-                 <div className="flex flex-col items-center gap-3 opacity-20">
-                    <Loader2 className="h-10 w-10 text-primary animate-spin" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Synchronizing with Government Portal...</p>
-                 </div>
+              <div>
+                <DialogTitle className="text-base sm:text-lg font-bold text-foreground tracking-tight leading-none">
+                  Public Verification Gateway
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-1">
+                  Official Fayda Resident Status Service {publicRid ? `· RID: ${publicRid}` : ''}
+                </DialogDescription>
               </div>
-              <iframe 
-                src={`https://resident.fayda.et/status?rid=${publicRid}`} 
-                className="absolute inset-0 w-full h-full border-none"
-                title="Resident Portal"
-                loading="lazy"
-                allow="geolocation"
-              />
-           </div>
+            </div>
+          </DialogHeader>
+          
+          <div className="flex-1 relative bg-card overflow-hidden">
+            <div className="absolute inset-0 flex items-center justify-center -z-10">
+              <div className="flex flex-col items-center gap-3 opacity-30">
+                <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                <p className="text-xs font-semibold text-muted-foreground">Connecting to Official Verification Portal...</p>
+              </div>
+            </div>
+            <iframe 
+              src={publicRid.trim() ? `https://resident.fayda.et/status?rid=${encodeURIComponent(publicRid.trim())}` : 'https://resident.fayda.et/status'} 
+              className="absolute inset-0 w-full h-full border-none"
+              title="Resident Portal"
+              loading="lazy"
+              allow="geolocation"
+            />
+          </div>
 
-           <div className="p-4 bg-muted/30 border-t border-border flex justify-center shrink-0">
-              <div className="flex items-center gap-2 px-4 py-1.5 bg-background border border-border rounded-full shadow-sm">
-                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-                 <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">End-to-End Encrypted Tunnel Established</span>
-              </div>
-           </div>
+          <div className="px-6 py-3 bg-muted/30 border-t border-border flex items-center justify-between text-xs text-muted-foreground shrink-0">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+              <span>Encrypted verification session</span>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setIsLookupOpen(false)} className="h-8 text-xs font-semibold">
+              Close Window
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
 
-function InfoCard({ title, description, icon: Icon, index }: any) {
+function InfoCard({ number, title, description, icon: Icon }: { number: string; title: string; description: string; icon: any }) {
   return (
-    <div 
-      className="p-8 md:p-12 rounded-[32px] md:rounded-[40px] bg-card border border-border shadow-sm transition-all duration-500 hover:shadow-2xl group relative overflow-hidden"
-      style={{ animationDelay: `${index * 150}ms` }}
-    >
-      <div className="absolute top-0 right-0 -mt-8 -mr-8 w-40 h-40 bg-primary/[0.02] rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
-      <div className="mb-8 md:mb-10 p-4 md:p-5 rounded-[20px] bg-muted/50 w-fit border border-border group-hover:bg-primary/10 group-hover:border-primary/20 transition-all duration-500">
-        <Icon className="h-6 w-6 md:h-8 md:w-8 text-muted-foreground group-hover:text-primary transition-colors" strokeWidth={2.5} />
+    <div className="p-7 md:p-8 rounded-2xl bg-card border border-border shadow-sm transition-all duration-200 hover:border-primary/30 group">
+      <div className="flex items-center justify-between mb-6">
+        <div className="p-3 rounded-xl bg-muted/60 border border-border group-hover:bg-primary/10 group-hover:border-primary/20 transition-colors">
+          <Icon className="h-5 w-5 text-primary" />
+        </div>
+        <span className="text-xs font-mono font-bold text-muted-foreground/50 tabular-nums">{number}</span>
       </div>
-      <div className="space-y-3 md:space-y-4 relative z-10">
-        <h3 className="text-xl md:text-2xl font-black text-foreground uppercase tracking-tight">{title}</h3>
-        <p className="text-sm md:text-base text-muted-foreground font-medium leading-relaxed">{description}</p>
+      <div className="space-y-2.5">
+        <h3 className="text-lg font-bold text-foreground tracking-tight">{number}. {title}</h3>
+        <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
       </div>
     </div>
   );
 }
 
-function StatBox({ label, value, icon: Icon, isLive = false }: any) {
+function StatBox({ label, value, icon: Icon }: { label: string; value: string; icon: any }) {
   return (
-    <div className="flex items-center gap-4 md:gap-5 p-4 md:p-6 rounded-2xl bg-muted/30 border border-border/50 group transition-all hover:bg-card relative">
-      {isLive && (
-        <div className="absolute top-4 right-4 flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20">
-           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-           <span className="text-[7px] font-black text-emerald-600 uppercase tracking-tighter">Live</span>
-        </div>
-      )}
-      <div className="p-2.5 md:p-3 bg-background rounded-xl border border-border group-hover:border-primary/20 group-hover:shadow-lg transition-all">
-        <Icon className="h-5 w-5 md:h-6 md:w-6 text-primary" />
+    <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/20 border border-border">
+      <div className="p-2.5 bg-background rounded-lg border border-border">
+        <Icon className="h-5 w-5 text-primary" />
       </div>
-      <div className="space-y-0.5">
-         <p className="text-2xl md:text-3xl font-black text-foreground tracking-tighter">{value}</p>
-         <div className="flex items-center gap-1.5">
-            <p className="text-[9px] md:text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">{label}</p>
-            {isLive && <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500 opacity-40" />}
-         </div>
+      <div>
+        <p className="text-2xl font-mono font-black text-foreground tracking-tight tabular-nums">{value}</p>
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
       </div>
     </div>
   );

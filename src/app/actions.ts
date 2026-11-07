@@ -12,6 +12,9 @@ export async function getStatusSuggestion(input: AiAssistedStatusSuggestionInput
     return result;
   } catch (error) {
     console.error("AI Suggestion failed:", error);
-    throw new Error("Failed to get AI status suggestion.");
+    return {
+      suggestedStatus: input.requiredFieldsFilled ? 'processing' : 'pending review',
+      reason: 'AI service unavailable. Automated assessment based on completed fields.'
+    };
   }
 }

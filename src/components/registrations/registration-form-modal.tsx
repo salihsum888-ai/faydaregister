@@ -28,14 +28,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useState, useEffect } from 'react';
+import { Switch } from '@/components/ui/switch';
+import { useState, useEffect, useMemo } from 'react';
 import { Registration, UserProfile } from '@/lib/types';
-import { Edit2, Plus, Loader2 } from 'lucide-react';
+import { Edit2, Plus, Building2, Sparkles, Check, AlertTriangle, ClipboardPaste } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useFirestore, useUser, useDoc, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useFirestore, useUser, useDoc, useCollection, useMemoFirebase } from '@/firebase';
+import { doc, collection, query, where, limit } from 'firebase/firestore';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { logAuditAction } from '@/lib/audit';
+import { cn } from '@/lib/utils';
 
 const formSchema = z.object({
   applicantName: z.string().min(2, "Name must be at least 2 characters"),
@@ -47,6 +49,16 @@ const formSchema = z.object({
   officer: z.string().optional(),
   location: z.string().min(1, "Location is required"),
   remarks: z.string().optional(),
+  isSchoolRegistration: z.boolean().default(false),
+  schoolName: z.string().optional(),
+}).refine((data) => {
+  if (data.isSchoolRegistration) {
+    return Boolean(data.schoolName && data.schoolName.trim().length >= 2);
+  }
+  return true;
+}, {
+  message: "Institution Name is required when Institution Registration is enabled (min 2 characters)",
+  path: ["schoolName"],
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -55,9 +67,19 @@ interface RegistrationFormModalProps {
   registration?: Registration;
   mode: 'add' | 'edit';
   trigger?: React.ReactNode;
+  defaultIsSchool?: boolean;
+  defaultSchoolName?: string;
+  existingSchools?: string[];
 }
 
-export function RegistrationFormModal({ registration, mode, trigger }: RegistrationFormModalProps) {
+export function RegistrationFormModal({
+  registration,
+  mode,
+  trigger,
+  defaultIsSchool = false,
+  defaultSchoolName = '',
+  existingSchools,
+}: RegistrationFormModalProps) {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
   const db = useFirestore();
@@ -69,7 +91,51 @@ export function RegistrationFormModal({ registration, mode, trigger }: Registrat
   }, [db, user]);
 
   const { data: profile } = useDoc<UserProfile>(userProfileRef);
-  
+
+  // Query registrations when modal is open for institution suggestions and live 29-digit RID duplicate check
+  const schoolSuggestionsQuery = useMemoFirebase(() => {
+    if (!db || !user || !open) return null;
+    if (profile?.role === 'admin') {
+      return query(collection(db, 'registrations'), limit(2000));
+    }
+    return query(
+      collection(db, 'registrations'),
+      where('assignedReviewerId', '==', user.uid),
+      limit(2000)
+    );
+  }, [db, user, open, profile?.role]);
+
+  const { data: fetchedRegistrations } = useCollection<Registration>(schoolSuggestionsQuery);
+
+  const availableSchools = useMemo(() => {
+    const names = new Set<string>();
+    if (existingSchools && existingSchools.length > 0) {
+      existingSchools.forEach((s) => {
+        if (s && s.trim()) names.add(s.trim());
+      });
+    }
+    if (fetchedRegistrations && fetchedRegistrations.length > 0) {
+      fetchedRegistrations.forEach((reg) => {
+        const inst = (reg.institutionName || reg.schoolName || '').trim();
+        if (inst) {
+          names.add(inst);
+        }
+      });
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [existingSchools, fetchedRegistrations]);
+
+  const initialIsSchool = Boolean(
+    registration?.isInstitutionRegistration ||
+    registration?.isSchoolRegistration ||
+    (registration?.institutionName && registration.institutionName.trim().length > 0) ||
+    (registration?.schoolName && registration.schoolName.trim().length > 0) ||
+    defaultIsSchool ||
+    Boolean(defaultSchoolName && defaultSchoolName.trim().length > 0)
+  );
+
+  const initialSchoolName = registration?.institutionName || registration?.schoolName || defaultSchoolName || '';
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -82,13 +148,78 @@ export function RegistrationFormModal({ registration, mode, trigger }: Registrat
       officer: registration?.officer || '',
       location: registration?.location || '',
       remarks: registration?.remarks || '',
+      isSchoolRegistration: initialIsSchool,
+      schoolName: initialSchoolName,
     },
   });
 
   const selectedStatus = form.watch('status');
+  const isSchoolRegistration = form.watch('isSchoolRegistration');
+  const currentSchoolName = form.watch('schoolName') || '';
+  const watchedId = (form.watch('id') || '').trim();
+
+  // Check ONLY 29-digit Registration ID for duplicates (shared phone numbers across family/citizens are allowed)
+  const duplicateRidMatch = useMemo(() => {
+    if (mode !== 'add' || watchedId.length < 10 || !fetchedRegistrations) return null;
+    return fetchedRegistrations.find((r) => (r.id || '').trim() === watchedId) || null;
+  }, [mode, watchedId, fetchedRegistrations]);
+
+  const handleExtractRidFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const match = (text || '').replace(/\s+/g, '').match(/\d{29}/);
+      if (match && match[0]) {
+        form.setValue('id', match[0], { shouldValidate: true });
+        toast({
+          title: '29-Digit RID Extracted',
+          description: `Extracted ${match[0]} from clipboard.`,
+        });
+      } else {
+        const digitsOnly = (text || '').replace(/\D/g, '').slice(0, 29);
+        if (digitsOnly.length > 0) {
+          form.setValue('id', digitsOnly, { shouldValidate: true });
+          toast({
+            title: 'Digits Pasted',
+            description: `Pasted ${digitsOnly.length} numeric digits from clipboard.`,
+          });
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'No Numeric ID Found',
+            description: 'Clipboard does not contain a 29-digit Registration ID.',
+          });
+        }
+      }
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'Clipboard Access Blocked',
+        description: 'Please paste the 29-digit RID directly into the field.',
+      });
+    }
+  };
+
+  const filteredSuggestions = useMemo(() => {
+    if (availableSchools.length === 0) return [];
+    const q = currentSchoolName.trim().toLowerCase();
+    if (!q) return availableSchools.slice(0, 8);
+    return availableSchools
+      .filter((s) => s.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [availableSchools, currentSchoolName]);
 
   useEffect(() => {
     if (open) {
+      const resetIsSchool = Boolean(
+        registration?.isInstitutionRegistration ||
+        registration?.isSchoolRegistration ||
+        (registration?.institutionName && registration.institutionName.trim().length > 0) ||
+        (registration?.schoolName && registration.schoolName.trim().length > 0) ||
+        defaultIsSchool ||
+        Boolean(defaultSchoolName && defaultSchoolName.trim().length > 0)
+      );
+      const resetSchoolName = registration?.institutionName || registration?.schoolName || defaultSchoolName || '';
+
       form.reset({
         applicantName: registration?.applicantName || '',
         id: registration?.id || '',
@@ -99,17 +230,26 @@ export function RegistrationFormModal({ registration, mode, trigger }: Registrat
         officer: registration?.officer || (mode === 'add' ? profile?.fullName : registration?.officer) || '',
         location: registration?.location || '',
         remarks: registration?.remarks || '',
+        isSchoolRegistration: resetIsSchool,
+        schoolName: resetSchoolName,
       });
     }
-  }, [open, registration, form, profile, mode]);
+  }, [open, registration, form, profile, mode, defaultIsSchool, defaultSchoolName]);
 
   function onSubmit(values: FormValues) {
     if (!db || !user || !profile) return;
 
     const finalRejectionReason = values.status === 'Rejected' ? values.rejectionReason : '';
+    const cleanedSchoolName = values.isSchoolRegistration && values.schoolName
+      ? values.schoolName.trim()
+      : '';
 
     const data = {
       ...values,
+      isSchoolRegistration: Boolean(values.isSchoolRegistration && cleanedSchoolName.length > 0),
+      schoolName: cleanedSchoolName,
+      isInstitutionRegistration: Boolean(values.isSchoolRegistration && cleanedSchoolName.length > 0),
+      institutionName: cleanedSchoolName,
       rejectionReason: finalRejectionReason,
       submissionDate: new Date(values.submissionDate).toISOString(),
       updatedAt: new Date().toISOString(),
@@ -126,11 +266,11 @@ export function RegistrationFormModal({ registration, mode, trigger }: Registrat
         profile.fullName,
         'STATUS_UPDATE', 
         registration.id, 
-        `Registry: Modified record for ${values.applicantName}. New Status: ${values.status}.`
+        `Registry: Modified record for ${values.applicantName}${cleanedSchoolName ? ` (Institution: ${cleanedSchoolName})` : ''}. New Status: ${values.status}.`
       );
       toast({
         title: "Registration Updated",
-        description: `Successfully modified record for ${values.applicantName}.`,
+        description: `Successfully modified record for ${values.applicantName}${cleanedSchoolName ? ` at ${cleanedSchoolName}` : ''}.`,
       });
     } else {
       setDocumentNonBlocking(doc(db, 'registrations', values.id), data, { merge: true });
@@ -140,11 +280,11 @@ export function RegistrationFormModal({ registration, mode, trigger }: Registrat
         profile.fullName,
         'RECORD_CREATED', 
         values.id, 
-        `Registry: Created new registration for ${values.applicantName}.`
+        `Registry: Created new registration for ${values.applicantName}${cleanedSchoolName ? ` (Institution: ${cleanedSchoolName})` : ''}.`
       );
       toast({
         title: "Registration Created",
-        description: `Success: New record for ${values.applicantName} saved.`,
+        description: `Success: New record for ${values.applicantName}${cleanedSchoolName ? ` enrolled under ${cleanedSchoolName}` : ''} saved.`,
       });
     }
 
@@ -165,23 +305,124 @@ export function RegistrationFormModal({ registration, mode, trigger }: Registrat
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="w-[calc(100%-2rem)] sm:max-w-[550px] p-0 overflow-hidden rounded-xl border-none shadow-2xl bg-popover max-h-[95vh] overflow-y-auto">
-        <DialogHeader className="p-6 border-b bg-muted/30">
-          <DialogTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+      <DialogContent className="w-[calc(100%-2rem)] sm:max-w-[560px] p-0 overflow-hidden rounded-2xl border border-white/60 dark:border-white/10 shadow-2xl glass-card-surface max-h-[95vh] overflow-y-auto">
+        <DialogHeader className="p-6 border-b border-white/60 dark:border-white/10 bg-white/40 dark:bg-white/[0.03]">
+          <DialogTitle className="text-xl font-bold text-foreground flex items-center gap-2.5">
             {mode === 'add' ? <Plus className="h-6 w-6 text-primary" /> : <Edit2 className="h-6 w-6 text-primary" />}
             {mode === 'add' ? 'New Bureau Registration' : 'Update Record Details'}
           </DialogTitle>
         </DialogHeader>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="p-6 space-y-5 bg-card">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="p-6 space-y-5">
+            {/* Institution Registration Toggle + Institution Name Input with Suggestions */}
+            <div className="rounded-2xl glass-subpanel p-4 space-y-4 border border-white/70 dark:border-white/10 transition-all duration-300">
+              <FormField
+                control={form.control}
+                name="isSchoolRegistration"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between gap-3 space-y-0">
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "h-10 w-10 rounded-xl flex items-center justify-center transition-colors",
+                        field.value
+                          ? "bg-primary text-white shadow-md shadow-primary/25"
+                          : "bg-slate-200/70 dark:bg-white/10 text-slate-600 dark:text-slate-300"
+                      )}>
+                        <Building2 className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <FormLabel className="text-xs font-bold text-foreground cursor-pointer">
+                          Institution Registration
+                        </FormLabel>
+                        <p className="text-[11px] text-muted-foreground">
+                          Enable to assign this record to an institution (School, Hospital, Company, etc.)
+                        </p>
+                      </div>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={(checked) => {
+                          field.onChange(checked);
+                          if (!checked) {
+                            form.setValue('schoolName', '');
+                            form.clearErrors('schoolName');
+                          }
+                        }}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              {isSchoolRegistration && (
+                <div className="pt-2 border-t border-white/60 dark:border-white/10 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <FormField
+                    control={form.control}
+                    name="schoolName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-[10px] font-bold uppercase text-primary tracking-wider flex items-center gap-1.5">
+                          <Building2 className="h-3.5 w-3.5" />
+                          Institution Name *
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Type or select institution name (e.g., Bole High School, Black Lion Hospital)"
+                            {...field}
+                            className="h-11 bg-background/90 border-primary/30 focus-visible:ring-primary"
+                          />
+                        </FormControl>
+                        <FormMessage className="text-[10px]" />
+                      </FormItem>
+                    )}
+                  />
+
+                  {filteredSuggestions.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                        <Sparkles className="h-3 w-3 text-primary" />
+                        Registered Institution Suggestions
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {filteredSuggestions.map((school) => {
+                          const isSelected = currentSchoolName.trim().toLowerCase() === school.toLowerCase();
+                          return (
+                            <button
+                              key={school}
+                              type="button"
+                              onClick={() => {
+                                form.setValue('schoolName', school, { shouldValidate: true });
+                              }}
+                              className={cn(
+                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer",
+                                isSelected
+                                  ? "bg-primary text-white shadow-sm"
+                                  : "bg-white/70 dark:bg-white/[0.06] hover:bg-primary/15 text-slate-700 dark:text-slate-200 border border-white/80 dark:border-white/10"
+                              )}
+                            >
+                              {isSelected && <Check className="h-3 w-3" />}
+                              <span>{school}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <FormField
                 control={form.control}
                 name="applicantName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Name *</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
+                      Full Name *
+                    </FormLabel>
                     <FormControl>
                       <Input placeholder="Enter full name" {...field} className="h-11 bg-background border-border" />
                     </FormControl>
@@ -194,10 +435,32 @@ export function RegistrationFormModal({ registration, mode, trigger }: Registrat
                 name="id"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Registration ID *</FormLabel>
+                    <div className="flex items-center justify-between">
+                      <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
+                        Registration ID * ({watchedId.length}/29)
+                      </FormLabel>
+                      {mode === 'add' && (
+                        <button
+                          type="button"
+                          onClick={handleExtractRidFromClipboard}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-primary hover:underline cursor-pointer"
+                          title="Extract 29-digit RID from clipboard"
+                        >
+                          <ClipboardPaste className="h-3 w-3" /> Paste 29-Digit
+                        </button>
+                      )}
+                    </div>
                     <FormControl>
-                      <Input placeholder="29-digit numeric ID" {...field} className="h-11 bg-background border-border" maxLength={29} disabled={mode === 'edit'} />
+                      <Input placeholder="29-digit numeric ID" {...field} className="h-11 bg-background border-border font-mono text-xs" maxLength={29} disabled={mode === 'edit'} />
                     </FormControl>
+                    {duplicateRidMatch && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        <span>
+                          Duplicate 29-Digit RID already exists for {duplicateRidMatch.applicantName} ({duplicateRidMatch.status}).
+                        </span>
+                      </div>
+                    )}
                     <FormMessage className="text-[10px]" />
                   </FormItem>
                 )}
@@ -240,7 +503,7 @@ export function RegistrationFormModal({ registration, mode, trigger }: Registrat
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Status *</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="h-11 bg-background border-border">
                           <SelectValue placeholder="Select status" />
@@ -279,7 +542,7 @@ export function RegistrationFormModal({ registration, mode, trigger }: Registrat
                 render={({ field }) => (
                   <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
                     <FormLabel className="text-[10px] font-bold uppercase text-rose-500 tracking-wider">Rejection Reason *</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="h-11 border-rose-200 bg-rose-500/10 text-rose-600">
                           <SelectValue placeholder="Select reason" />

@@ -17,6 +17,10 @@ export interface Registration {
   assignedReviewerId?: string;
   updatedAt?: string;
   isPrinted?: boolean;
+  isSchoolRegistration?: boolean;
+  schoolName?: string;
+  isInstitutionRegistration?: boolean;
+  institutionName?: string;
 }
 
 export interface DashboardStats {
@@ -30,6 +34,8 @@ export interface DashboardStats {
   activeOfficers: number;
   pendingOfficers: number;
   onDutyOfficers: number;
+  institutionsCount?: number;
+  institutionRecordsCount?: number;
 }
 
 export interface DailyReport {
@@ -41,6 +47,12 @@ export interface DailyReport {
   total: number;
   remarks?: string;
   timestamp?: any;
+  isSchoolRegistration?: boolean;
+  schoolName?: string;
+  isInstitutionRegistration?: boolean;
+  institutionName?: string;
+  studentCount?: number;
+  nonStudentCount?: number;
 }
 
 export interface MonthlySummary {
@@ -68,11 +80,22 @@ export interface Notification {
   createdAt: string;
 }
 
+export interface SharedRegistrationPayload {
+  id: string;
+  applicantName: string;
+  status: RegistrationStatus;
+  phone?: string;
+  location?: string;
+  institutionName?: string;
+  submissionDate?: string;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
   text?: string;
   audioUrl?: string;
+  audioDurationSeconds?: number;
   senderId: string;
   senderName: string;
   senderEmail: string;
@@ -80,6 +103,21 @@ export interface Message {
   isEdited?: boolean;
   deletedFor?: string[];
   updatedAt?: any;
+  replyToId?: string;
+  replyToSenderName?: string;
+  replyToText?: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  attachmentType?: 'image' | 'file';
+  sharedRegistration?: SharedRegistrationPayload;
+  isCallLog?: boolean;
+  callLogData?: {
+    callType: 'voice' | 'video';
+    event: 'started' | 'ended' | 'missed' | 'declined';
+    durationSeconds?: number;
+  };
+  isExamSubmission?: boolean;
+  examSubmission?: MeetingExamSubmission;
 }
 
 export interface Conversation {
@@ -87,10 +125,18 @@ export interface Conversation {
   type: 'dm' | 'group';
   members: string[];
   name?: string;
+  description?: string;
   lastMessage?: string;
   lastTimestamp?: any;
+  lastSenderId?: string;
+  lastSenderName?: string;
+  lastReadBy?: Record<string, string>;
+  typingBy?: Record<string, string>;
   createdBy?: string;
   pinnedMessageId?: string;
+  activeCall?: CallSession | null;
+  isMeetingRoom?: boolean;
+  meetingData?: MeetingSession;
 }
 
 export interface Announcement {
@@ -133,6 +179,8 @@ export interface SystemSettings {
   publicLookupEnabled?: boolean;
   primaryLanguage?: string;
   dateFormat?: string;
+  institutionTargets?: Record<string, number>;
+  slaTargetPct?: number;
   updatedAt: any;
 }
 
@@ -145,3 +193,105 @@ export interface AuditLog {
   details: string;
   timestamp: any;
 }
+
+export interface CallParticipantState {
+  uid: string;
+  name: string;
+  role?: string;
+  photoUrl?: string;
+  isMuted: boolean;
+  isCameraOn: boolean;
+  isScreenSharing: boolean;
+  isHandRaised?: boolean;
+  joinedAt: string;
+}
+
+export interface CallSession {
+  id: string;
+  conversationId: string;
+  conversationName: string;
+  conversationType: 'dm' | 'group';
+  callType: 'voice' | 'video';
+  status: 'ringing' | 'active' | 'ended' | 'declined';
+  callerId: string;
+  callerName: string;
+  targetMemberIds: string[];
+  activeParticipantIds: string[];
+  participants?: Record<string, CallParticipantState>;
+  screenSharerId?: string;
+  screenSharerName?: string;
+  offerSdp?: string;
+  answerSdp?: string;
+  callerCandidates?: string[];
+  calleeCandidates?: string[];
+  sdpVersion?: number;
+  startedAt: string;
+  connectedAt?: string;
+  endedAt?: string;
+  endedBy?: string;
+  updatedAt?: any;
+}
+
+export interface MeetingQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctOptionIndex: number;
+  points: number;
+  explanation?: string;
+}
+
+export interface MeetingPoll {
+  id: string;
+  question: string;
+  options: string[];
+  votes?: Record<string, number>;
+  isOpen: boolean;
+}
+
+export interface MeetingSession {
+  id: string;
+  title: string;
+  agenda: string;
+  category: 'Protocol Briefing' | 'Institution Training' | 'Quality Audit' | 'Emergency Sync';
+  status: 'scheduled' | 'live' | 'ended';
+  hostId: string;
+  hostName: string;
+  scheduledFor: string;
+  startedAt?: string;
+  endedAt?: string;
+  activeParticipantIds: string[];
+  attendeeIds: string[];
+  participants?: Record<string, CallParticipantState>;
+  screenSharerId?: string;
+  screenSharerName?: string;
+  offerSdp?: string;
+  answerSdp?: string;
+  meetingNotes?: string;
+  activePoll?: MeetingPoll;
+  hasExam: boolean;
+  examUnlocked: boolean;
+  passingScorePct: number;
+  examDurationMinutes: number;
+  questions: MeetingQuestion[];
+  createdAt: string;
+  updatedAt?: any;
+}
+
+export interface MeetingExamSubmission {
+  id: string;
+  meetingId: string;
+  meetingTitle: string;
+  officerId: string;
+  officerName: string;
+  officerEmail?: string;
+  answers: number[];
+  correctCount: number;
+  totalQuestions: number;
+  earnedPoints: number;
+  totalPoints: number;
+  exactScorePct: number;
+  passed: boolean;
+  submittedAt: string;
+}
+

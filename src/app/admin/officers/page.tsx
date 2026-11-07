@@ -26,7 +26,8 @@ import {
   X,
   ShieldCheck,
   Zap,
-  TrendingUp
+  TrendingUp,
+  Eye
 } from 'lucide-react';
 import { OfficerFormModal } from '@/components/admin/officer-form-modal';
 import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from '@/firebase';
@@ -40,6 +41,8 @@ import { deleteDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { logAuditAction } from '@/lib/audit';
 import { format } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
+import { TablePagination } from '@/components/ui/table-pagination';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -109,7 +112,7 @@ export default function OfficerManagementPage() {
 
   const regions = useMemo(() => {
     if (!allOfficers) return [];
-    return Array.from(new Set(allOfficers.map(o => o.region).filter(Boolean)));
+    return Array.from(new Set(allOfficers.map(o => o.region).filter((r): r is string => Boolean(r))));
   }, [allOfficers]);
 
   const filteredOfficers = useMemo(() => {
@@ -243,7 +246,7 @@ export default function OfficerManagementPage() {
     const doc = new jsPDF('l', 'mm', 'a4');
     doc.text("Official Bureau Personnel Ledger", 14, 15);
     const rows = filteredOfficers.map(o => [
-      o.fullName, o.email, o.role, o.region, o.cluster, o.updatedAt ? format(new Date(o.updatedAt), 'MMM dd') : '-'
+      o.fullName || '', o.email || '', o.role || '', o.region || '', o.cluster || '', o.updatedAt ? format(new Date(o.updatedAt), 'MMM dd') : '-'
     ]);
 
     autoTable(doc, {
@@ -340,93 +343,124 @@ export default function OfficerManagementPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <StatSummary label="Total Active" value={stats.total} icon={Users} color="text-primary" />
-        <StatSummary label="Command Pulse" value={stats.onDuty} icon={Activity} color="text-emerald-500" />
-        <StatSummary label="Field Units" value={stats.reviewers} icon={Shield} color="text-blue-500" />
-        <StatSummary label="Admins" value={stats.admins} icon={BadgeCheck} color="text-amber-500" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <StatSummary label="Total Active" value={stats.total} delta="+100%" subText="bureau roster" isPositive={true} />
+        <StatSummary label="Command Pulse" value={stats.onDuty} delta={`+${stats.total ? Math.round((stats.onDuty / stats.total) * 100) : 0}%`} subText="on active duty" isPositive={true} />
+        <StatSummary label="Field Units" value={stats.reviewers} delta={`${stats.total ? Math.round((stats.reviewers / stats.total) * 100) : 0}%`} subText="sector officers" isPositive={true} />
+        <StatSummary label="Admins" value={stats.admins} delta={`${stats.total ? Math.round((stats.admins / stats.total) * 100) : 0}%`} subText="command clearance" isPositive={true} />
       </div>
 
-      <Card className="border border-border shadow-sm overflow-hidden bg-card rounded-[32px] relative">
-        <div className="p-6 border-b border-border bg-muted/10">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-             <div className="relative group">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
-                <Input 
-                  placeholder="Search identity or email..." 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 h-11 border-border bg-background rounded-xl text-xs font-bold"
-                />
-              </div>
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger className="h-11 bg-background border-border rounded-xl text-[10px] font-bold uppercase tracking-widest">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-3.5 w-3.5 opacity-30" />
-                    <SelectValue placeholder="Clearance" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-[10px] font-bold uppercase">All Ranks</SelectItem>
-                  <SelectItem value="admin" className="text-[10px] font-bold uppercase">Bureau Admin</SelectItem>
-                  <SelectItem value="reviewer" className="text-[10px] font-bold uppercase">Field Officer</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={regionFilter} onValueChange={setRegionFilter}>
-                <SelectTrigger className="h-11 bg-background border-border rounded-xl text-[10px] font-bold uppercase tracking-widest">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-3.5 w-3.5 opacity-30" />
-                    <SelectValue placeholder="Region" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-[10px] font-bold uppercase">All Regions</SelectItem>
-                  {regions.map(r => (
-                    <SelectItem key={r} value={r} className="text-[10px] font-bold uppercase">{r}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="ghost" className="h-11 font-black text-[10px] uppercase tracking-widest text-muted-foreground" onClick={() => { setSearchTerm(''); setRoleFilter('all'); setRegionFilter('all'); }}>
-                Reset Matrix
-              </Button>
-          </div>
-        </div>
-
-        {/* Bulk Command Matrix - Responsive Overlay */}
+      <Card className="bg-white dark:bg-card rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_8px_30px_rgba(15,23,42,0.04)] overflow-hidden relative">
+        {/* Bulk Command Matrix */}
         {selectedIds.size > 0 && (
-          <div className="absolute top-0 left-0 right-0 z-30 min-h-[4rem] h-auto bg-primary text-primary-foreground flex flex-col sm:flex-row items-center px-6 py-3 sm:py-0 gap-4 sm:gap-6 animate-in slide-in-from-top duration-500 shadow-2xl">
-            <p className="text-[11px] font-black uppercase tracking-widest flex-1 text-center sm:text-left">
+          <div className="bg-slate-900 text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 animate-in slide-in-from-top duration-200">
+            <p className="text-xs font-semibold">
               {selectedIds.size} Personnel Selected
             </p>
-            <div className="flex flex-wrap items-center justify-center sm:justify-end gap-3 w-full sm:w-auto">
-              <Button variant="ghost" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest hover:bg-white/10" onClick={() => setSelectedIds(new Set())}>
-                <X className="mr-2 h-4 w-4" /> Cancel
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-slate-300 hover:text-white hover:bg-white/10" onClick={() => setSelectedIds(new Set())}>
+                <X className="mr-1.5 h-3.5 w-3.5" /> Cancel
               </Button>
-              <div className="hidden sm:block w-px h-6 bg-white/20" />
-              <Button variant="ghost" size="sm" className="h-9 px-6 text-[10px] font-black uppercase tracking-widest hover:bg-red-500 text-white" onClick={() => setIsConfirmBulkPurgeOpen(true)} disabled={isBulkProcessing}>
-                {isBulkProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />} Purge Access
+              <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-rose-400 hover:bg-rose-600 hover:text-white" onClick={() => setIsConfirmBulkPurgeOpen(true)} disabled={isBulkProcessing}>
+                {isBulkProcessing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-1.5 h-3.5 w-3.5" />} Purge Access
               </Button>
             </div>
           </div>
         )}
 
+        {/* Integrated Top Control Bar */}
+        <div className="px-5 py-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-200/80 dark:border-slate-800 bg-white dark:bg-card">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search Officer or Email"
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              className="w-full pl-9 pr-3 h-9 bg-transparent text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-500 focus:outline-none"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setCurrentPage(1); }}>
+              <SelectTrigger className="h-9 w-[140px] rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-2xs">
+                <SelectValue placeholder="All Ranks" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs font-medium">All Ranks</SelectItem>
+                <SelectItem value="admin" className="text-xs font-medium">Bureau Admin</SelectItem>
+                <SelectItem value="reviewer" className="text-xs font-medium">Field Officer</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={regionFilter} onValueChange={(v) => { setRegionFilter(v); setCurrentPage(1); }}>
+              <SelectTrigger className="h-9 w-[150px] rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-2xs">
+                <SelectValue placeholder="All Regions" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs font-medium">All Regions</SelectItem>
+                {regions.map(r => (
+                  <SelectItem key={r} value={r} className="text-xs font-medium">{r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => { setSearchTerm(''); setRoleFilter('all'); setRegionFilter('all'); setCurrentPage(1); }}
+              title="Reset Filters"
+              className="h-9 w-9 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 shadow-2xs"
+            >
+              <Filter className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex justify-center py-40"><Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" /></div>
+            <div className="p-6 space-y-4">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center justify-between gap-4 py-3 border-b border-border/50 last:border-none">
+                  <div className="flex items-center gap-4">
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-40 rounded" />
+                      <Skeleton className="h-3 w-28 rounded" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-6 w-20 rounded-md hidden sm:block" />
+                  <Skeleton className="h-8 w-24 rounded-lg" />
+                </div>
+              ))}
+            </div>
           ) : paginatedOfficers && paginatedOfficers.length > 0 ? (
             <>
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader className="bg-muted/30">
-                    <TableRow className="border-border hover:bg-transparent h-16">
-                      <TableHead className="w-12 pl-8">
-                        <Checkbox checked={allOnPageSelected} onCheckedChange={toggleSelectAll} className="border-muted-foreground/30" />
+                  <TableHeader className="bg-[#F9FAFB] dark:bg-slate-900/60">
+                    <TableRow className="border-b border-slate-200/80 dark:border-slate-800 hover:bg-transparent h-11">
+                      <TableHead className="h-11 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <Checkbox checked={allOnPageSelected} onCheckedChange={toggleSelectAll} />
+                          <span>OFFICIAL NAME</span>
+                        </div>
                       </TableHead>
-                      <TableHead className="text-[9px] font-black uppercase h-14 pl-4 text-muted-foreground tracking-widest">Official Signature</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase h-14 text-muted-foreground tracking-widest hidden lg:table-cell">Clearance</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase h-14 text-muted-foreground tracking-widest hidden sm:table-cell">Deployment</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase h-14 text-muted-foreground tracking-widest">Status</TableHead>
-                      <TableHead className="text-[9px] font-black uppercase h-14 pr-8 text-right text-muted-foreground tracking-widest">Actions</TableHead>
+                      <TableHead className="h-11 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        LAST SYNC
+                      </TableHead>
+                      <TableHead className="h-11 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 hidden lg:table-cell whitespace-nowrap">
+                        ROLE
+                      </TableHead>
+                      <TableHead className="h-11 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 hidden sm:table-cell whitespace-nowrap">
+                        REGION / SECTOR
+                      </TableHead>
+                      <TableHead className="h-11 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        DUTY STATUS
+                      </TableHead>
+                      <TableHead className="h-11 px-4 w-28 text-right">
+                        ACTION
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -434,102 +468,90 @@ export default function OfficerManagementPage() {
                       const isMe = officer.id === currentUser?.uid;
                       return (
                         <TableRow key={officer.id} className={cn(
-                          "hover:bg-muted/30 transition-colors group border-border h-24",
-                          selectedIds.has(officer.id) && "bg-primary/[0.02]"
+                          "hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors group border-b border-slate-100 dark:border-slate-800/60 h-14",
+                          selectedIds.has(officer.id) && "bg-blue-50/40 dark:bg-blue-950/20"
                         )}>
-                          <TableCell className="pl-8">
-                            {!isMe && (
-                              <Checkbox 
-                                checked={selectedIds.has(officer.id)} 
-                                onCheckedChange={() => toggleSelectRow(officer.id)}
-                                className="border-muted-foreground/30"
-                              />
-                            )}
-                          </TableCell>
-                          <TableCell className="pl-4">
-                            <div className="flex items-center gap-5">
-                              <div className="relative">
-                                <Avatar className="h-12 w-12 sm:h-14 sm:w-14 border-2 border-background shadow-xl">
-                                  <AvatarImage src={officer.profilePhoto} />
-                                  <AvatarFallback className="font-black text-[10px] bg-muted/50">{officer.fullName.substring(0, 2).toUpperCase()}</AvatarFallback>
-                                </Avatar>
-                                <span className={cn(
-                                  "absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full border-2 border-background",
-                                  officer.isDutyActive ? "bg-green-500 animate-pulse" : "bg-muted-foreground/30"
-                                )} />
-                              </div>
+                          <TableCell className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              {!isMe ? (
+                                <Checkbox 
+                                  checked={selectedIds.has(officer.id)} 
+                                  onCheckedChange={() => toggleSelectRow(officer.id)}
+                                />
+                              ) : (
+                                <span className="w-4" />
+                              )}
+                              <Avatar className="h-8 w-8 border border-slate-200 dark:border-slate-700">
+                                <AvatarImage src={officer.profilePhoto} />
+                                <AvatarFallback className="font-semibold text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                                  {officer.fullName.substring(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
                               <div>
-                                <p className="text-base font-black text-foreground tracking-tight whitespace-nowrap flex items-center gap-1.5">
+                                <p className="text-[13px] font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap flex items-center gap-1.5">
                                   {officer.fullName}
-                                  {isMe && <span className="text-[8px] font-black uppercase bg-primary/10 text-primary px-1.5 py-0.5 rounded">You</span>}
+                                  {isMe && <span className="text-[10px] font-semibold bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">You</span>}
                                 </p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <Mail className="h-3 w-3 text-muted-foreground/30" />
-                                  <span className="text-[10px] font-bold text-muted-foreground">{officer.email}</span>
-                                </div>
+                                <p className="text-[11px] text-slate-400">{officer.email}</p>
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell">
-                            <div className="flex flex-col gap-1">
-                              <span className={cn(
-                                "text-[9px] font-black uppercase px-2 py-1 rounded-lg tracking-tighter w-fit",
-                                officer.role === 'admin' ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' : 'bg-primary/10 text-primary border border-primary/20'
-                              )}>
-                                {officer.role}
-                              </span>
-                              <p className="text-[8px] font-mono text-muted-foreground/30 uppercase tracking-tighter">UID: {officer.id.substring(0, 10)}</p>
-                            </div>
+                          <TableCell className="px-4 py-3 whitespace-nowrap">
+                            <span className="text-[13px] text-slate-600 dark:text-slate-300">
+                              {officer.updatedAt ? format(new Date(officer.updatedAt), 'MMM do, yyyy; hh:mm a') : 'Not synced'}
+                            </span>
                           </TableCell>
-                          <TableCell className="hidden sm:table-cell">
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-1.5 text-[11px] font-black text-foreground uppercase">
-                                <MapPin className="h-3 w-3 text-primary/40" />
-                                {officer.region}
-                              </div>
-                              <p className="text-[9px] text-muted-foreground/50 font-bold uppercase tracking-widest pl-4.5">{officer.cluster}</p>
-                            </div>
+                          <TableCell className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">
+                            <span className="text-[13px] text-slate-600 dark:text-slate-300 capitalize">
+                              {officer.role === 'admin' ? 'Administrator' : 'Field Reviewer'}
+                            </span>
                           </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col gap-1">
-                               <div className="flex items-center gap-2 text-[10px] font-black uppercase">
-                                 {officer.isDutyActive ? (
-                                   <span className="text-emerald-600 flex items-center gap-1"><Activity className="h-3 w-3" /> Active</span>
-                                 ) : (
-                                   <span className="text-muted-foreground/40">Offline</span>
-                                 )}
-                               </div>
-                               <div className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground/30 uppercase tracking-tighter">
-                                 <Clock className="h-2.5 w-2.5" />
-                                 {officer.updatedAt ? format(new Date(officer.updatedAt), 'MMM dd, HH:mm') : 'No sync'}
-                               </div>
-                            </div>
+                          <TableCell className="px-4 py-3 hidden sm:table-cell whitespace-nowrap">
+                            <span className="text-[13px] text-slate-600 dark:text-slate-300">
+                              {officer.region} • {officer.cluster}
+                            </span>
                           </TableCell>
-                          <TableCell className="pr-8 text-right">
-                            <div className="flex items-center justify-end gap-2 lg:opacity-0 lg:group-hover:opacity-100 transition-all">
-                              <Button variant="ghost" size="sm" className="h-9 px-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-xl" asChild>
-                                <Link href={`/performance?officerId=${officer.id}`}>
-                                   <TrendingUp className="mr-1.5 h-3.5 w-3.5" /> Intelligence
-                                </Link>
-                              </Button>
+                          <TableCell className="px-4 py-3 whitespace-nowrap">
+                            <span className={cn(
+                              "inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold",
+                              officer.isDutyActive
+                                ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400"
+                                : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                            )}>
+                              {officer.isDutyActive ? 'Active Duty' : 'Offline'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="px-4 py-3 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center justify-end gap-1">
+                              <Link
+                                href={`/performance?officerId=${officer.id}`}
+                                title="View Officer Dossier"
+                                className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Link>
                               <OfficerFormModal 
                                 mode="edit" 
                                 officer={officer} 
                                 trigger={
-                                  <Button variant="ghost" size="icon" className="h-10 w-10 text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-xl">
+                                  <button
+                                    type="button"
+                                    title="Edit Officer"
+                                    className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                  >
                                     <Edit2 className="h-4 w-4" />
-                                  </Button>
+                                  </button>
                                 } 
                               />
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-10 w-10 text-muted-foreground/30 hover:text-destructive hover:bg-destructive/5 rounded-xl"
+                              <button
+                                type="button"
+                                title="Revoke Officer"
                                 onClick={() => initiateDelete(officer)}
                                 disabled={isMe}
+                                className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-30 transition-colors"
                               >
                                 <Trash2 className="h-4 w-4" />
-                              </Button>
+                              </button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -539,44 +561,19 @@ export default function OfficerManagementPage() {
                 </Table>
               </div>
 
-              {totalPages > 1 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between px-8 py-6 bg-muted/5 border-t border-border gap-6">
-                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">
-                    Visualizing {paginatedOfficers.length} of {filteredOfficers.length} Personnel
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-11 w-11 p-0 rounded-xl border-border bg-background hover:bg-muted"
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <div className="flex items-center justify-center min-w-[120px] h-11 text-[10px] font-black text-foreground bg-muted/50 border border-border rounded-xl uppercase tracking-widest px-3">
-                      Page {currentPage} / {totalPages}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-11 w-11 p-0 rounded-xl border-border bg-background hover:bg-muted"
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                      disabled={currentPage === totalPages}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
+              <TablePagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={filteredOfficers.length}
+                shownItems={paginatedOfficers.length}
+                itemLabel="officers"
+                onPageChange={setCurrentPage}
+              />
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center h-[500px] text-muted-foreground/30">
-              <div className="p-8 bg-muted/50 rounded-full border border-dashed border-border mb-6">
-                <Users className="h-16 w-16 opacity-10" />
-              </div>
-              <p className="text-sm font-black uppercase tracking-[0.4em] text-center">Zero Matches in Sector</p>
-              <p className="text-xs text-center px-12 mt-2 font-medium italic">Adjust your filters or initialize new personnel registration.</p>
+            <div className="flex flex-col items-center justify-center h-[360px] text-slate-400">
+              <Users className="h-10 w-10 opacity-40 mb-3" />
+              <p className="text-xs font-semibold">No matching officers found</p>
             </div>
           )}
         </CardContent>
@@ -657,15 +654,28 @@ export default function OfficerManagementPage() {
   );
 }
 
-function StatSummary({ label, value, icon: Icon, color }: any) {
+function StatSummary({ label, value, delta = '+12%', subText = 'last week', isPositive = true }: any) {
   return (
-    <Card className="border border-border shadow-sm bg-card rounded-[24px] overflow-hidden group hover:shadow-lg transition-all">
-      <CardContent className="p-8">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">{label}</p>
-          <div className={`p-3 rounded-2xl bg-muted/50 border border-border group-hover:bg-background transition-all ${color}`}><Icon className="h-5 w-5" /></div>
+    <Card className="rounded-[20px] border border-slate-100 dark:border-slate-800/80 bg-white dark:bg-card shadow-[0_10px_30px_rgba(15,23,42,0.04)] hover:shadow-[0_14px_36px_rgba(15,23,42,0.07)] transition-all duration-300 overflow-hidden">
+      <CardContent className="p-6 space-y-4">
+        <p className="text-[13px] font-semibold text-slate-900 dark:text-slate-100 tracking-tight">{label}</p>
+        <p className="text-[32px] font-bold text-slate-900 dark:text-white tracking-tight tabular-nums leading-none">{value.toLocaleString()}</p>
+        <div className="flex items-center gap-1.5 pt-1">
+          <span
+            className={cn(
+              'inline-flex items-center justify-center h-4 w-4 rounded-[4px] border',
+              isPositive
+                ? 'border-emerald-500/50 text-emerald-600 bg-emerald-500/5'
+                : 'border-rose-500/50 text-rose-500 bg-rose-500/5'
+            )}
+          >
+            <svg viewBox="0 0 12 12" className="h-2.5 w-2.5 fill-none stroke-current" strokeWidth="1.6">
+              <path d="M1.5 8.5L4.5 5.5L7 7.5L10.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">{delta}</span>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 font-normal">{subText}</span>
         </div>
-        <p className="text-4xl sm:text-5xl font-black text-foreground tracking-tighter">{value.toLocaleString()}</p>
       </CardContent>
     </Card>
   );

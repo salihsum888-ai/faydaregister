@@ -31,14 +31,15 @@ import {
 import { useState, useEffect } from 'react';
 import { UserPlus, ShieldCheck, UserCircle, MapPin, Layers, ImageIcon, Loader2, Mail, Edit2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { initializeApp, deleteApp } from 'firebase/app';
+import { initializeApp, deleteApp, getApps } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import { useFirestore, useUser, useDoc, useMemoFirebase } from '@/firebase';
-import { setDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { setDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { UserProfile } from '@/lib/types';
 import { logAuditAction } from '@/lib/audit';
+import { VerificationAnimation } from '@/components/auth/verification-animation';
 
 const formSchema = z.object({
   fullName: z.string().min(2, "Full name must be at least 2 characters"),
@@ -63,6 +64,7 @@ interface OfficerFormModalProps {
 export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerFormModalProps) {
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [verifiedData, setVerifiedData] = useState<{ fullName: string; role: string } | null>(null);
   const { toast } = useToast();
   const db = useFirestore();
   const { user: currentUser } = useUser();
@@ -87,6 +89,9 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
   });
 
   useEffect(() => {
+    if (!open) {
+      setVerifiedData(null);
+    }
     if (open && mode === 'edit' && officer) {
       form.reset({
         fullName: officer.fullName,
@@ -122,45 +127,49 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
           return;
         }
 
-        const secondaryApp = initializeApp(firebaseConfig, 'SecondaryApp');
+        const existingSecondary = getApps().find(a => a.name === 'SecondaryApp');
+        const secondaryApp = existingSecondary || initializeApp(firebaseConfig, 'SecondaryApp');
         const secondaryAuth = getAuth(secondaryApp);
         
-        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, values.email, values.password);
-        const uid = userCredential.user.uid;
+        try {
+          const userCredential = await createUserWithEmailAndPassword(secondaryAuth, values.email, values.password);
+          const uid = userCredential.user.uid;
 
-        const profileData = {
-          id: uid,
-          fullName: values.fullName,
-          email: values.email,
-          role: values.role,
-          region: values.region,
-          cluster: values.cluster,
-          profilePhoto: values.profilePhoto || `https://api.dicebear.com/7.x/initials/svg?seed=${values.fullName}`,
-          updatedAt: new Date().toISOString(),
-          twoFactorEnabled: true, // Mandatory MFA for everyone
-          twoFactorSecret: '', 
-        };
+          const profileData = {
+            id: uid,
+            fullName: values.fullName,
+            email: values.email,
+            role: values.role,
+            region: values.region,
+            cluster: values.cluster,
+            profilePhoto: values.profilePhoto || `https://api.dicebear.com/7.x/initials/svg?seed=${values.fullName}`,
+            updatedAt: new Date().toISOString(),
+            twoFactorEnabled: true, // Mandatory MFA for everyone
+            twoFactorSecret: '', 
+          };
 
-        setDocumentNonBlocking(doc(db, 'users', uid), profileData, { merge: true });
+          setDocumentNonBlocking(doc(db, 'users', uid), profileData, { merge: true });
 
-        if (values.role === 'admin') {
-          setDocumentNonBlocking(doc(db, 'admin_users', uid), { active: true }, { merge: true });
+          if (values.role === 'admin') {
+            setDocumentNonBlocking(doc(db, 'admin_users', uid), { active: true }, { merge: true });
+          }
+          
+          logAuditAction(
+            db,
+            currentUser,
+            currentProfile.fullName,
+            'PERSONNEL_MODIFIED',
+            uid,
+            `Registered new official: ${values.fullName} with ${values.role} clearance. MFA Initialized.`
+          );
+
+          toast({
+            title: "Officer Registered",
+            description: `Success: ${values.fullName} has been granted access. MFA setup required on first login.`,
+          });
+        } finally {
+          await deleteApp(secondaryApp).catch(() => {});
         }
-        
-        logAuditAction(
-          db,
-          currentUser,
-          currentProfile.fullName,
-          'PERSONNEL_MODIFIED',
-          uid,
-          `Registered new official: ${values.fullName} with ${values.role} clearance. MFA Initialized.`
-        );
-
-        await deleteApp(secondaryApp);
-        toast({
-          title: "Officer Registered",
-          description: `Success: ${values.fullName} has been granted access. MFA setup required on first login.`,
-        });
       } else if (mode === 'edit' && officer) {
         const profileData = {
           fullName: values.fullName,
@@ -175,6 +184,8 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
 
         if (values.role === 'admin') {
           setDocumentNonBlocking(doc(db, 'admin_users', officer.id), { active: true }, { merge: true });
+        } else if (officer.role === 'admin') {
+          deleteDocumentNonBlocking(doc(db, 'admin_users', officer.id));
         }
 
         logAuditAction(
@@ -192,8 +203,15 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
         });
       }
 
-      setOpen(false);
-      form.reset();
+      setVerifiedData({
+        fullName: values.fullName,
+        role: values.role === 'admin' ? 'Bureau Administrator' : 'Field Officer',
+      });
+      setTimeout(() => {
+        setOpen(false);
+        setVerifiedData(null);
+        form.reset();
+      }, 1450);
     } catch (error: any) {
       toast({
         title: "Operation Failed",
@@ -222,6 +240,23 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
           </DialogTitle>
         </DialogHeader>
         
+        {verifiedData ? (
+          <div className="bg-card p-6">
+            <VerificationAnimation
+              variant="provisioned"
+              title={mode === 'add' ? 'Officer Authenticated & Provisioned' : 'Credentials Verified & Updated'}
+              subtitle={
+                mode === 'add'
+                  ? 'Account credentials verified. Mandatory Google Authenticator MFA will activate on initial sign-in.'
+                  : 'Updated clearance parameters and officer registry profile verified.'
+              }
+              userName={verifiedData.fullName}
+              userRole={verifiedData.role}
+              durationMs={1400}
+              compact
+            />
+          </div>
+        ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="p-6 sm:p-8 space-y-6 bg-card">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -364,6 +399,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
             </div>
           </form>
         </Form>
+        )}
       </DialogContent>
     </Dialog>
   );

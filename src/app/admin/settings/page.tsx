@@ -9,10 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { useFirestore, useDoc, useMemoFirebase, useUser } from '@/firebase';
-import { doc, serverTimestamp } from 'firebase/firestore';
+import { useFirestore, useDoc, useCollection, useMemoFirebase, useUser } from '@/firebase';
+import { doc, collection, query, limit, serverTimestamp } from 'firebase/firestore';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
-import { SystemSettings, UserProfile } from '@/lib/types';
+import { SystemSettings, UserProfile, Registration, DailyReport, MonthlySummary } from '@/lib/types';
 import { 
   Settings, 
   Image as ImageIcon, 
@@ -38,11 +38,15 @@ import {
   CheckCircle2,
   XCircle,
   Moon,
-  Sun
+  Sun,
+  FileSpreadsheet,
+  Database,
 } from 'lucide-react';
 import Image from 'next/image';
 import { logAuditAction } from '@/lib/audit';
 import { cn } from '@/lib/utils';
+import * as XLSX from 'xlsx';
+import { format } from 'date-fns';
 
 const DEFAULT_LOGO = "https://services.eaes.et/NID-Logos/Fayda%20For%20Ethiopia%20logo-%20english-2-01.png";
 
@@ -82,6 +86,123 @@ export default function AdminSettingsPage() {
     return doc(db, 'system_settings', 'branding');
   }, [db]);
   const { data: branding, isLoading } = useDoc<SystemSettings>(brandingRef);
+
+  // Step 5: Queries for 1-Click Full Bureau Multi-Sheet Excel Backup
+  const backupRegsQuery = useMemoFirebase(
+    () => (db && user ? query(collection(db, 'registrations'), limit(10000)) : null),
+    [db, user]
+  );
+  const backupDailyQuery = useMemoFirebase(
+    () => (db && user ? query(collection(db, 'daily_reports'), limit(10000)) : null),
+    [db, user]
+  );
+  const backupMonthlyQuery = useMemoFirebase(
+    () => (db && user ? query(collection(db, 'monthly_summaries'), limit(5000)) : null),
+    [db, user]
+  );
+  const backupUsersQuery = useMemoFirebase(
+    () => (db && user ? query(collection(db, 'users'), limit(2000)) : null),
+    [db, user]
+  );
+
+  const { data: allRegsBackup } = useCollection<Registration>(backupRegsQuery);
+  const { data: allDailyBackup } = useCollection<DailyReport>(backupDailyQuery);
+  const { data: allMonthlyBackup } = useCollection<MonthlySummary>(backupMonthlyQuery);
+  const { data: allUsersBackup } = useCollection<UserProfile>(backupUsersQuery);
+  const [isExportingBackup, setIsExportingBackup] = useState(false);
+
+  const handleExportFullBureauBackup = () => {
+    setIsExportingBackup(true);
+    try {
+      const wb = XLSX.utils.book_new();
+
+      const regRows = (allRegsBackup || []).map((r, i) => ({
+        'No.': i + 1,
+        '29-Digit RID': r.id,
+        'Applicant Name': r.applicantName,
+        Phone: r.phone || '',
+        Status: r.status,
+        'Rejection / Failure Reason': r.rejectionReason || '',
+        Institution: r.institutionName || r.schoolName || '',
+        Location: r.location || '',
+        'Submission Date': r.submissionDate || '',
+        Officer: r.officer || '',
+      }));
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(regRows.length ? regRows : [{ Info: 'No registrations' }]),
+        'Registrations'
+      );
+
+      const dailyRows = (allDailyBackup || []).map((d, i) => ({
+        'No.': i + 1,
+        Date: d.date,
+        Officer: d.officerName || d.officerId,
+        'Ethio Count': d.ethioCount,
+        'Safaricom Count': d.safaricomCount,
+        Total: d.total,
+        Institution: d.institutionName || d.schoolName || '',
+        Remarks: d.remarks || '',
+      }));
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(dailyRows.length ? dailyRows : [{ Info: 'No daily reports' }]),
+        'Daily_Reports'
+      );
+
+      const monthlyRows = (allMonthlyBackup || []).map((m, i) => ({
+        'No.': i + 1,
+        Month: m.month,
+        Year: m.year,
+        Officer: m.officerName || m.officerId,
+        'Ethio Total': m.ethioTotal,
+        'Safaricom Total': m.safaricomTotal,
+        'Grand Total': m.grandTotal,
+      }));
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(
+          monthlyRows.length ? monthlyRows : [{ Info: 'No monthly summaries' }]
+        ),
+        'Monthly_Summaries'
+      );
+
+      const userRows = (allUsersBackup || []).map((u, i) => ({
+        'No.': i + 1,
+        'Full Name': u.fullName,
+        Email: u.email,
+        Role: u.role,
+        Phone: u.phoneNumber || '',
+        Address: u.address || '',
+      }));
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(userRows.length ? userRows : [{ Info: 'No personnel' }]),
+        'Personnel'
+      );
+
+      const filename = `Fayda_Full_Bureau_Backup_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+      XLSX.writeFile(wb, filename);
+
+      if (db && user && profile) {
+        logAuditAction(
+          db,
+          user,
+          profile.fullName,
+          'PERFORMANCE_REVIEW',
+          'bureau_backup',
+          `Exported Full Bureau Multi-Sheet Excel Backup (${regRows.length} registrations, ${dailyRows.length} daily logs, ${monthlyRows.length} monthly archives, ${userRows.length} personnel).`
+        );
+      }
+
+      toast({
+        title: 'Full Bureau Backup Exported',
+        description: `Downloaded 4-sheet workbook (${filename}).`,
+      });
+    } finally {
+      setTimeout(() => setIsExportingBackup(false), 500);
+    }
+  };
 
   useEffect(() => {
     if (branding) {
@@ -218,6 +339,20 @@ export default function AdminSettingsPage() {
         </div>
         
         <div className="flex flex-col sm:flex-row items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleExportFullBureauBackup}
+            disabled={isExportingBackup}
+            className="w-full sm:w-auto h-14 px-6 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 font-black uppercase tracking-widest text-[10px] rounded-2xl"
+          >
+            {isExportingBackup ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Database className="mr-2 h-4 w-4" />
+            )}
+            Full Bureau Backup (.xlsx)
+          </Button>
           {!isEditing ? (
             <Button onClick={() => setIsEditing(true)} className="w-full sm:w-auto h-14 px-10 bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-primary/10 transition-all hover:scale-[1.02] active:scale-95">
               <Edit3 className="mr-2 h-4 w-4" /> Enter Configuration Mode

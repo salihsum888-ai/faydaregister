@@ -20,8 +20,21 @@ import {
   ShieldAlert,
   TrendingUp,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Search,
+  ArrowUpDown,
+  Eye,
+  RotateCcw,
+  SquarePen
 } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table';
 import Link from 'next/link';
 import { 
   Dialog, 
@@ -57,6 +70,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from '@/components/ui/checkbox';
+import { TablePagination } from '@/components/ui/table-pagination';
 import { logAuditAction } from '@/lib/audit';
 import { format } from 'date-fns';
 
@@ -84,8 +98,10 @@ export default function HistoricalDataPage() {
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
   const [isConfirmBulkPurgeOpen, setIsConfirmBulkPurgeOpen] = useState(false);
 
-  // Pagination State
+  // Pagination & Filter State
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [yearFilter, setYearFilter] = useState('all');
   const itemsPerPage = 8;
 
   // Deletion State
@@ -125,13 +141,20 @@ export default function HistoricalDataPage() {
 
   const history = useMemo(() => {
     if (!rawHistory) return [];
-    return [...rawHistory].sort((a, b) => {
-      const yearA = parseInt(a.year);
-      const yearB = parseInt(b.year);
-      if (yearA !== yearB) return yearB - yearA;
-      return MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month);
-    });
-  }, [rawHistory]);
+    return [...rawHistory]
+      .filter(item => {
+        const label = `${item.month} ${item.year}`.toLowerCase();
+        const matchesSearch = !searchTerm || label.includes(searchTerm.toLowerCase());
+        const matchesYear = yearFilter === 'all' || item.year === yearFilter;
+        return matchesSearch && matchesYear;
+      })
+      .sort((a, b) => {
+        const yearA = parseInt(a.year);
+        const yearB = parseInt(b.year);
+        if (yearA !== yearB) return yearB - yearA;
+        return MONTHS.indexOf(b.month) - MONTHS.indexOf(a.month);
+      });
+  }, [rawHistory, searchTerm, yearFilter]);
 
   const paginatedHistory = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -484,155 +507,230 @@ export default function HistoricalDataPage() {
         </div>
       </div>
 
-      <Card className="border border-border bg-card overflow-hidden rounded-3xl shadow-sm relative min-h-[500px]">
-        <CardHeader className="bg-muted/30 border-b border-border py-4">
-          <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-            <Database className="h-3.5 w-3.5" /> Bureau Archive Ledger
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {/* Bulk Action Overlay - Hardened Responsiveness */}
-          {selectedIds.size > 0 && (
-            <div className="absolute top-0 left-0 right-0 z-30 min-h-[3.5rem] h-auto bg-primary text-primary-foreground flex flex-col sm:flex-row items-center px-4 sm:px-8 py-3 sm:py-0 gap-4 sm:gap-6 animate-in slide-in-from-top duration-500 shadow-xl">
-              <p className="text-[11px] font-black uppercase tracking-widest flex-1 text-center sm:text-left">
-                 {selectedIds.size} Archives Selected
-              </p>
-              <div className="flex items-center justify-center sm:justify-end gap-3 w-full sm:w-auto">
-                <Button variant="ghost" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest hover:bg-white/10" onClick={() => setSelectedIds(new Set())}>
-                  <X className="mr-2 h-4 w-4" /> Clear
-                </Button>
-                <div className="hidden sm:block w-px h-6 bg-white/20" />
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-9 px-6 text-[10px] font-black uppercase tracking-widest hover:bg-red-500 text-white" 
-                  onClick={() => setIsConfirmBulkPurgeOpen(true)}
-                  disabled={isBulkProcessing}
-                >
-                  {isBulkProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                  Purge Selected
-                </Button>
-              </div>
+      <div className="bg-white dark:bg-card rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_8px_30px_rgba(15,23,42,0.04)] overflow-hidden relative">
+        {/* Bulk Action Bar */}
+        {selectedIds.size > 0 && (
+          <div className="bg-blue-600 text-white flex flex-col sm:flex-row items-center justify-between px-5 py-2.5 gap-3">
+            <p className="text-xs font-semibold">
+              {selectedIds.size} Archives Selected
+            </p>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" className="h-8 px-3 text-xs font-semibold text-white hover:bg-white/15" onClick={() => setSelectedIds(new Set())}>
+                <X className="mr-1.5 h-3.5 w-3.5" /> Clear
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-8 px-3.5 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-lg" 
+                onClick={() => setIsConfirmBulkPurgeOpen(true)}
+                disabled={isBulkProcessing}
+              >
+                {isBulkProcessing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-1.5 h-3.5 w-3.5" />}
+                Purge Selected
+              </Button>
             </div>
-          )}
+          </div>
+        )}
 
-          <div className="divide-y divide-border">
-            {/* Header Row for Select All - Responsive Padding */}
-            {paginatedHistory.length > 0 && (
-              <div className="bg-muted/10 px-4 sm:px-6 py-3 sm:py-2 border-b border-border flex items-center">
-                 <div className="flex items-center gap-3">
-                    <Checkbox checked={allOnPageSelected} onCheckedChange={toggleSelectAll} className="border-muted-foreground/30" />
-                    <span className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Select All Archives on Page</span>
-                 </div>
-              </div>
-            )}
+        {/* Integrated Top Control Bar */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 px-5 py-3.5 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Search month or year..."
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              className="h-9 pl-9 border-0 bg-transparent shadow-none focus-visible:ring-0 text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-2xs">
+              <span>Show {itemsPerPage} Row</span>
+            </div>
+            <Select value={yearFilter} onValueChange={(v) => { setYearFilter(v); setCurrentPage(1); }}>
+              <SelectTrigger className="w-auto min-w-[120px] h-9 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-2xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400">Year</span>
+                  <SelectValue placeholder="All" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs font-medium">All Years</SelectItem>
+                {YEARS.map(y => (
+                  <SelectItem key={y} value={y} className="text-xs font-medium">{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => { setSearchTerm(''); setYearFilter('all'); setCurrentPage(1); }}
+              className="h-9 w-9 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 hover:text-slate-800 shadow-2xs"
+              title="Reset filters"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
 
-            {isLoading ? (
-              <div className="py-24 flex justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary opacity-20" /></div>
-            ) : paginatedHistory.map((entry) => {
-              const label = `${entry.month} ${entry.year}`;
-              return (
-                <div key={entry.id} className={cn(
-                  "group flex flex-col lg:flex-row lg:items-center justify-between p-6 hover:bg-muted/30 transition-all border-border border-b last:border-0 lg:h-24 gap-6 lg:gap-0",
-                  selectedIds.has(entry.id) && "bg-primary/5"
-                )}>
-                  <div className="flex-1 flex flex-col lg:flex-row lg:items-center gap-6 lg:gap-10">
-                    <div className="flex items-center gap-4 min-w-0 lg:min-w-[220px]">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-11 px-4 text-center">
+                  <Checkbox checked={allOnPageSelected} onCheckedChange={toggleSelectAll} className="rounded-[4px] border-slate-300 dark:border-slate-700" />
+                </TableHead>
+                <TableHead>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Reporting Period</span>
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </TableHead>
+                <TableHead>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Ethio Intake</span>
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </TableHead>
+                <TableHead>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Safaricom Intake</span>
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </TableHead>
+                <TableHead>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Grand Total</span>
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </TableHead>
+                <TableHead>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Processed</span>
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </TableHead>
+                <TableHead>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Rejected</span>
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </TableHead>
+                <TableHead className="border-r-0 text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <span>Action</span>
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-48 text-center">
+                    <Loader2 className="h-7 w-7 animate-spin text-blue-600 mx-auto" />
+                  </TableCell>
+                </TableRow>
+              ) : paginatedHistory.length > 0 ? paginatedHistory.map((entry) => {
+                const label = `${entry.month} ${entry.year}`;
+                return (
+                  <TableRow key={entry.id} className={cn("h-14 group", selectedIds.has(entry.id) && "bg-blue-50/40 dark:bg-blue-950/20")}>
+                    <TableCell className="text-center">
                       <Checkbox 
                         checked={selectedIds.has(entry.id)} 
                         onCheckedChange={() => toggleSelectRow(entry.id)}
-                        className="border-muted-foreground/30 shrink-0"
+                        className="rounded-[4px] border-slate-300 dark:border-slate-700"
                       />
-                      <div className="p-3 rounded-2xl bg-muted/50 border border-border group-hover:bg-primary/5 group-hover:border-primary/20 transition-all shrink-0">
-                        <Calendar className="h-5 w-5 text-muted-foreground/40 group-hover:text-primary transition-colors" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500">
+                          <Calendar className="h-4 w-4" />
+                        </div>
+                        <span className="text-[13px] font-semibold text-slate-800 dark:text-slate-100">{label}</span>
                       </div>
-                      <h3 className="text-lg font-black text-foreground tracking-tight truncate">{label}</h3>
+                    </TableCell>
+                    <TableCell className="font-medium text-slate-700 dark:text-slate-200 tabular-nums">
+                      {entry.ethio.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="font-medium text-slate-700 dark:text-slate-200 tabular-nums">
+                      {entry.safaricom.toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/50 text-[12px] font-semibold text-blue-600 dark:text-blue-400 tabular-nums">
+                        {entry.total.toLocaleString()}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#ECFDF5] text-[#10B981] dark:bg-emerald-950/50 dark:text-emerald-400 text-[11px] font-semibold tabular-nums">
+                        {(entry.processed || 0).toLocaleString()}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#FEF2F2] text-[#EF4444] dark:bg-rose-950/50 dark:text-rose-400 text-[11px] font-semibold tabular-nums">
+                        {(entry.rejected || 0).toLocaleString()}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          asChild
+                          title="View Comparative Analysis"
+                        >
+                          <Link href={`/previous?month=${entry.month}&year=${entry.year}`}>
+                            <Eye className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          onClick={() => handleEdit(entry)}
+                          title="Edit Archive"
+                        >
+                          <SquarePen className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                          onClick={() => initiateDelete(entry.id, label)}
+                          title="Delete Archive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              }) : (
+                <TableRow>
+                  <TableCell colSpan={9} className="h-48 text-center">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Database className="h-8 w-8 text-slate-300" />
+                      <p className="text-xs font-semibold text-slate-400">Archive Vault Empty</p>
                     </div>
-                    
-                    <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-8">
-                      <MetricItem label="Grand Total" value={entry.total} color="text-primary" />
-                      <MetricItem label="Ethio Intake" value={entry.ethio} color="text-foreground/80" />
-                      <MetricItem label="Safaricom" value={entry.safaricom} color="text-foreground/80" />
-                      <MetricItem label="Processed" value={entry.processed || 0} color="text-emerald-600" />
-                      <MetricItem label="Rejected" value={entry.rejected || 0} color="text-rose-600" />
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2 lg:opacity-0 group-hover:opacity-100 transition-all lg:ml-6 justify-end">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-10 px-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-xl transition-all"
-                      asChild
-                    >
-                      <Link href={`/previous?month=${entry.month}&year=${entry.year}`}>
-                        <TrendingUp className="mr-2 h-4 w-4" /> Analysis
-                      </Link>
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-10 w-10 text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-xl transition-all"
-                      onClick={() => handleEdit(entry)}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-10 w-10 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/5 rounded-xl transition-all"
-                      onClick={() => initiateDelete(entry.id, label)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-            {!isLoading && history.length === 0 && (
-              <div className="py-32 flex flex-col items-center justify-center text-muted-foreground/30 bg-muted/5">
-                <div className="p-6 bg-muted rounded-full mb-6 border border-border shadow-inner">
-                   <Database className="h-12 w-12 opacity-10" />
-                </div>
-                <p className="text-sm font-black uppercase tracking-[0.2em]">Archive Vault Empty</p>
-                <p className="text-xs font-medium mt-2">Initialize synchronization to begin digitizing bureau records.</p>
-              </div>
-            )}
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between px-8 py-6 bg-muted/5 border-t border-border gap-6">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                Showing {paginatedHistory.length} of {history.length} Archives
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-11 w-11 p-0 rounded-xl border-border bg-background hover:bg-muted"
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <div className="flex items-center justify-center min-w-[120px] h-11 text-[10px] font-black text-foreground bg-muted/50 border border-border rounded-xl uppercase tracking-widest px-3">
-                  Page {currentPage} of {totalPages}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-11 w-11 p-0 rounded-xl border-border bg-background hover:bg-muted"
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        {/* Bottom Pagination Footer */}
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={history.length}
+          shownItems={paginatedHistory.length}
+          itemLabel="Archives"
+          onPageChange={setCurrentPage}
+        />
+      </div>
       
       <div className="flex items-center gap-3 p-5 bg-amber-500/5 border border-amber-500/10 rounded-2xl">
         <ShieldAlert className="h-5 w-5 text-amber-500 shrink-0" />

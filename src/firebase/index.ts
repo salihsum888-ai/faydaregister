@@ -12,32 +12,20 @@ import {
 
 // IMPORTANT: This function enables offline persistence for institutional use
 export function initializeFirebase() {
-  if (getApps().length > 0) {
-    const app = getApp();
-    return {
-      firebaseApp: app,
-      auth: getAuth(app),
-      firestore: getFirestore(app)
-    };
-  }
+  const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-  let firebaseApp;
-  try {
-    // Attempt to initialize via Firebase App Hosting environment variables
-    firebaseApp = initializeApp();
-  } catch (e) {
-    // Fallback to config object
-    firebaseApp = initializeApp(firebaseConfig);
+  let firestore;
+  if (typeof window !== 'undefined') {
+    try {
+      firestore = initializeFirestore(firebaseApp, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+      });
+    } catch {
+      firestore = getFirestore(firebaseApp);
+    }
+  } else {
+    firestore = getFirestore(firebaseApp);
   }
-
-  /**
-   * ENABLE OFFLINE PERSISTENCE
-   * This ensures that data is cached locally on the device (IndexedDB).
-   * tabManager allows multiple browser tabs to share the same offline cache.
-   */
-  const firestore = initializeFirestore(firebaseApp, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-  });
 
   return {
     firebaseApp,

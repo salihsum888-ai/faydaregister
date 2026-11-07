@@ -1,14 +1,12 @@
-
 "use client"
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { 
   Form, 
@@ -20,22 +18,35 @@ import {
 } from '@/components/ui/form';
 import { 
   CalendarPlus, 
-  History, 
   CheckCircle2, 
   Smartphone, 
   Phone,
-  Pencil,
   Trash2,
   X,
   Loader2,
   Search,
   FileSpreadsheet,
   FileText,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
-  MoreVertical
+  ArrowUpDown,
+  Eye,
+  RotateCcw,
+  SquarePen,
+  Building2,
+  Sparkles,
+  Check,
+  Users,
+  UserCheck,
+  User
 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -46,7 +57,7 @@ import {
   setDocumentNonBlocking, 
   deleteDocumentNonBlocking 
 } from '@/firebase/non-blocking-updates';
-import { DailyReport, UserProfile } from '@/lib/types';
+import { DailyReport, Registration, UserProfile } from '@/lib/types';
 import { logAuditAction } from '@/lib/audit';
 import {
   AlertDialog,
@@ -59,6 +70,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+import { Checkbox } from '@/components/ui/checkbox';
+import { TablePagination } from '@/components/ui/table-pagination';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -68,9 +81,55 @@ const dailyReportSchema = z.object({
   ethioCount: z.coerce.number().min(0, "Cannot be negative"),
   safaricomCount: z.coerce.number().min(0, "Cannot be negative"),
   remarks: z.string().optional(),
+  isSchoolRegistration: z.boolean().default(false),
+  schoolName: z.string().optional(),
+  studentCount: z.coerce.number().min(0, "Cannot be negative").default(0),
+  nonStudentCount: z.coerce.number().min(0, "Cannot be negative").default(0),
+}).superRefine((data, ctx) => {
+  const total = (Number(data.ethioCount) || 0) + (Number(data.safaricomCount) || 0);
+  if (data.isSchoolRegistration) {
+    if (!data.schoolName || data.schoolName.trim().length < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Institution Name is required when Institution Registration is enabled (min 2 characters)",
+        path: ["schoolName"],
+      });
+    }
+    if (data.studentCount > total) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Institution count (${data.studentCount}) cannot exceed total people (${total})`,
+        path: ["studentCount"],
+      });
+    }
+    if (data.studentCount + data.nonStudentCount !== total) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Institution (${data.studentCount}) + Non-Institution (${data.nonStudentCount}) must equal Total (${total})`,
+        path: ["studentCount"],
+      });
+    }
+  }
 });
 
 type DailyReportValues = z.infer<typeof dailyReportSchema>;
+
+function getReportSplit(entry: DailyReport) {
+  const total = Number(entry.total) || 0;
+  const instName = (entry.institutionName || entry.schoolName || '').trim();
+  const hasSchool = Boolean(entry.isInstitutionRegistration || entry.isSchoolRegistration || instName.length > 0);
+  if (typeof entry.studentCount === 'number') {
+    const students = Math.min(total, Math.max(0, entry.studentCount));
+    const nonStudents = typeof entry.nonStudentCount === 'number'
+      ? Math.max(0, entry.nonStudentCount)
+      : Math.max(0, total - students);
+    return { students, nonStudents, hasSchool, instName };
+  }
+  if (hasSchool) {
+    return { students: total, nonStudents: 0, hasSchool: true, instName };
+  }
+  return { students: 0, nonStudents: total, hasSchool: false, instName: '' };
+}
 
 export default function DailyRegistrationsPage() {
   const { user } = useUser();
@@ -83,7 +142,9 @@ export default function DailyRegistrationsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'school' | 'regular'>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const itemsPerPage = 10;
   
   // Deletion state
@@ -108,17 +169,65 @@ export default function DailyRegistrationsPage() {
 
   const { data: rawHistory, isLoading } = useCollection<DailyReport>(reportsQuery);
 
+  const registrationsQuery = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return query(
+      collection(db, 'registrations'),
+      where('assignedReviewerId', '==', user.uid)
+    );
+  }, [db, user]);
+  const { data: rawRegistrations } = useCollection<Registration>(registrationsQuery);
+
+  const availableSchools = useMemo(() => {
+    const names = new Set<string>();
+    rawHistory?.forEach((item) => {
+      const inst = (item.institutionName || item.schoolName || '').trim();
+      if (inst) names.add(inst);
+    });
+    rawRegistrations?.forEach((reg) => {
+      const inst = (reg.institutionName || reg.schoolName || '').trim();
+      if (inst) names.add(inst);
+    });
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [rawHistory, rawRegistrations]);
+
   // Filter and Pagination Intelligence
   const history = useMemo(() => {
     if (!rawHistory) return [];
     
     return [...rawHistory]
-      .filter(item => 
-        item.date.includes(searchTerm) || 
-        item.remarks?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+      .filter(item => {
+        const split = getReportSplit(item);
+        if (filterType === 'school' && !split.hasSchool && split.students === 0) return false;
+        if (filterType === 'regular' && split.nonStudents === 0) return false;
+
+        if (!searchTerm.trim()) return true;
+        const q = searchTerm.toLowerCase();
+        return (
+          item.date.includes(q) || 
+          item.remarks?.toLowerCase().includes(q) ||
+          split.instName.toLowerCase().includes(q)
+        );
+      })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [rawHistory, searchTerm]);
+  }, [rawHistory, searchTerm, filterType]);
+
+  // Summary KPIs across all daily reports
+  const summaryStats = useMemo(() => {
+    if (!rawHistory) return { totalPeople: 0, totalStudents: 0, totalNonStudents: 0, ethio: 0, safaricom: 0 };
+    return rawHistory.reduce(
+      (acc, item) => {
+        const split = getReportSplit(item);
+        acc.totalPeople += Number(item.total) || 0;
+        acc.totalStudents += split.students;
+        acc.totalNonStudents += split.nonStudents;
+        acc.ethio += Number(item.ethioCount) || 0;
+        acc.safaricom += Number(item.safaricomCount) || 0;
+        return acc;
+      },
+      { totalPeople: 0, totalStudents: 0, totalNonStudents: 0, ethio: 0, safaricom: 0 }
+    );
+  }, [rawHistory]);
 
   const totalPages = Math.ceil(history.length / itemsPerPage);
   const paginatedHistory = useMemo(() => {
@@ -133,23 +242,124 @@ export default function DailyRegistrationsPage() {
       ethioCount: 0,
       safaricomCount: 0,
       remarks: '',
+      isSchoolRegistration: false,
+      schoolName: '',
+      studentCount: 0,
+      nonStudentCount: 0,
     },
   });
 
+  const selectedDate = form.watch('date');
   const ethioCount = Number(form.watch('ethioCount')) || 0;
   const safaricomCount = Number(form.watch('safaricomCount')) || 0;
   const dailyTotal = ethioCount + safaricomCount;
+  const isSchoolRegistration = form.watch('isSchoolRegistration');
+  const currentSchoolName = form.watch('schoolName') || '';
+  const studentCount = Number(form.watch('studentCount')) || 0;
+  const nonStudentCount = Number(form.watch('nonStudentCount')) || 0;
+
+  // Detect individual registrations logged on the selected date
+  const dateIndividualBreakdown = useMemo(() => {
+    if (!rawRegistrations || !selectedDate) return null;
+    const onDate = rawRegistrations.filter((r) => {
+      try {
+        return new Date(r.submissionDate).toISOString().split('T')[0] === selectedDate;
+      } catch {
+        return false;
+      }
+    });
+    if (onDate.length === 0) return null;
+    const schoolRegs = onDate.filter((r) =>
+      Boolean(
+        r.isInstitutionRegistration ||
+        r.isSchoolRegistration ||
+        (r.institutionName && r.institutionName.trim()) ||
+        (r.schoolName && r.schoolName.trim())
+      )
+    );
+    const nonSchoolRegs = onDate.length - schoolRegs.length;
+    const firstSchool = schoolRegs[0]?.institutionName || schoolRegs[0]?.schoolName || '';
+    return {
+      total: onDate.length,
+      students: schoolRegs.length,
+      nonStudents: nonSchoolRegs,
+      schoolName: firstSchool,
+    };
+  }, [rawRegistrations, selectedDate]);
+
+  const filteredSchoolSuggestions = useMemo(() => {
+    if (availableSchools.length === 0) return [];
+    const q = currentSchoolName.trim().toLowerCase();
+    if (!q) return availableSchools.slice(0, 8);
+    return availableSchools.filter(s => s.toLowerCase().includes(q)).slice(0, 8);
+  }, [availableSchools, currentSchoolName]);
+
+  // Helper when Ethio or Safaricom count changes so studentCount + nonStudentCount stays synced with new total
+  const handleNetworkCountChange = (field: 'ethioCount' | 'safaricomCount', newVal: number) => {
+    const safeVal = Math.max(0, newVal);
+    form.setValue(field, safeVal, { shouldValidate: true });
+    const otherVal = field === 'ethioCount' ? safaricomCount : ethioCount;
+    const nextTotal = safeVal + otherVal;
+
+    if (isSchoolRegistration) {
+      // Keep nonStudentCount if it fits within nextTotal; otherwise clamp and assign remainder to studentCount
+      const keptNonStudent = Math.min(nextTotal, Math.max(0, nonStudentCount));
+      const nextStudents = Math.max(0, nextTotal - keptNonStudent);
+      form.setValue('studentCount', nextStudents, { shouldValidate: true });
+      form.setValue('nonStudentCount', keptNonStudent, { shouldValidate: true });
+    } else {
+      form.setValue('studentCount', 0, { shouldValidate: true });
+      form.setValue('nonStudentCount', nextTotal, { shouldValidate: true });
+    }
+  };
+
+  // Helper when officer edits Students count directly (e.g., types 10 out of 11 -> nonStudentCount becomes 1)
+  const handleStudentCountChange = (newStudents: number) => {
+    const clampedStudents = Math.min(dailyTotal, Math.max(0, newStudents));
+    const autoNonStudents = Math.max(0, dailyTotal - clampedStudents);
+    form.setValue('studentCount', clampedStudents, { shouldValidate: true });
+    form.setValue('nonStudentCount', autoNonStudents, { shouldValidate: true });
+  };
+
+  // Helper when officer edits Non-Students count directly (e.g., types 1 out of 11 -> studentCount becomes 10)
+  const handleNonStudentCountChange = (newNonStudents: number) => {
+    const clampedNonStudents = Math.min(dailyTotal, Math.max(0, newNonStudents));
+    const autoStudents = Math.max(0, dailyTotal - clampedNonStudents);
+    form.setValue('nonStudentCount', clampedNonStudents, { shouldValidate: true });
+    form.setValue('studentCount', autoStudents, { shouldValidate: true });
+  };
 
   async function onSubmit(values: DailyReportValues) {
     if (!db || !user || !profile) return;
     setIsSubmitting(true);
 
+    const cleanedSchoolName = values.isSchoolRegistration && values.schoolName
+      ? values.schoolName.trim()
+      : '';
+
+    const finalStudents = values.isSchoolRegistration
+      ? Math.min(dailyTotal, Math.max(0, Number(values.studentCount) || 0))
+      : 0;
+    const finalNonStudents = values.isSchoolRegistration
+      ? Math.max(0, dailyTotal - finalStudents)
+      : dailyTotal;
+
     const reportData = {
       ...values,
+      isSchoolRegistration: Boolean(values.isSchoolRegistration && cleanedSchoolName.length > 0),
+      schoolName: cleanedSchoolName,
+      isInstitutionRegistration: Boolean(values.isSchoolRegistration && cleanedSchoolName.length > 0),
+      institutionName: cleanedSchoolName,
+      studentCount: finalStudents,
+      nonStudentCount: finalNonStudents,
       officerId: user.uid,
       total: dailyTotal,
       timestamp: serverTimestamp(),
     };
+
+    const splitSummaryText = values.isSchoolRegistration
+      ? ` (${finalStudents} Institution at ${cleanedSchoolName}, ${finalNonStudents} Non-Institution)`
+      : ` (${finalNonStudents} Non-Institution)`;
 
     try {
       if (editingId) {
@@ -161,12 +371,12 @@ export default function DailyRegistrationsPage() {
           profile.fullName,
           'STATUS_UPDATE',
           editingId,
-          `Modified daily report for ${values.date}. New Total: ${dailyTotal} (E: ${values.ethioCount}, S: ${values.safaricomCount})`
+          `Modified daily report for ${values.date}${splitSummaryText}. Total: ${dailyTotal} (E: ${values.ethioCount}, S: ${values.safaricomCount})`
         );
 
         toast({
           title: "Report Updated",
-          description: `Daily registration for ${format(new Date(values.date), 'MMM dd')} updated successfully.`,
+          description: `Daily report for ${format(new Date(values.date), 'MMM dd')}: ${dailyTotal} total (${finalStudents} institution, ${finalNonStudents} non-institution).`,
         });
         setEditingId(null);
       } else {
@@ -178,12 +388,12 @@ export default function DailyRegistrationsPage() {
           profile.fullName,
           'RECORD_CREATED',
           values.date,
-          `Logged new daily report for ${values.date}. Total Intake: ${dailyTotal}`
+          `Logged new daily report for ${values.date}${splitSummaryText}. Total Intake: ${dailyTotal}`
         );
 
         toast({
           title: "Report Submitted",
-          description: `Daily registration for ${format(new Date(values.date), 'MMM dd')} saved successfully.`,
+          description: `Saved ${dailyTotal} registrations for ${format(new Date(values.date), 'MMM dd')} (${finalStudents} institution, ${finalNonStudents} non-institution).`,
         });
       }
 
@@ -192,6 +402,10 @@ export default function DailyRegistrationsPage() {
         ethioCount: 0,
         safaricomCount: 0,
         remarks: '',
+        isSchoolRegistration: false,
+        schoolName: '',
+        studentCount: 0,
+        nonStudentCount: 0,
       });
     } catch (error) {
       toast({
@@ -206,11 +420,16 @@ export default function DailyRegistrationsPage() {
 
   const handleEdit = (entry: DailyReport) => {
     setEditingId(entry.id);
+    const split = getReportSplit(entry);
     form.reset({
       date: entry.date,
       ethioCount: entry.ethioCount,
       safaricomCount: entry.safaricomCount,
       remarks: entry.remarks || '',
+      isSchoolRegistration: split.hasSchool,
+      schoolName: split.instName,
+      studentCount: split.students,
+      nonStudentCount: split.nonStudents,
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -238,6 +457,10 @@ export default function DailyRegistrationsPage() {
           ethioCount: 0,
           safaricomCount: 0,
           remarks: '',
+          isSchoolRegistration: false,
+          schoolName: '',
+          studentCount: 0,
+          nonStudentCount: 0,
         });
       }
 
@@ -266,6 +489,10 @@ export default function DailyRegistrationsPage() {
       ethioCount: 0,
       safaricomCount: 0,
       remarks: '',
+      isSchoolRegistration: false,
+      schoolName: '',
+      studentCount: 0,
+      nonStudentCount: 0,
     });
   };
 
@@ -273,13 +500,19 @@ export default function DailyRegistrationsPage() {
     if (history.length === 0 || !user || !profile) return;
     setIsExporting(true);
 
-    const exportData = history.map(h => ({
-      'Date': h.date,
-      'Ethio Intake': h.ethioCount,
-      'Safaricom Intake': h.safaricomCount,
-      'Total': h.total,
-      'Remarks': h.remarks || ''
-    }));
+    const exportData = history.map(h => {
+      const split = getReportSplit(h);
+      return {
+        'Date': h.date,
+        'Institution Name': split.instName || 'Individual / Walk-in',
+        'Ethio Intake': h.ethioCount,
+        'Safaricom Intake': h.safaricomCount,
+        'Institution Count': split.students,
+        'Non-Institution Count': split.nonStudents,
+        'Total Registered': h.total,
+        'Remarks': h.remarks || ''
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
@@ -303,12 +536,30 @@ export default function DailyRegistrationsPage() {
     if (history.length === 0 || !user || !profile) return;
     setIsExporting(true);
 
-    const doc = new jsPDF();
-    doc.text(`Official Bureau Ledger: ${profile.fullName}`, 14, 15);
-    const rows = history.map(h => [h.date, h.ethioCount, h.safaricomCount, h.total, h.remarks || '']);
+    const doc = new jsPDF('l', 'mm', 'a4');
+    doc.text(`Official Bureau Daily Registration Ledger: ${profile.fullName}`, 14, 15);
+    doc.setFontSize(9);
+    doc.text(
+      `Total Registered: ${summaryStats.totalPeople} | Institution Intake: ${summaryStats.totalStudents} | Non-Institution: ${summaryStats.totalNonStudents}`,
+      14,
+      21
+    );
+    const rows = history.map(h => {
+      const split = getReportSplit(h);
+      return [
+        h.date,
+        split.instName || 'Individual Intake',
+        String(h.ethioCount),
+        String(h.safaricomCount),
+        String(split.students),
+        String(split.nonStudents),
+        String(h.total),
+        h.remarks || ''
+      ];
+    });
     autoTable(doc, {
-      startY: 25,
-      head: [['Date', 'Ethio', 'Safaricom', 'Total', 'Remarks']],
+      startY: 27,
+      head: [['Date', 'Institution Name', 'Ethio', 'Safaricom', 'Institution', 'Non-Institution', 'Total', 'Remarks']],
       body: rows,
       theme: 'striped',
       headStyles: { fillColor: [15, 23, 42] }
@@ -328,21 +579,79 @@ export default function DailyRegistrationsPage() {
     setTimeout(() => setIsExporting(false), 800);
   };
 
+  const activeStudentsDisplay = isSchoolRegistration ? studentCount : 0;
+  const activeNonStudentsDisplay = isSchoolRegistration ? nonStudentCount : dailyTotal;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-20">
       <div className="space-y-1">
         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Field Operations</p>
         <h1 className="text-3xl font-bold tracking-tight text-foreground font-headline">Registration Reporting</h1>
         <p className="text-sm text-muted-foreground">
-          Submit or modify your daily total counts for verification and performance tracking.
+          Submit your daily counts and specify how many registrations were Institution vs. Non-Institution.
         </p>
+      </div>
+
+      {/* Top Glassmorphic Summary Strip: Total vs. Institution vs. Non-Institution */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <Card className="rounded-[22px] relative overflow-hidden">
+          <div aria-hidden="true" className="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full bg-indigo-500/15 blur-2xl" />
+          <CardContent className="p-6 flex items-center justify-between relative z-10">
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Total People Registered</p>
+              <p className="text-3xl font-black text-foreground tabular-nums">{summaryStats.totalPeople.toLocaleString()}</p>
+              <p className="text-[11px] text-muted-foreground tabular-nums">
+                {summaryStats.ethio} Ethio · {summaryStats.safaricom} Safaricom
+              </p>
+            </div>
+            <div className="h-11 w-11 rounded-2xl glass-subpanel flex items-center justify-center text-primary">
+              <Users className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[22px] relative overflow-hidden">
+          <div aria-hidden="true" className="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full bg-sky-500/15 blur-2xl" />
+          <CardContent className="p-6 flex items-center justify-between relative z-10">
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Institution Intake</p>
+              <p className="text-3xl font-black text-foreground tabular-nums">{summaryStats.totalStudents.toLocaleString()}</p>
+              <p className="text-[11px] text-muted-foreground tabular-nums">
+                {summaryStats.totalPeople > 0
+                  ? `${Number(((summaryStats.totalStudents / summaryStats.totalPeople) * 100).toFixed(2))}% (${summaryStats.totalStudents}/${summaryStats.totalPeople})`
+                  : 'Schools, Hospitals, Companies'}
+              </p>
+            </div>
+            <div className="h-11 w-11 rounded-2xl glass-subpanel flex items-center justify-center text-sky-500">
+              <Building2 className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[22px] relative overflow-hidden">
+          <div aria-hidden="true" className="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full bg-emerald-500/15 blur-2xl" />
+          <CardContent className="p-6 flex items-center justify-between relative z-10">
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Non-Institution (Individual)</p>
+              <p className="text-3xl font-black text-foreground tabular-nums">{summaryStats.totalNonStudents.toLocaleString()}</p>
+              <p className="text-[11px] text-muted-foreground tabular-nums">
+                {summaryStats.totalPeople > 0
+                  ? `${Number(((summaryStats.totalNonStudents / summaryStats.totalPeople) * 100).toFixed(2))}% (${summaryStats.totalNonStudents}/${summaryStats.totalPeople})`
+                  : 'Standard walk-in intake'}
+              </p>
+            </div>
+            <div className="h-11 w-11 rounded-2xl glass-subpanel flex items-center justify-center text-emerald-500">
+              <UserCheck className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <section className="lg:col-span-1">
           <Card className={cn(
-            "border-none shadow-sm sticky top-24 transition-all duration-300 bg-card",
-            editingId && "ring-1 ring-primary/20 bg-primary/5"
+            "rounded-[24px] sticky top-24 transition-all duration-300",
+            editingId && "ring-2 ring-primary/40"
           )}>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -357,7 +666,9 @@ export default function DailyRegistrationsPage() {
                 )}
               </div>
               <CardDescription>
-                {editingId ? "Currently modifying an existing record." : "Enter your successful registrations for the date."}
+                {editingId
+                  ? "Modify daily counts and Institution vs. Non-Institution breakdown."
+                  : "Enter total registrations and split between Institution and Non-Institution."}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -377,6 +688,45 @@ export default function DailyRegistrationsPage() {
                     )}
                   />
 
+                  {/* Smart Detection Banner if individual records exist for this date */}
+                  {dateIndividualBreakdown && (
+                    <div className="rounded-xl bg-primary/10 border border-primary/20 p-3 space-y-2 animate-in fade-in duration-300">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          Records Found on {selectedDate}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (dateIndividualBreakdown.students > 0) {
+                              form.setValue('isSchoolRegistration', true, { shouldValidate: true });
+                              if (dateIndividualBreakdown.schoolName) {
+                                form.setValue('schoolName', dateIndividualBreakdown.schoolName, { shouldValidate: true });
+                              }
+                              const baseTotal = dailyTotal > 0 ? dailyTotal : dateIndividualBreakdown.total;
+                              if (dailyTotal === 0) {
+                                form.setValue('ethioCount', dateIndividualBreakdown.total, { shouldValidate: true });
+                              }
+                              const syncedStudents = Math.min(baseTotal, dateIndividualBreakdown.students);
+                              form.setValue('studentCount', syncedStudents, { shouldValidate: true });
+                              form.setValue('nonStudentCount', Math.max(0, baseTotal - syncedStudents), { shouldValidate: true });
+                            }
+                          }}
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-primary text-white hover:bg-primary/90 transition-colors cursor-pointer"
+                        >
+                          Sync Split
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-slate-700 dark:text-slate-200 tabular-nums">
+                        Individual records logged: <strong>{dateIndividualBreakdown.total}</strong> total (
+                        <strong>{dateIndividualBreakdown.students}</strong> Institution
+                        {dateIndividualBreakdown.schoolName ? ` at ${dateIndividualBreakdown.schoolName}` : ''},{' '}
+                        <strong>{dateIndividualBreakdown.nonStudents}</strong> Non-Institution)
+                      </p>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
@@ -389,10 +739,11 @@ export default function DailyRegistrationsPage() {
                           <FormControl>
                             <Input 
                               type="number" 
+                              min={0}
                               {...field} 
                               disabled={isSubmitting}
-                              className="h-11 bg-background border-border" 
-                              onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+                              className="h-11 bg-background border-border tabular-nums" 
+                              onChange={(e) => handleNetworkCountChange('ethioCount', e.target.value === '' ? 0 : Number(e.target.value))}
                             />
                           </FormControl>
                           <FormMessage />
@@ -410,10 +761,11 @@ export default function DailyRegistrationsPage() {
                           <FormControl>
                             <Input 
                               type="number" 
+                              min={0}
                               {...field} 
                               disabled={isSubmitting}
-                              className="h-11 bg-background border-border" 
-                              onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+                              className="h-11 bg-background border-border tabular-nums" 
+                              onChange={(e) => handleNetworkCountChange('safaricomCount', e.target.value === '' ? 0 : Number(e.target.value))}
                             />
                           </FormControl>
                           <FormMessage />
@@ -422,9 +774,198 @@ export default function DailyRegistrationsPage() {
                     />
                   </div>
 
-                  <div className="p-4 bg-muted/30 rounded-xl border border-dashed border-border text-center transition-all">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Calculated Aggregate</p>
-                    <p className="text-4xl font-black text-foreground">{dailyTotal}</p>
+                  {/* Institution Registration Toggle + Institution Name + Institution vs Non-Institution Split */}
+                  <div className="rounded-2xl glass-subpanel p-4 space-y-4 border border-border transition-all">
+                    <FormField
+                      control={form.control}
+                      name="isSchoolRegistration"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between gap-3 space-y-0">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "h-9 w-9 rounded-xl flex items-center justify-center transition-colors",
+                              field.value
+                                ? "bg-primary text-white shadow-sm"
+                                : "bg-muted text-muted-foreground"
+                            )}>
+                              <Building2 className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <FormLabel className="text-xs font-bold text-foreground cursor-pointer">
+                                Includes Institution Registration
+                              </FormLabel>
+                              <p className="text-[10px] text-muted-foreground">
+                                Split total into Institution & Non-Institution
+                              </p>
+                            </div>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked);
+                                if (checked) {
+                                  const nextStudents = studentCount > 0 && studentCount <= dailyTotal ? studentCount : dailyTotal;
+                                  form.setValue('studentCount', nextStudents, { shouldValidate: true });
+                                  form.setValue('nonStudentCount', Math.max(0, dailyTotal - nextStudents), { shouldValidate: true });
+                                } else {
+                                  form.setValue('schoolName', '');
+                                  form.setValue('studentCount', 0);
+                                  form.setValue('nonStudentCount', dailyTotal);
+                                  form.clearErrors(['schoolName', 'studentCount', 'nonStudentCount']);
+                                }
+                              }}
+                              disabled={isSubmitting}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    {isSchoolRegistration && (
+                      <div className="pt-3 border-t border-border space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <FormField
+                          control={form.control}
+                          name="schoolName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-[10px] font-bold uppercase text-primary tracking-wider flex items-center gap-1.5">
+                                <Building2 className="h-3.5 w-3.5" /> Institution Name *
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="Enter institution name (e.g., School, Hospital, Company)..."
+                                  {...field}
+                                  disabled={isSubmitting}
+                                  className="h-10 bg-background border-primary/30"
+                                />
+                              </FormControl>
+                              <FormMessage className="text-[10px]" />
+                            </FormItem>
+                          )}
+                        />
+
+                        {filteredSchoolSuggestions.length > 0 && (
+                          <div className="space-y-1.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                              <Sparkles className="h-3 w-3 text-primary" /> Institution Suggestions
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {filteredSchoolSuggestions.map((school) => {
+                                const active = currentSchoolName.trim().toLowerCase() === school.toLowerCase();
+                                return (
+                                  <button
+                                    key={school}
+                                    type="button"
+                                    onClick={() => form.setValue('schoolName', school, { shouldValidate: true })}
+                                    className={cn(
+                                      "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all cursor-pointer",
+                                      active
+                                        ? "bg-primary text-white"
+                                        : "bg-muted hover:bg-primary/15 text-foreground"
+                                    )}
+                                  >
+                                    {active && <Check className="h-2.5 w-2.5" />}
+                                    <span>{school}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Institution vs Non-Institution Breakdown Inputs */}
+                        <div className="space-y-2 pt-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                              Breakdown of {dailyTotal} Registered People
+                            </span>
+                            <span className="text-[10px] font-mono font-bold text-primary tabular-nums">
+                              {studentCount} + {nonStudentCount} = {dailyTotal}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <FormField
+                              control={form.control}
+                              name="studentCount"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-[10px] font-bold uppercase text-primary tracking-wider flex items-center gap-1">
+                                    <Building2 className="h-3 w-3" /> Institution
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={dailyTotal}
+                                      {...field}
+                                      disabled={isSubmitting}
+                                      className="h-10 bg-background border-primary/30 font-bold tabular-nums"
+                                      onChange={(e) =>
+                                        handleStudentCountChange(
+                                          e.target.value === '' ? 0 : Number(e.target.value)
+                                        )
+                                      }
+                                    />
+                                  </FormControl>
+                                  <FormMessage className="text-[10px]" />
+                                </FormItem>
+                              )}
+                            />
+
+                            <FormField
+                              control={form.control}
+                              name="nonStudentCount"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 tracking-wider flex items-center gap-1">
+                                    <User className="h-3 w-3" /> Non-Institution
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={dailyTotal}
+                                      {...field}
+                                      disabled={isSubmitting}
+                                      className="h-10 bg-background border-emerald-500/30 font-bold tabular-nums"
+                                      onChange={(e) =>
+                                        handleNonStudentCountChange(
+                                          e.target.value === '' ? 0 : Number(e.target.value)
+                                        )
+                                      }
+                                    />
+                                  </FormControl>
+                                  <FormMessage className="text-[10px]" />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Calculated Aggregate with Live Institution vs Non-Institution Split */}
+                  <div className="p-4 bg-muted/30 rounded-2xl border border-dashed border-border text-center space-y-3 transition-all">
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">
+                        Calculated Daily Aggregate
+                      </p>
+                      <p className="text-4xl font-black text-foreground tabular-nums">{dailyTotal}</p>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/15 text-primary border border-primary/25 text-[11px] font-bold tabular-nums">
+                        <Building2 className="h-3.5 w-3.5" />
+                        {activeStudentsDisplay} Institution
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 text-[11px] font-bold tabular-nums">
+                        <User className="h-3.5 w-3.5" />
+                        {activeNonStudentsDisplay} Non-Institution
+                      </span>
+                    </div>
                   </div>
 
                   <FormField
@@ -435,7 +976,7 @@ export default function DailyRegistrationsPage() {
                         <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Internal Remarks</FormLabel>
                         <FormControl>
                           <Textarea 
-                            placeholder="e.g. Issues with network, branch updates..." 
+                            placeholder="e.g. 10 registered at institution + 1 walk-in citizen..." 
                             className="resize-none min-h-[80px] bg-background border-border" 
                             disabled={isSubmitting}
                             {...field} 
@@ -463,143 +1004,270 @@ export default function DailyRegistrationsPage() {
           </Card>
         </section>
 
-        <section className="lg:col-span-2 space-y-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-              <History className="h-4 w-4 text-primary" /> Report Ledger
-            </h2>
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-               <div className="relative flex-1 sm:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30" />
+        <section className="lg:col-span-2 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+                Report Ledger
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Daily throughput logs with Institution vs. Non-Institution breakdown
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button onClick={handleExportExcel} disabled={isExporting} variant="outline" className="h-9 px-3.5 rounded-full border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-semibold text-xs shadow-2xs">
+                {isExporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />}
+                Export XLS
+              </Button>
+              <Button onClick={handleExportPDF} disabled={isExporting} variant="outline" className="h-9 px-3.5 rounded-full border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-semibold text-xs shadow-2xs">
+                {isExporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileText className="mr-1.5 h-3.5 w-3.5 text-rose-600" />}
+                Export PDF
+              </Button>
+            </div>
+          </div>
+
+          <div className="glass-card-surface rounded-2xl overflow-hidden">
+            {/* Integrated Top Control Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-5 py-3.5 border-b border-slate-200/80 dark:border-slate-800">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input 
-                  placeholder="Filter by date or notes..." 
+                  placeholder="Search by date, institution name, or notes..." 
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                  className="pl-10 h-10 border-border bg-card rounded-xl text-xs font-bold"
+                  className="h-9 pl-9 border-0 bg-transparent shadow-none focus-visible:ring-0 text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400"
                 />
               </div>
-              <Button onClick={handleExportExcel} disabled={isExporting} variant="outline" size="icon" className="h-10 w-10 border-border bg-card text-emerald-500 hover:bg-emerald-500/10">
-                {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
-              </Button>
-              <Button onClick={handleExportPDF} disabled={isExporting} variant="outline" size="icon" className="h-10 w-10 border-border bg-card text-rose-500 hover:bg-rose-500/10">
-                {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4">
-            {isLoading ? (
-              <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground/30" /></div>
-            ) : paginatedHistory.map((entry) => (
-              <Card key={entry.id} className={cn(
-                "border-none shadow-sm overflow-hidden group transition-all bg-card",
-                editingId === entry.id ? "ring-2 ring-primary bg-primary/5" : "hover:shadow-md"
-              )}>
-                <CardContent className="p-0">
-                  <div className="flex flex-col sm:flex-row sm:items-center p-5 gap-6">
-                    <div className="flex items-center gap-4 sm:flex-col sm:justify-center sm:min-w-[100px] sm:py-2.5 sm:px-4 sm:bg-muted/50 sm:rounded-xl sm:border sm:border-border">
-                      <div className="flex flex-col items-center justify-center min-w-[60px] py-1.5 px-3 bg-muted/50 rounded-lg border border-border sm:border-none sm:bg-transparent sm:p-0">
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{format(new Date(entry.date), 'MMM')}</span>
-                        <span className="text-2xl font-black text-foreground tabular-nums">{format(new Date(entry.date), 'dd')}</span>
-                      </div>
-                      <div className="sm:hidden h-8 w-px bg-border" />
-                      <div className="flex-1 sm:hidden">
-                        <p className="text-[10px] font-black text-primary uppercase tracking-widest">Daily Intake</p>
-                        <p className="text-xl font-black text-foreground tabular-nums">{entry.total}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex-1 grid grid-cols-3 gap-4 border-t border-border pt-4 sm:border-none sm:pt-0">
-                      <div className="space-y-1">
-                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter flex items-center gap-1">
-                          <Phone className="h-2.5 w-2.5 text-emerald-500" /> Ethio
-                        </p>
-                        <p className="text-base font-bold text-foreground/80 tabular-nums">{entry.ethioCount}</p>
-                      </div>
-                      <div className="space-y-1 border-x border-border/50 px-2 sm:px-4">
-                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter flex items-center gap-1">
-                          <Smartphone className="h-2.5 w-2.5 text-orange-500" /> Safaricom
-                        </p>
-                        <p className="text-base font-bold text-foreground/80 tabular-nums">{entry.safaricomCount}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-[9px] font-black text-primary uppercase tracking-tighter">Aggregate</p>
-                        <p className="text-lg font-black text-primary tabular-nums">{entry.total}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2 pt-4 border-t border-border sm:border-none sm:pt-0 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="flex-1 sm:flex-none h-10 sm:h-9 px-4 sm:px-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-xl sm:rounded-lg border border-border sm:border-none"
-                        onClick={() => handleEdit(entry)}
-                      >
-                        <Pencil className="h-3.5 w-3.5 mr-2 sm:mr-1.5" /> Edit
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-10 sm:h-9 w-10 sm:w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl sm:rounded-lg border border-border sm:border-none"
-                        onClick={() => {
-                          setReportToDelete({id: entry.id, date: entry.date});
-                          setIsDeleteDialogOpen(true);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  {entry.remarks && (
-                    <div className="px-5 pb-4 sm:ml-[116px] animate-in fade-in slide-in-from-top-1">
-                       <p className="text-[10px] text-muted-foreground/60 italic border-l-2 border-muted pl-3 leading-relaxed">
-                         "{entry.remarks}"
-                       </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-
-            {!isLoading && history.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-24 bg-card rounded-[32px] border border-dashed border-border text-muted-foreground/30">
-                <CalendarPlus className="h-16 w-16 mb-4 opacity-10" />
-                <p className="text-[10px] font-black uppercase tracking-[0.4em]">Ledger Stream Empty</p>
-                <p className="text-xs mt-2 italic">Synchronize your first report to begin performance tracking.</p>
-              </div>
-            )}
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between px-2 py-6 border-t border-border gap-4">
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest order-2 sm:order-1">
-                Visualizing {paginatedHistory.length} of {history.length} Bureau Documents
-              </p>
-              <div className="flex items-center gap-2 order-1 sm:order-2 w-full sm:w-auto">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 sm:flex-none h-11 sm:h-9 px-4 sm:px-0 sm:w-9 rounded-xl border-border bg-background hover:bg-muted"
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <div className="flex-1 sm:flex-none flex items-center justify-center min-w-[120px] h-11 sm:h-9 text-[10px] font-black text-foreground bg-muted/50 border border-border rounded-xl uppercase tracking-widest px-3">
-                  Page {currentPage} / {totalPages}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center p-1 rounded-xl glass-subpanel gap-1">
+                  <button
+                    type="button"
+                    onClick={() => { setFilterType('all'); setCurrentPage(1); }}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer",
+                      filterType === 'all' ? "bg-primary text-white" : "text-slate-600 dark:text-slate-300"
+                    )}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setFilterType('school'); setCurrentPage(1); }}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer",
+                      filterType === 'school' ? "bg-primary text-white" : "text-slate-600 dark:text-slate-300"
+                    )}
+                  >
+                    Institution
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setFilterType('regular'); setCurrentPage(1); }}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer",
+                      filterType === 'regular' ? "bg-primary text-white" : "text-slate-600 dark:text-slate-300"
+                    )}
+                  >
+                    Non-Institution
+                  </button>
                 </div>
+
                 <Button
+                  type="button"
                   variant="outline"
-                  size="sm"
-                  className="flex-1 sm:flex-none h-11 sm:h-9 px-4 sm:px-0 sm:w-9 rounded-xl border-border bg-background hover:bg-muted"
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
+                  size="icon"
+                  onClick={() => { setSearchTerm(''); setFilterType('all'); setCurrentPage(1); }}
+                  className="h-9 w-9 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 hover:text-slate-800 shadow-2xs"
+                  title="Reset filter"
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  <RotateCcw className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
-          )}
+
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-11 px-4 text-center">
+                      <Checkbox
+                        checked={paginatedHistory.length > 0 && paginatedHistory.every((entry) => selectedIds.has(entry.id))}
+                        onCheckedChange={() => {
+                          const allSelected = paginatedHistory.length > 0 && paginatedHistory.every((entry) => selectedIds.has(entry.id));
+                          const next = new Set(selectedIds);
+                          if (allSelected) {
+                            paginatedHistory.forEach((entry) => next.delete(entry.id));
+                          } else {
+                            paginatedHistory.forEach((entry) => next.add(entry.id));
+                          }
+                          setSelectedIds(next);
+                        }}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center justify-between gap-2">
+                        <span>Date & Institution</span>
+                        <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                      </div>
+                    </TableHead>
+                    <TableHead>Network Split</TableHead>
+                    <TableHead>
+                      <div className="flex items-center justify-between gap-2">
+                        <span>Institution vs. Individual</span>
+                        <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center justify-between gap-2">
+                        <span>Aggregate</span>
+                        <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                      </div>
+                    </TableHead>
+                    <TableHead>Remarks</TableHead>
+                    <TableHead className="border-r-0 text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-48 text-center">
+                        <Loader2 className="h-7 w-7 animate-spin text-blue-600 mx-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ) : paginatedHistory.length > 0 ? paginatedHistory.map((entry) => {
+                    const split = getReportSplit(entry);
+                    return (
+                      <TableRow key={entry.id} className={cn(
+                        "h-16 group",
+                        (editingId === entry.id || selectedIds.has(entry.id)) && "bg-blue-50/40 dark:bg-blue-950/20"
+                      )}>
+                        <TableCell className="text-center">
+                          <Checkbox
+                            checked={selectedIds.has(entry.id)}
+                            onCheckedChange={() => {
+                              const next = new Set(selectedIds);
+                              if (next.has(entry.id)) next.delete(entry.id);
+                              else next.add(entry.id);
+                              setSelectedIds(next);
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[13px] font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap">
+                              {format(new Date(entry.date), 'dd MMM yyyy')}
+                            </span>
+                            {split.instName ? (
+                              <span className="inline-flex items-center gap-1 w-fit px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold">
+                                <Building2 className="h-3 w-3 shrink-0" />
+                                <span className="truncate max-w-[160px]">{split.instName}</span>
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-medium text-slate-400">
+                                Individual / Walk-in Intake
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#ECFDF5] text-[#10B981] dark:bg-emerald-950/50 dark:text-emerald-400 text-[11px] font-semibold tabular-nums">
+                              {entry.ethioCount} E
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#FFFBEB] text-[#F59E0B] dark:bg-amber-950/50 dark:text-amber-400 text-[11px] font-semibold tabular-nums">
+                              {entry.safaricomCount} S
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {split.students > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 text-primary border border-primary/20 text-[11px] font-bold tabular-nums">
+                                <Building2 className="h-3 w-3 shrink-0" />
+                                {split.students} Institution
+                              </span>
+                            )}
+                            {split.nonStudents > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-[11px] font-semibold tabular-nums">
+                                <User className="h-3 w-3 shrink-0" />
+                                {split.nonStudents} Individual
+                              </span>
+                            )}
+                            {split.students === 0 && split.nonStudents === 0 && (
+                              <span className="text-xs text-slate-400">0</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#EEF2FF] text-[#4F46E5] dark:bg-indigo-950/50 dark:text-indigo-400 text-[11px] font-bold tabular-nums">
+                            {entry.total} Total
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-[12px] text-slate-500 dark:text-slate-400 truncate block max-w-[160px]">
+                            {entry.remarks ? entry.remarks : '—'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                              onClick={() => handleEdit(entry)}
+                              title="View / Inspect Report"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                              onClick={() => handleEdit(entry)}
+                              title="Edit Report"
+                            >
+                              <SquarePen className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                              onClick={() => {
+                                setReportToDelete({id: entry.id, date: entry.date});
+                                setIsDeleteDialogOpen(true);
+                              }}
+                              title="Delete Report"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-48 text-center">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <CalendarPlus className="h-8 w-8 text-slate-300" />
+                          <p className="text-xs font-semibold text-slate-400">Ledger Stream Empty</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Bottom Pagination Footer */}
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={history.length}
+              shownItems={paginatedHistory.length}
+              itemLabel="Bureau Documents"
+              onPageChange={setCurrentPage}
+            />
+          </div>
         </section>
       </div>
 

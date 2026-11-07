@@ -5,8 +5,8 @@
 
 @layer base {
   :root {
-    /* Bureau Minimalist - Light */
-    --background: 0 0% 100%;
+    /* Bureau Minimalist - Light (Soft Cool Gray Canvas for Crisp White Cards) */
+    --background: 220 33% 96.5%;
     --foreground: 224 71.4% 4.1%;
 
     --card: 0 0% 100%;
@@ -106,3 +106,455 @@
 ::-webkit-scrollbar-thumb {
   @apply bg-slate-200 dark:bg-slate-800 rounded-full hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors;
 }
+
+@keyframes mfa-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-8px); }
+  30% { transform: translateX(7px); }
+  45% { transform: translateX(-6px); }
+  60% { transform: translateX(5px); }
+  75% { transform: translateX(-3px); }
+  90% { transform: translateX(2px); }
+}
+
+@keyframes mfa-wave {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.04);
+  }
+}
+
+@keyframes mfa-success-pop {
+  0% {
+    transform: scale(0.92);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes orb-drift-1 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(42px, -36px, 0) scale(1.08);
+  }
+  66% {
+    transform: translate3d(-28px, 24px, 0) scale(0.95);
+  }
+}
+
+@keyframes orb-drift-2 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(-48px, 32px, 0) scale(1.06);
+  }
+  66% {
+    transform: translate3d(36px, -28px, 0) scale(0.94);
+  }
+}
+
+@keyframes orb-drift-3 {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(28px, 38px, 0) scale(1.1);
+  }
+}
+
+@keyframes glass-card-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes glass-sheen {
+  0% {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  100% {
+    transform: translateX(220%) skewX(-18deg);
+  }
+}
+
+.animate-mfa-shake {
+  animation: mfa-shake 0.48s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.animate-mfa-wave {
+  animation: mfa-wave 0.9s ease-in-out infinite;
+}
+
+.animate-mfa-success-pop {
+  animation: mfa-success-pop 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-orb-1 {
+  animation: orb-drift-1 16s ease-in-out infinite;
+}
+
+.animate-orb-2 {
+  animation: orb-drift-2 20s ease-in-out infinite;
+}
+
+.animate-orb-3 {
+  animation: orb-drift-3 18s ease-in-out infinite;
+}
+
+.animate-glass-enter {
+  animation: glass-card-enter 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.glass-auth-card {
+  @apply bg-white/65 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/75 dark:border-white/15;
+  box-shadow: 0 24px 68px -12px rgba(15, 23, 42, 0.18), 0 1px 0 0 rgba(255, 255, 255, 0.75) inset;
+}
+
+.dark .glass-auth-card {
+  box-shadow: 0 28px 80px -12px rgba(0, 0, 0, 0.68), 0 1px 0 0 rgba(255, 255, 255, 0.1) inset;
+}
+
+.glass-auth-input {
+  @apply bg-white/55 dark:bg-white/5 backdrop-blur-md border border-white/75 dark:border-white/10 focus:bg-white/90 dark:focus:bg-white/10 focus:border-primary/50 focus:ring-4 focus:ring-primary/15 transition-all duration-300;
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.05) inset;
+}
+
+.glass-subpanel {
+  @apply bg-white/50 dark:bg-white/5 backdrop-blur-xl border border-white/70 dark:border-white/10;
+  box-shadow: 0 8px 24px -8px rgba(15, 23, 42, 0.08), 0 1px 0 0 rgba(255, 255, 255, 0.6) inset;
+}
+
+.dark .glass-subpanel {
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.45), 0 1px 0 0 rgba(255, 255, 255, 0.08) inset;
+}
+
+/* Glassy Navbar & Navigation Surfaces */
+.glass-navbar {
+  @apply bg-white/65 dark:bg-slate-900/65 backdrop-blur-2xl backdrop-saturate-[180%] border-b border-white/75 dark:border-white/10;
+  box-shadow: 0 12px 36px -12px rgba(15, 23, 42, 0.08), 0 1px 0 0 rgba(255, 255, 255, 0.75) inset;
+}
+
+.dark .glass-navbar {
+  box-shadow: 0 14px 40px -12px rgba(0, 0, 0, 0.55), 0 1px 0 0 rgba(255, 255, 255, 0.08) inset;
+}
+
+.glass-nav-pill {
+  @apply bg-white/45 dark:bg-white/[0.04] backdrop-blur-xl border border-white/70 dark:border-white/10;
+  box-shadow: 0 2px 10px -2px rgba(15, 23, 42, 0.05) inset, 0 1px 0 0 rgba(255, 255, 255, 0.65);
+}
+
+.dark .glass-nav-pill {
+  box-shadow: 0 2px 10px -2px rgba(0, 0, 0, 0.4) inset, 0 1px 0 0 rgba(255, 255, 255, 0.06);
+}
+
+.glass-nav-item-active {
+  @apply bg-white/90 dark:bg-white/[0.12] backdrop-blur-md border border-white/90 dark:border-white/20;
+  box-shadow: 0 6px 20px -4px rgba(15, 23, 42, 0.1), 0 1px 0 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+.dark .glass-nav-item-active {
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.5), 0 1px 0 0 rgba(255, 255, 255, 0.18) inset;
+}
+
+.glass-dropdown {
+  @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl backdrop-saturate-[180%] border border-white/80 dark:border-white/15;
+  box-shadow: 0 24px 60px -12px rgba(15, 23, 42, 0.18), 0 1px 0 0 rgba(255, 255, 255, 0.8) inset;
+}
+
+.dark .glass-dropdown {
+  box-shadow: 0 28px 68px -12px rgba(0, 0, 0, 0.68), 0 1px 0 0 rgba(255, 255, 255, 0.12) inset;
+}
+
+.glass-mobile-dock {
+  @apply bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl backdrop-saturate-[180%] border border-white/80 dark:border-white/15;
+  box-shadow: 0 20px 50px -10px rgba(15, 23, 42, 0.18), 0 1px 0 0 rgba(255, 255, 255, 0.85) inset;
+}
+
+.dark .glass-mobile-dock {
+  box-shadow: 0 24px 60px -10px rgba(0, 0, 0, 0.68), 0 1px 0 0 rgba(255, 255, 255, 0.12) inset;
+}
+
+/* Glassy Tabs Surfaces */
+.glass-tabs-list {
+  @apply bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl backdrop-saturate-[160%] border border-white/75 dark:border-white/10;
+  box-shadow: 0 2px 10px -2px rgba(15, 23, 42, 0.06) inset, 0 8px 24px -8px rgba(15, 23, 42, 0.06);
+}
+
+.dark .glass-tabs-list {
+  box-shadow: 0 2px 12px -2px rgba(0, 0, 0, 0.45) inset, 0 8px 24px -8px rgba(0, 0, 0, 0.4);
+}
+
+.glass-tab-trigger {
+  @apply relative overflow-hidden border border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/[0.05] data-[state=active]:bg-white/90 dark:data-[state=active]:bg-white/[0.12] data-[state=active]:backdrop-blur-md data-[state=active]:border-white/85 dark:data-[state=active]:border-white/20 data-[state=active]:text-slate-900 dark:data-[state=active]:text-white;
+}
+
+.glass-tab-trigger[data-state="active"] {
+  box-shadow: 0 6px 18px -4px rgba(15, 23, 42, 0.12), 0 1px 0 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+.dark .glass-tab-trigger[data-state="active"] {
+  box-shadow: 0 6px 20px -4px rgba(0, 0, 0, 0.55), 0 1px 0 0 rgba(255, 255, 255, 0.18) inset;
+}
+
+/* Glassy Cards & Elevated Surfaces */
+.glass-card-surface {
+  @apply !bg-white/60 dark:!bg-slate-900/55 backdrop-blur-2xl backdrop-saturate-[175%] !border !border-white/75 dark:!border-white/10;
+  box-shadow: 0 18px 46px -12px rgba(15, 23, 42, 0.08), 0 1px 0 0 rgba(255, 255, 255, 0.82) inset;
+}
+
+.glass-card-surface:hover {
+  box-shadow: 0 24px 56px -12px rgba(15, 23, 42, 0.12), 0 1px 0 0 rgba(255, 255, 255, 0.92) inset;
+}
+
+.dark .glass-card-surface {
+  box-shadow: 0 22px 54px -12px rgba(0, 0, 0, 0.55), 0 1px 0 0 rgba(255, 255, 255, 0.12) inset;
+}
+
+.dark .glass-card-surface:hover {
+  box-shadow: 0 28px 64px -12px rgba(0, 0, 0, 0.68), 0 1px 0 0 rgba(255, 255, 255, 0.16) inset;
+}
+
+/* Glassy Graphs, Chart Wells & Tooltips */
+.glass-chart-surface {
+  @apply relative overflow-hidden rounded-2xl bg-white/40 dark:bg-slate-950/35 backdrop-blur-xl backdrop-saturate-[160%] border border-white/70 dark:border-white/[0.08];
+  box-shadow: 0 2px 16px -4px rgba(15, 23, 42, 0.05) inset, 0 1px 0 0 rgba(255, 255, 255, 0.65);
+}
+
+.dark .glass-chart-surface {
+  box-shadow: 0 2px 18px -4px rgba(0, 0, 0, 0.45) inset, 0 1px 0 0 rgba(255, 255, 255, 0.06);
+}
+
+.glass-chart-tooltip {
+  @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl backdrop-saturate-[190%] border border-white/85 dark:border-white/15 rounded-2xl;
+  box-shadow: 0 20px 48px -10px rgba(15, 23, 42, 0.18), 0 1px 0 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+.dark .glass-chart-tooltip {
+  box-shadow: 0 24px 56px -10px rgba(0, 0, 0, 0.68), 0 1px 0 0 rgba(255, 255, 255, 0.14) inset;
+}
+
+/* Recharts Luminous Glass Enhancements */
+.recharts-cartesian-grid line {
+  stroke: rgba(148, 163, 184, 0.22);
+}
+
+.dark .recharts-cartesian-grid line {
+  stroke: rgba(148, 163, 184, 0.12);
+}
+
+.recharts-area-curve,
+.recharts-line-curve {
+  filter: drop-shadow(0 6px 12px rgba(59, 130, 246, 0.2));
+}
+
+.recharts-bar-rectangle path,
+.recharts-sector {
+  filter: drop-shadow(0 6px 14px rgba(15, 23, 42, 0.1));
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+
+.dark .recharts-bar-rectangle path,
+.dark .recharts-sector {
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45));
+}
+
+.recharts-radial-bar-background-sector {
+  fill: rgba(148, 163, 184, 0.14) !important;
+}
+
+.dark .recharts-radial-bar-background-sector {
+  fill: rgba(255, 255, 255, 0.06) !important;
+}
+
+.recharts-tooltip-wrapper {
+  outline: none !important;
+  z-index: 40;
+}
+
+/* ==========================================================================
+   Claymorphism UI System — Soft 3D Inflated Surfaces & Sculpted Wells
+   ========================================================================== */
+
+/* Clay Tab Bar Dock (Floating Mobile Tab Bar & Contained Bars) */
+.clay-tab-bar {
+  @apply bg-gradient-to-b from-[#f8fafc] to-[#e2e8f0] dark:from-[#1e293b] dark:to-[#0f172a] border-2 border-white/90 dark:border-slate-700/70;
+  box-shadow:
+    0 22px 44px -10px rgba(15, 23, 42, 0.2),
+    inset 0 6px 12px rgba(255, 255, 255, 0.95),
+    inset 0 -6px 14px rgba(148, 163, 184, 0.48);
+}
+
+.dark .clay-tab-bar {
+  box-shadow:
+    0 26px 52px -10px rgba(0, 0, 0, 0.72),
+    inset 0 4px 10px rgba(255, 255, 255, 0.14),
+    inset 0 -6px 14px rgba(0, 0, 0, 0.65);
+}
+
+/* Recessed Clay Track for Desktop Nav Pill & TabsList */
+.clay-tab-pill {
+  @apply bg-[#e6ecf4] dark:bg-[#0f172a] border-2 border-white/85 dark:border-slate-800/90;
+  box-shadow:
+    0 10px 24px -8px rgba(15, 23, 42, 0.1),
+    inset 5px 5px 10px rgba(148, 163, 184, 0.45),
+    inset -5px -5px 10px rgba(255, 255, 255, 0.95);
+}
+
+.dark .clay-tab-pill {
+  box-shadow:
+    0 12px 26px -8px rgba(0, 0, 0, 0.55),
+    inset 4px 4px 10px rgba(0, 0, 0, 0.68),
+    inset -3px -3px 8px rgba(255, 255, 255, 0.06);
+}
+
+/* Puffy Inflated 3D Active Tab Item */
+.clay-tab-active {
+  @apply bg-gradient-to-b from-white via-[#f8fafc] to-[#e9eff6] dark:from-[#334155] dark:via-[#263346] dark:to-[#1e293b] border border-white/95 dark:border-slate-600/80;
+  box-shadow:
+    0 8px 18px -4px rgba(15, 23, 42, 0.16),
+    inset 0 4px 7px rgba(255, 255, 255, 1),
+    inset 0 -4px 7px rgba(148, 163, 184, 0.42);
+}
+
+.dark .clay-tab-active {
+  box-shadow:
+    0 10px 22px -4px rgba(0, 0, 0, 0.65),
+    inset 0 3px 6px rgba(255, 255, 255, 0.2),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.6);
+}
+
+/* Radix TabsTrigger Claymorphic States */
+.clay-tab-trigger {
+  @apply relative overflow-hidden border border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all duration-300 data-[state=active]:text-slate-900 dark:data-[state=active]:text-white;
+}
+
+.clay-tab-trigger[data-state="active"] {
+  @apply bg-gradient-to-b from-white via-[#f8fafc] to-[#e9eff6] dark:from-[#334155] dark:via-[#263346] dark:to-[#1e293b] border-white/95 dark:border-slate-600/80;
+  box-shadow:
+    0 8px 18px -4px rgba(15, 23, 42, 0.16),
+    inset 0 4px 7px rgba(255, 255, 255, 1),
+    inset 0 -4px 7px rgba(148, 163, 184, 0.42);
+}
+
+.dark .clay-tab-trigger[data-state="active"] {
+  box-shadow:
+    0 10px 22px -4px rgba(0, 0, 0, 0.65),
+    inset 0 3px 6px rgba(255, 255, 255, 0.2),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.6);
+}
+
+/* Puffy 3D Clay Card Surface (Overrides .glass-card-surface when combined) */
+.glass-card-surface.clay-card,
+.clay-card {
+  @apply !bg-gradient-to-br !from-white !via-[#f6f9fc] !to-[#e9eff6] dark:!from-[#1e293b] dark:!via-[#172033] dark:!to-[#0f172a] !border-2 !border-white/95 dark:!border-slate-700/70 !backdrop-blur-none transition-all duration-300;
+  box-shadow:
+    0 20px 42px -12px rgba(15, 23, 42, 0.14),
+    inset 0 6px 12px rgba(255, 255, 255, 0.98),
+    inset 0 -7px 15px rgba(148, 163, 184, 0.38);
+}
+
+.glass-card-surface.clay-card:hover,
+.clay-card:hover {
+  box-shadow:
+    0 26px 50px -12px rgba(15, 23, 42, 0.18),
+    inset 0 7px 14px rgba(255, 255, 255, 1),
+    inset 0 -8px 16px rgba(148, 163, 184, 0.44);
+}
+
+.dark .glass-card-surface.clay-card,
+.dark .clay-card {
+  box-shadow:
+    0 24px 48px -12px rgba(0, 0, 0, 0.68),
+    inset 0 4px 10px rgba(255, 255, 255, 0.14),
+    inset 0 -7px 15px rgba(0, 0, 0, 0.65);
+}
+
+.dark .glass-card-surface.clay-card:hover,
+.dark .clay-card:hover {
+  box-shadow:
+    0 30px 58px -12px rgba(0, 0, 0, 0.78),
+    inset 0 5px 12px rgba(255, 255, 255, 0.18),
+    inset 0 -8px 18px rgba(0, 0, 0, 0.72);
+}
+
+/* Pastel Amber Clay Card Variant (Elite Milestone) */
+.glass-card-surface.clay-card-amber,
+.clay-card-amber {
+  @apply !bg-gradient-to-br !from-[#fffdf7] !via-[#fef3c7] !to-[#fde68a]/80 dark:!from-[#451a03]/80 dark:!via-[#3b1704]/90 dark:!to-[#271004] !border-2 !border-amber-100 dark:!border-amber-500/35 !backdrop-blur-none transition-all duration-300;
+  box-shadow:
+    0 20px 42px -12px rgba(217, 119, 6, 0.18),
+    inset 0 6px 12px rgba(255, 255, 255, 0.92),
+    inset 0 -7px 15px rgba(245, 158, 11, 0.28);
+}
+
+.dark .glass-card-surface.clay-card-amber,
+.dark .clay-card-amber {
+  box-shadow:
+    0 24px 48px -12px rgba(0, 0, 0, 0.72),
+    inset 0 4px 10px rgba(251, 191, 36, 0.2),
+    inset 0 -7px 15px rgba(0, 0, 0, 0.68);
+}
+
+/* Sculpted Recessed Clay Well (for Inner Charts, Legend Rows, & Inputs) */
+.clay-well {
+  @apply relative overflow-hidden rounded-[22px] !bg-[#e8eef5] dark:!bg-[#0f172a] !border !border-white/85 dark:!border-slate-800/90 !backdrop-blur-none;
+  box-shadow:
+    inset 5px 5px 11px rgba(148, 163, 184, 0.42),
+    inset -5px -5px 11px rgba(255, 255, 255, 0.92);
+}
+
+.dark .clay-well {
+  box-shadow:
+    inset 5px 5px 12px rgba(0, 0, 0, 0.7),
+    inset -4px -4px 10px rgba(255, 255, 255, 0.05);
+}
+
+/* Puffy 3D Clay Icon Badge & Pill */
+.clay-badge {
+  @apply border border-white/85 dark:border-white/15;
+  box-shadow:
+    0 6px 14px -3px rgba(15, 23, 42, 0.14),
+    inset 0 3px 5px rgba(255, 255, 255, 0.9),
+    inset 0 -3px 5px rgba(15, 23, 42, 0.14);
+}
+
+.dark .clay-badge {
+  box-shadow:
+    0 8px 16px -3px rgba(0, 0, 0, 0.55),
+    inset 0 2px 4px rgba(255, 255, 255, 0.18),
+    inset 0 -3px 5px rgba(0, 0, 0, 0.55);
+}
+
+@media print {
+  header,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}
+
+
+

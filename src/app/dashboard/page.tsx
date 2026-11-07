@@ -6,43 +6,47 @@ import { collection, query, where, limit, doc } from 'firebase/firestore';
 import { updateDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { StatsCards } from '@/components/dashboard/stats-cards';
 import { RegistrationTable } from '@/components/dashboard/registration-table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  FileText, 
-  ShieldCheck, 
-  Megaphone, 
-  Info, 
-  Timer, 
-  Loader2, 
-  Sparkles, 
-  Plus, 
-  MessageSquare, 
-  CalendarPlus, 
-  Search,
-  Zap,
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  ShieldCheck,
+  Megaphone,
+  Info,
+  Timer,
+  Loader2,
+  Sparkles,
+  Plus,
+  MessageSquare,
+  CalendarPlus,
   Power,
   RefreshCcw,
   FileSpreadsheet,
   FileText as FileTextIcon,
-  TrendingUp as VelocityIcon
+  TrendingUp as VelocityIcon,
+  ArrowRight,
+  Clock,
+  CheckCircle2,
+  Building2,
+  Phone,
+  Smartphone,
+  UserCheck,
+  RotateCcw,
 } from 'lucide-react';
 import { Registration, DashboardStats, Announcement, DailyReport, UserProfile } from '@/lib/types';
 import { RegistrationFormModal } from '@/components/registrations/registration-form-modal';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { logAuditAction } from '@/lib/audit';
 import { format, subDays } from 'date-fns';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer 
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
 } from 'recharts';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -53,6 +57,7 @@ export default function OfficerDashboard() {
   const db = useFirestore();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeCardFilter, setActiveCardFilter] = useState<string | null>(null);
   const [isTogglingDuty, setIsTogglingDuty] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -81,10 +86,7 @@ export default function OfficerDashboard() {
 
   const reportsQuery = useMemoFirebase(() => {
     if (!db || !user) return null;
-    return query(
-      collection(db, 'daily_reports'),
-      where('officerId', '==', user.uid)
-    );
+    return query(collection(db, 'daily_reports'), where('officerId', '==', user.uid));
   }, [db, user]);
 
   const announcementsQuery = useMemoFirebase(() => {
@@ -92,15 +94,96 @@ export default function OfficerDashboard() {
     return query(collection(db, 'announcements'), limit(10));
   }, [db, user]);
 
-  const { data: rawRegistrations, isLoading: isRegLoading } = useCollection<Registration>(registrationsQuery);
+  const { data: rawRegistrations, isLoading: isRegLoading } =
+    useCollection<Registration>(registrationsQuery);
   const { data: reports, isLoading: isReportsLoading } = useCollection<DailyReport>(reportsQuery);
-  const { data: announcements, isLoading: isAnnLoading } = useCollection<Announcement>(announcementsQuery);
+  const { data: announcements, isLoading: isAnnLoading } =
+    useCollection<Announcement>(announcementsQuery);
 
   useEffect(() => {
     if (rawRegistrations || reports || announcements) {
       setLastSynced(new Date());
     }
   }, [rawRegistrations, reports, announcements]);
+
+  const existingInstitutions = useMemo(() => {
+    const set = new Set<string>();
+    (rawRegistrations || []).forEach((r) => {
+      const name = (r.institutionName || r.schoolName || '').trim();
+      if (name) set.add(name);
+    });
+    (reports || []).forEach((rep) => {
+      const name = (rep.institutionName || rep.schoolName || '').trim();
+      if (name) set.add(name);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [rawRegistrations, reports]);
+
+  // Today's Live Intake & Institution vs Non-Institution Split
+  const todaySummary = useMemo(() => {
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const todayReports = (reports || []).filter((r) => r.date === todayStr);
+    const todayRecords = (rawRegistrations || []).filter((r) => {
+      try {
+        return format(new Date(r.submissionDate), 'yyyy-MM-dd') === todayStr;
+      } catch {
+        return false;
+      }
+    });
+
+    if (todayReports.length > 0) {
+      let total = 0;
+      let ethio = 0;
+      let safaricom = 0;
+      let institutionCount = 0;
+      let nonInstitutionCount = 0;
+
+      todayReports.forEach((rep) => {
+        const repTotal = Number(rep.total || 0);
+        total += repTotal;
+        ethio += Number(rep.ethioCount || 0);
+        safaricom += Number(rep.safaricomCount || 0);
+        const hasInst =
+          Boolean(rep.isInstitutionRegistration || rep.isSchoolRegistration) ||
+          Boolean((rep.institutionName || rep.schoolName || '').trim().length > 0);
+        const instPart =
+          typeof rep.studentCount === 'number'
+            ? Math.min(repTotal, Math.max(0, rep.studentCount))
+            : hasInst
+            ? repTotal
+            : 0;
+        const nonInstPart =
+          typeof rep.nonStudentCount === 'number'
+            ? Math.max(0, rep.nonStudentCount)
+            : Math.max(0, repTotal - instPart);
+        institutionCount += instPart;
+        nonInstitutionCount += nonInstPart;
+      });
+
+      return {
+        hasDailyReport: true,
+        total,
+        ethio,
+        safaricom,
+        institutionCount,
+        nonInstitutionCount,
+        individualRecordsToday: todayRecords.length,
+      };
+    }
+
+    const instRecs = todayRecords.filter(
+      (r) => (r.institutionName || r.schoolName || '').trim().length > 0
+    ).length;
+    return {
+      hasDailyReport: false,
+      total: todayRecords.length,
+      ethio: 0,
+      safaricom: 0,
+      institutionCount: instRecs,
+      nonInstitutionCount: Math.max(0, todayRecords.length - instRecs),
+      individualRecordsToday: todayRecords.length,
+    };
+  }, [reports, rawRegistrations]);
 
   const sortedAnnouncements = useMemo(() => {
     if (!announcements) return [];
@@ -115,34 +198,73 @@ export default function OfficerDashboard() {
 
   const filteredRegistrations = useMemo(() => {
     if (!rawRegistrations) return [];
-    if (!searchTerm) return rawRegistrations;
-    return rawRegistrations.filter(reg => 
-      reg.applicantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reg.id.includes(searchTerm) ||
-      reg.status.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [rawRegistrations, searchTerm]);
+    return rawRegistrations.filter((reg) => {
+      if (activeCardFilter) {
+        if (activeCardFilter === 'INSTITUTIONS') {
+          const instName = (reg.institutionName || rInst(reg)).trim();
+          if (!instName) return false;
+        } else if (activeCardFilter === 'Processing') {
+          if (reg.status !== 'Processing' && reg.status !== 'Pending Review') return false;
+        } else if (reg.status !== activeCardFilter) {
+          return false;
+        }
+      }
+
+      if (!searchTerm) return true;
+      const q = searchTerm.toLowerCase();
+      return (
+        reg.applicantName.toLowerCase().includes(q) ||
+        reg.id.toLowerCase().includes(q) ||
+        reg.status.toLowerCase().includes(q) ||
+        (reg.institutionName || reg.schoolName || '').toLowerCase().includes(q)
+      );
+    });
+  }, [rawRegistrations, searchTerm, activeCardFilter]);
+
+  function rInst(reg: Registration) {
+    return reg.schoolName || '';
+  }
 
   const stats: DashboardStats = useMemo(() => {
-    const defaultStats = { 
-      total: 0, processed: 0, pendingReview: 0, rejected: 0, processing: 0, failed: 0, 
-      totalOfficers: 0, activeOfficers: 0, pendingOfficers: 0, onDutyOfficers: 0 
+    const defaultStats: DashboardStats = {
+      total: 0,
+      processed: 0,
+      pendingReview: 0,
+      rejected: 0,
+      processing: 0,
+      failed: 0,
+      totalOfficers: 0,
+      activeOfficers: 0,
+      pendingOfficers: 0,
+      onDutyOfficers: 0,
+      institutionsCount: 0,
+      institutionRecordsCount: 0,
     };
-    
+
     if (!mounted) return defaultStats;
-    
+
     const totalFromReports = reports?.reduce((acc, curr) => acc + (curr.total || 0), 0) || 0;
+    const totalTrackedRecords = rawRegistrations?.length || 0;
+    const instRecordsCount =
+      rawRegistrations?.filter(
+        (r) => (r.institutionName || r.schoolName || '').trim().length > 0
+      ).length || 0;
 
     return {
       ...defaultStats,
-      total: totalFromReports,
-      processed: rawRegistrations?.filter(r => r.status === 'Processed').length || 0,
-      pendingReview: rawRegistrations?.filter(r => r.status === 'Pending Review').length || 0,
-      rejected: rawRegistrations?.filter(r => r.status === 'Rejected').length || 0,
-      processing: rawRegistrations?.filter(r => r.status === 'Processing').length || 0,
-      failed: rawRegistrations?.filter(r => r.status === 'Failed').length || 0,
+      total: totalFromReports > 0 ? totalFromReports : totalTrackedRecords,
+      processed: rawRegistrations?.filter((r) => r.status === 'Processed').length || 0,
+      pendingReview: rawRegistrations?.filter((r) => r.status === 'Pending Review').length || 0,
+      rejected: rawRegistrations?.filter((r) => r.status === 'Rejected').length || 0,
+      processing:
+        rawRegistrations?.filter(
+          (r) => r.status === 'Processing' || r.status === 'Pending Review'
+        ).length || 0,
+      failed: rawRegistrations?.filter((r) => r.status === 'Failed').length || 0,
+      institutionsCount: existingInstitutions.length,
+      institutionRecordsCount: instRecordsCount,
     };
-  }, [rawRegistrations, reports, mounted]);
+  }, [rawRegistrations, reports, mounted, existingInstitutions.length]);
 
   const velocityData = useMemo(() => {
     if (!reports || !mounted) return [];
@@ -151,27 +273,27 @@ export default function OfficerDashboard() {
       return format(d, 'yyyy-MM-dd');
     }).reverse();
 
-    return last7Days.map(date => {
+    return last7Days.map((date) => {
       const dayTotal = reports
-        .filter(r => r.date === date)
+        .filter((r) => r.date === date)
         .reduce((acc, curr) => acc + (curr.total || 0), 0);
       return {
         name: format(new Date(date), 'MMM dd'),
-        total: dayTotal
+        total: dayTotal,
       };
     });
   }, [reports, mounted]);
 
   const handleToggleDuty = async () => {
     if (!db || !user || !profile || isTogglingDuty) return;
-    
+
     setIsTogglingDuty(true);
     const newDutyStatus = !profile.isDutyActive;
-    
+
     try {
       await updateDocumentNonBlocking(doc(db, 'users', user.uid), {
         isDutyActive: newDutyStatus,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       });
 
       logAuditAction(
@@ -184,14 +306,14 @@ export default function OfficerDashboard() {
       );
 
       toast({
-        title: newDutyStatus ? "Active Duty Initialized" : "Off-Duty Signal Sent",
+        title: newDutyStatus ? 'Active Duty Initialized' : 'Off-Duty Signal Sent',
         description: `Personnel status updated in the bureau coordination matrix.`,
       });
-    } catch (error) {
+    } catch {
       toast({
-        variant: "destructive",
-        title: "Protocol Failure",
-        description: "Could not synchronize duty status with backend.",
+        variant: 'destructive',
+        title: 'Protocol Failure',
+        description: 'Could not synchronize duty status with backend.',
       });
     } finally {
       setIsTogglingDuty(false);
@@ -207,29 +329,33 @@ export default function OfficerDashboard() {
     if (filteredRegistrations.length === 0 || !user || !profile) return;
     setIsExporting(true);
 
-    const exportData = filteredRegistrations.map(r => ({
-      'ID': r.id,
-      'Applicant': r.applicantName,
-      'Date': format(new Date(r.submissionDate), 'yyyy-MM-dd'),
-      'Status': r.status,
-      'Location': r.location
+    const exportData = filteredRegistrations.map((r) => ({
+      ID: r.id,
+      Applicant: r.applicantName,
+      'Institution Name': r.institutionName || r.schoolName || 'Individual',
+      Date: format(new Date(r.submissionDate), 'yyyy-MM-dd'),
+      Status: r.status,
+      Location: r.location,
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "ActiveWorklist");
+    XLSX.utils.book_append_sheet(wb, ws, 'ActiveWorklist');
     XLSX.writeFile(wb, `Bureau_Worklist_${format(new Date(), 'yyyyMMdd')}.xlsx`);
 
     logAuditAction(
-      db, 
-      user, 
-      profile.fullName, 
-      'PERFORMANCE_REVIEW', 
-      'officer_dashboard', 
+      db,
+      user,
+      profile.fullName,
+      'PERFORMANCE_REVIEW',
+      'officer_dashboard',
       `Dashboard: Generated XLSX worklist snapshot for ${filteredRegistrations.length} records.`
     );
 
-    toast({ title: "Excel Snapshot Generated", description: "Current worklist exported to spreadsheet." });
+    toast({
+      title: 'Excel Snapshot Generated',
+      description: 'Current worklist exported to spreadsheet.',
+    });
     setTimeout(() => setIsExporting(false), 800);
   };
 
@@ -237,28 +363,34 @@ export default function OfficerDashboard() {
     if (filteredRegistrations.length === 0 || !user || !profile) return;
     setIsExporting(true);
 
-    const doc = new jsPDF();
-    doc.text(`Worklist Snapshot: ${profile.fullName}`, 14, 15);
-    const rows = filteredRegistrations.map(r => [r.id.substring(0, 15), r.applicantName, format(new Date(r.submissionDate), 'MMM dd'), r.status]);
-    autoTable(doc, {
+    const pdfDoc = new jsPDF();
+    pdfDoc.text(`Worklist Snapshot: ${profile.fullName}`, 14, 15);
+    const rows = filteredRegistrations.map((r) => [
+      r.id.substring(0, 15),
+      r.applicantName,
+      r.institutionName || r.schoolName || 'Individual',
+      format(new Date(r.submissionDate), 'MMM dd'),
+      r.status,
+    ]);
+    autoTable(pdfDoc, {
       startY: 25,
-      head: [['RID', 'Applicant', 'Date', 'Status']],
+      head: [['RID', 'Applicant', 'Institution', 'Date', 'Status']],
       body: rows,
       theme: 'striped',
-      headStyles: { fillColor: [15, 23, 42] }
+      headStyles: { fillColor: [15, 23, 42] },
     });
-    doc.save(`Bureau_Worklist_${format(new Date(), 'yyyyMMdd')}.pdf`);
+    pdfDoc.save(`Bureau_Worklist_${format(new Date(), 'yyyyMMdd')}.pdf`);
 
     logAuditAction(
-      db, 
-      user, 
-      profile.fullName, 
-      'PERFORMANCE_REVIEW', 
-      'officer_dashboard', 
+      db,
+      user,
+      profile.fullName,
+      'PERFORMANCE_REVIEW',
+      'officer_dashboard',
       `Dashboard: Generated PDF worklist archive for ${filteredRegistrations.length} records.`
     );
 
-    toast({ title: "PDF Snapshot Generated", description: "Official documentation saved." });
+    toast({ title: 'PDF Snapshot Generated', description: 'Official documentation saved.' });
     setTimeout(() => setIsExporting(false), 800);
   };
 
@@ -271,51 +403,76 @@ export default function OfficerDashboard() {
   }
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-700 pb-20">
+    <div className="space-y-8 sm:space-y-10 animate-in fade-in duration-700 pb-28">
       {/* Dynamic Command Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
-            <span className={cn(
-              "h-2 w-2 rounded-full animate-pulse",
-              profile?.isDutyActive ? "bg-green-500" : "bg-muted-foreground/30"
-            )} />
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Field Terminal v2.4</p>
+            <span
+              className={cn(
+                'h-2 w-2 rounded-full animate-pulse',
+                profile?.isDutyActive ? 'bg-green-500' : 'bg-muted-foreground/30'
+              )}
+            />
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">
+              Field Terminal v2.4
+            </p>
           </div>
-          <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">Officer Hub</h1>
-          <p className="text-sm text-muted-foreground max-w-lg">Unified Command Center for field operations and mission triage.</p>
+          <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">
+            Officer Hub
+          </h1>
+          <p className="text-sm text-muted-foreground max-w-lg">
+            Unified Command Center for field operations, institutions, and mission triage.
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 bg-card p-3 rounded-2xl border shadow-sm">
-          <div className="flex items-center gap-3 px-4 border-r border-border">
-            <div className={cn(
-              "p-2.5 rounded-xl transition-all",
-              profile?.isDutyActive ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground"
-            )}>
+        <div className="flex flex-wrap items-center gap-4 glass-card-surface p-3 rounded-2xl">
+          <div className="flex items-center gap-3 px-4 border-r border-white/60 dark:border-white/10">
+            <div
+              className={cn(
+                'p-2.5 rounded-xl transition-all backdrop-blur-md',
+                profile?.isDutyActive
+                  ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/20'
+                  : 'bg-white/40 dark:bg-white/5 text-muted-foreground border border-white/60 dark:border-white/10'
+              )}
+            >
               <ShieldCheck className="h-5 w-5" />
             </div>
             <div className="flex flex-col">
-              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Command Status</span>
-              <button 
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
+                Command Status
+              </span>
+              <button
                 onClick={handleToggleDuty}
                 disabled={isTogglingDuty}
                 className={cn(
-                  "text-sm font-black uppercase tracking-tighter flex items-center gap-1.5 hover:opacity-80 transition-opacity",
-                  profile?.isDutyActive ? "text-emerald-600" : "text-muted-foreground"
+                  'text-sm font-black uppercase tracking-tighter flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer',
+                  profile?.isDutyActive
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-muted-foreground'
                 )}
               >
-                {isTogglingDuty ? <Loader2 className="h-3 w-3 animate-spin" /> : <Power className="h-3 w-3" />}
+                {isTogglingDuty ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Power className="h-3 w-3" />
+                )}
                 {profile?.isDutyActive ? 'Active Duty' : 'Signal Offline'}
               </button>
             </div>
           </div>
-          
-          <div className="flex items-center gap-3 px-4 border-r border-border group cursor-pointer" onClick={handleRefresh}>
-            <div className="p-2.5 bg-primary/10 rounded-xl text-primary group-hover:rotate-180 transition-transform duration-500">
-              <RefreshCcw className={cn("h-5 w-5", isRefreshing && "animate-spin")} />
+
+          <div
+            className="flex items-center gap-3 px-4 border-r border-white/60 dark:border-white/10 group cursor-pointer"
+            onClick={handleRefresh}
+          >
+            <div className="p-2.5 bg-primary/15 border border-primary/20 backdrop-blur-md rounded-xl text-primary group-hover:rotate-180 transition-transform duration-500">
+              <RefreshCcw className={cn('h-5 w-5', isRefreshing && 'animate-spin')} />
             </div>
             <div className="flex flex-col">
-              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Last Sync</span>
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
+                Last Sync
+              </span>
               <span className="text-sm font-black text-foreground uppercase tracking-tighter">
                 {lastSynced ? format(lastSynced, 'HH:mm:ss') : '--:--:--'}
               </span>
@@ -323,84 +480,370 @@ export default function OfficerDashboard() {
           </div>
 
           <div className="flex items-center gap-3 px-2">
-            <div className="p-2.5 bg-muted rounded-xl text-muted-foreground"><Timer className="h-5 w-5" /></div>
+            <div className="p-2.5 bg-white/45 dark:bg-white/5 border border-white/60 dark:border-white/10 backdrop-blur-md rounded-xl text-muted-foreground">
+              <Timer className="h-5 w-5" />
+            </div>
             <div className="flex flex-col">
-              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Network</span>
-              <span className="text-sm font-black text-green-600 uppercase tracking-tighter">Synced</span>
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
+                Network
+              </span>
+              <span className="text-sm font-black text-green-600 dark:text-emerald-400 uppercase tracking-tighter">
+                Synced
+              </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Quick Action Matrix */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <RegistrationFormModal 
-          mode="add" 
-          trigger={
-            <Button className="h-20 bg-primary hover:bg-primary/90 text-white rounded-2xl flex flex-col items-center justify-center gap-1 shadow-xl shadow-primary/10 transition-transform active:scale-95">
-              <Plus className="h-5 w-5" />
-              <span className="text-[10px] font-black uppercase tracking-widest">New Registration</span>
-            </Button>
-          }
-        />
-        <Button variant="outline" className="h-20 border-border bg-card hover:bg-muted text-foreground rounded-2xl flex flex-col items-center justify-center gap-1 transition-transform active:scale-95" asChild>
-          <Link href="/daily-registrations">
-            <CalendarPlus className="h-5 w-5 text-primary" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Log Daily Totals</span>
-          </Link>
-        </Button>
-        <Button variant="outline" className="h-20 border-border bg-card hover:bg-muted text-foreground rounded-2xl flex flex-col items-center justify-center gap-1 transition-transform active:scale-95" asChild>
-          <Link href="/communication">
-            <MessageSquare className="h-5 w-5 text-amber-500" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Team Comms</span>
-          </Link>
-        </Button>
+      {/* Today's Live Output & Processing Queue Banner */}
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* Today's Live Intake & Institution vs Non-Institution Split */}
+        <Card className="lg:col-span-7 rounded-[24px] relative overflow-hidden">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-12 -right-12 h-36 w-36 rounded-full bg-primary/15 blur-3xl"
+          />
+          <CardContent className="p-5 sm:p-6 relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">
+                  Today&apos;s Live Intake • {format(new Date(), 'MMM dd, yyyy')}
+                </span>
+                {todaySummary.hasDailyReport ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase">
+                    <CheckCircle2 className="h-3 w-3" /> Report Logged
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase">
+                    <Clock className="h-3 w-3" /> Report Pending
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-baseline gap-3">
+                <span className="text-3xl sm:text-4xl font-black text-foreground tabular-nums">
+                  {todaySummary.total.toLocaleString()}
+                </span>
+                <span className="text-xs font-semibold text-muted-foreground">
+                  People Registered Today
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[11px] font-bold tabular-nums">
+                  <Building2 className="h-3 w-3" /> {todaySummary.institutionCount} Institution
+                </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg glass-subpanel text-slate-700 dark:text-slate-200 text-[11px] font-bold tabular-nums">
+                  <UserCheck className="h-3 w-3 text-emerald-500" />{' '}
+                  {todaySummary.nonInstitutionCount} Non-Institution
+                </span>
+                {todaySummary.hasDailyReport && (
+                  <>
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold tabular-nums">
+                      <Phone className="h-2.5 w-2.5" /> {todaySummary.ethio} Ethio
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-orange-500/10 text-orange-600 dark:text-orange-400 text-[10px] font-bold tabular-nums">
+                      <Smartphone className="h-2.5 w-2.5" /> {todaySummary.safaricom} Safaricom
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
+              <Button
+                asChild
+                size="sm"
+                className="rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-xs h-9 px-4 shadow-md shadow-primary/20"
+              >
+                <Link href="/daily-registrations">
+                  <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
+                  {todaySummary.hasDailyReport ? 'Update Daily Report' : 'Log Daily Report'}
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Processing Queue Verification Card */}
+        <Card className="lg:col-span-5 rounded-[24px] relative overflow-hidden">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-12 -right-12 h-36 w-36 rounded-full bg-amber-500/15 blur-3xl"
+          />
+          <CardContent className="p-5 sm:p-6 relative z-10 flex flex-col justify-between h-full gap-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Verification Queue
+                </span>
+                <p className="text-2xl sm:text-3xl font-black text-foreground tabular-nums">
+                  {stats.processing.toLocaleString()}{' '}
+                  <span className="text-sm font-bold text-muted-foreground">In Processing</span>
+                </p>
+              </div>
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="glass-subpanel rounded-xl h-9 px-3.5 text-xs font-bold text-primary hover:bg-primary hover:text-white transition-all shrink-0"
+              >
+                <Link href="/status-check">
+                  Verify Now <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {stats.processing > 0
+                ? `You have ${stats.processing} record(s) in Processing status ready for official gateway verification.`
+                : 'All assigned Processing records have been verified. Open the terminal anytime to check status.'}
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Quick Action Matrix (4 Glassy Integration Cards) */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <Card className="rounded-[22px] hover:-translate-y-0.5 transition-all duration-300 group relative">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full bg-orange-500/15 blur-2xl group-hover:bg-orange-500/25 transition-all"
+          />
+          <CardContent className="p-6 space-y-5 relative z-10">
+            <div className="flex items-center justify-between">
+              <div className="h-10 w-10 rounded-[12px] bg-gradient-to-br from-orange-400 to-orange-600 text-white flex items-center justify-center shadow-lg shadow-orange-500/25">
+                <Plus className="h-5 w-5" />
+              </div>
+              <RegistrationFormModal
+                mode="add"
+                existingSchools={existingInstitutions}
+                trigger={
+                  <button
+                    type="button"
+                    className="glass-subpanel px-3.5 py-1.5 rounded-[10px] text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-primary/50 hover:text-primary transition-all cursor-pointer"
+                  >
+                    Launch
+                  </button>
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-[14px] font-semibold text-slate-900 dark:text-white">
+                  New Registration
+                </h3>
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 fill-emerald-500/10" />
+              </div>
+              <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                Enroll new citizen or institution RIDs into the active bureau registry.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[22px] hover:-translate-y-0.5 transition-all duration-300 group relative">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full bg-violet-500/15 blur-2xl group-hover:bg-violet-500/25 transition-all"
+          />
+          <CardContent className="p-6 space-y-5 relative z-10">
+            <div className="flex items-center justify-between">
+              <div className="h-10 w-10 rounded-[12px] bg-gradient-to-br from-violet-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-violet-500/25">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <RegistrationFormModal
+                  mode="add"
+                  defaultIsSchool={true}
+                  existingSchools={existingInstitutions}
+                  trigger={
+                    <button
+                      type="button"
+                      title="Register under Institution"
+                      className="glass-subpanel px-2.5 py-1.5 rounded-[10px] text-[11px] font-semibold text-primary hover:bg-primary/10 transition-all cursor-pointer"
+                    >
+                      + Add
+                    </button>
+                  }
+                />
+                <Link
+                  href="/schools-students"
+                  className="glass-subpanel px-3 py-1.5 rounded-[10px] text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-primary/50 hover:text-primary transition-all"
+                >
+                  Open
+                </Link>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-[14px] font-semibold text-slate-900 dark:text-white">
+                  Institutions
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-600 dark:text-violet-400 tabular-nums">
+                  {stats.institutionsCount || 0} Active
+                </span>
+              </div>
+              <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                {stats.institutionRecordsCount || 0} enrolled records across schools, hospitals &
+                companies.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[22px] hover:-translate-y-0.5 transition-all duration-300 group relative">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full bg-sky-500/15 blur-2xl group-hover:bg-sky-500/25 transition-all"
+          />
+          <CardContent className="p-6 space-y-5 relative z-10">
+            <div className="flex items-center justify-between">
+              <div className="h-10 w-10 rounded-[12px] bg-gradient-to-br from-sky-400 to-sky-600 text-white flex items-center justify-center shadow-lg shadow-sky-500/25">
+                <CalendarPlus className="h-5 w-5" />
+              </div>
+              <Link
+                href="/daily-registrations"
+                className="glass-subpanel px-3.5 py-1.5 rounded-[10px] !border-indigo-500/40 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-all"
+              >
+                Connected
+              </Link>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-[14px] font-semibold text-slate-900 dark:text-white">
+                  Daily Totals
+                </h3>
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 fill-emerald-500/10" />
+              </div>
+              <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                Log daily intake counts and split Institution vs. Non-Institution output.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[22px] hover:-translate-y-0.5 transition-all duration-300 group relative">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full bg-indigo-500/15 blur-2xl group-hover:bg-indigo-500/25 transition-all"
+          />
+          <CardContent className="p-6 space-y-5 relative z-10">
+            <div className="flex items-center justify-between">
+              <div className="h-10 w-10 rounded-[12px] glass-subpanel text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                <MessageSquare className="h-5 w-5" />
+              </div>
+              <Link
+                href="/communication"
+                className="glass-subpanel px-3.5 py-1.5 rounded-[10px] text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-primary/50 hover:text-primary transition-all"
+              >
+                Connect
+              </Link>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-[14px] font-semibold text-slate-900 dark:text-white">
+                  Team Comms
+                </h3>
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 fill-emerald-500/10" />
+              </div>
+              <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                Coordinate with regional supervisors, share 29-digit RIDs, and chat in real time.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-        <div className="xl:col-span-8 space-y-8">
-          {/* Registration Velocity Intelligence */}
+        <div className="xl:col-span-8 min-w-0 space-y-8">
+          {/* Registration Velocity Intelligence (Glassy Graph) */}
           <section className="space-y-4">
-            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-              <VelocityIcon className="h-3.5 w-3.5 text-primary" /> 7-Day Velocity
-            </h2>
-            <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-card">
-              <CardContent className="p-6">
-                <div className="h-[200px] w-full">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
+                <VelocityIcon className="h-3.5 w-3.5 text-primary" /> 7-Day Velocity
+              </h2>
+              <span className="text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full glass-subpanel text-primary">
+                Live Telemetry
+              </span>
+            </div>
+            <Card className="rounded-[24px] overflow-hidden relative group">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -top-20 right-12 h-44 w-44 rounded-full bg-primary/15 blur-3xl"
+              />
+              <CardContent className="p-5 sm:p-6 relative z-10">
+                <div className="glass-chart-surface p-4 h-[225px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={velocityData}>
+                    <AreaChart
+                      data={velocityData}
+                      margin={{ top: 10, right: 10, left: -16, bottom: 0 }}
+                    >
                       <defs>
                         <linearGradient id="colorVelocity" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                          <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.42} />
+                          <stop offset="55%" stopColor="hsl(var(--primary))" stopOpacity={0.14} />
+                          <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                      <XAxis 
-                        dataKey="name" 
-                        axisLine={false} 
-                        tickLine={false} 
-                        tick={{ fontSize: 9, fontBold: true, fill: 'hsl(var(--muted-foreground))' }} 
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis
+                        dataKey="name"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          fill: 'hsl(var(--muted-foreground))',
+                        }}
                       />
-                      <YAxis 
-                        axisLine={false} 
-                        tickLine={false} 
-                        tick={{ fontSize: 9, fontBold: true, fill: 'hsl(var(--muted-foreground))' }} 
+                      <YAxis
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          fill: 'hsl(var(--muted-foreground))',
+                        }}
                       />
-                      <Tooltip 
+                      <Tooltip
+                        cursor={{
+                          stroke: 'hsl(var(--primary))',
+                          strokeWidth: 1,
+                          strokeDasharray: '4 4',
+                        }}
                         content={({ active, payload }) => {
                           if (active && payload && payload.length) {
                             return (
-                              <div className="bg-card border border-border shadow-2xl p-3 rounded-xl">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">{payload[0].payload.name}</p>
-                                <p className="text-sm font-black text-foreground tracking-tighter">Total: {payload[0].value}</p>
+                              <div className="glass-chart-tooltip px-3.5 py-2.5">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">
+                                  {payload[0].payload.name}
+                                </p>
+                                <div className="flex items-center gap-2">
+                                  <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+                                  <p className="text-sm font-black text-foreground tracking-tighter tabular-nums">
+                                    Total: {payload[0].value}
+                                  </p>
+                                </div>
                               </div>
                             );
                           }
                           return null;
                         }}
                       />
-                      <Area type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} fillOpacity={1} fill="url(#colorVelocity)" />
+                      <Area
+                        type="monotone"
+                        dataKey="total"
+                        stroke="hsl(var(--primary))"
+                        strokeWidth={2.75}
+                        fillOpacity={1}
+                        fill="url(#colorVelocity)"
+                        activeDot={{
+                          r: 5,
+                          strokeWidth: 2,
+                          stroke: '#ffffff',
+                          fill: 'hsl(var(--primary))',
+                        }}
+                      />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -409,98 +852,141 @@ export default function OfficerDashboard() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-              <Sparkles className="h-3.5 w-3.5 text-primary" /> Performance Metrics
-            </h2>
-            <StatsCards stats={stats} showOfficerCount={false} />
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
+                <Sparkles className="h-3.5 w-3.5 text-primary" /> Performance Metrics (Click Any Card to Filter Ledger)
+              </h2>
+              {activeCardFilter && (
+                <button
+                  type="button"
+                  onClick={() => setActiveCardFilter(null)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full glass-subpanel text-[10px] font-bold text-primary cursor-pointer"
+                >
+                  <RotateCcw className="h-3 w-3" /> Clear Filter ({activeCardFilter})
+                </button>
+              )}
+            </div>
+            <StatsCards
+              stats={stats}
+              showOfficerCount={false}
+              activeFilter={activeCardFilter}
+              onSelectFilter={setActiveCardFilter}
+            />
           </section>
 
           {/* Worklist Triage */}
           <section className="space-y-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-                <FileText className="h-3.5 w-3.5 text-primary" /> Activity Ledger
-              </h2>
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <div className="relative flex-1 sm:w-64 group">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                  <Input 
-                    placeholder="Quick Filter worklist..." 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="h-9 pl-9 bg-card border-border text-[11px] font-bold rounded-xl"
-                  />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+                    Activity Ledger
+                  </h2>
+                  {activeCardFilter && (
+                    <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-bold">
+                      Filtered: {activeCardFilter === 'INSTITUTIONS' ? 'Institutions' : activeCardFilter}
+                    </span>
+                  )}
                 </div>
-                <Button onClick={handleExportExcel} disabled={isExporting} variant="outline" size="icon" className="h-9 w-9 border-border bg-card text-emerald-500 hover:bg-emerald-500/10 rounded-xl">
-                  {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Manage and review your assigned registrations
+                </p>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <Button
+                  onClick={handleExportExcel}
+                  disabled={isExporting}
+                  variant="outline"
+                  className="glass-subpanel h-9 px-3.5 rounded-full text-slate-700 dark:text-slate-200 font-semibold text-xs hover:bg-white/75 dark:hover:bg-white/10"
+                >
+                  {isExporting ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+                  )}
+                  Export XLS
                 </Button>
-                <Button onClick={handleExportPDF} disabled={isExporting} variant="outline" size="icon" className="h-9 w-9 border-border bg-card text-rose-500 hover:bg-rose-500/10 rounded-xl">
-                  {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileTextIcon className="h-4 w-4" />}
+                <Button
+                  onClick={handleExportPDF}
+                  disabled={isExporting}
+                  variant="outline"
+                  className="glass-subpanel h-9 px-3.5 rounded-full text-slate-700 dark:text-slate-200 font-semibold text-xs hover:bg-white/75 dark:hover:bg-white/10"
+                >
+                  {isExporting ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileTextIcon className="mr-1.5 h-3.5 w-3.5 text-rose-600" />
+                  )}
+                  Export PDF
                 </Button>
               </div>
             </div>
-            <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-card">
-              <CardContent className="p-0">
-                {filteredRegistrations && filteredRegistrations.length > 0 ? (
-                  <RegistrationTable registrations={filteredRegistrations} isDashboardView={true} />
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-24 text-center bg-muted/5">
-                    <div className="p-6 bg-muted rounded-full mb-4"><Search className="h-10 w-10 text-muted-foreground/10" /></div>
-                    <h3 className="text-sm font-black text-foreground uppercase tracking-tight mb-1">No matches in queue</h3>
-                    <p className="text-xs text-muted-foreground font-medium italic">Adjust your search parameters or check full registry.</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <RegistrationTable
+              registrations={filteredRegistrations || []}
+              isDashboardView={true}
+            />
           </section>
         </div>
 
         {/* Priorities Intelligence */}
-        <section className="xl:col-span-4 space-y-4">
+        <section className="xl:col-span-4 min-w-0 space-y-4">
           <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
             <Megaphone className="h-3.5 w-3.5 text-primary" /> Intelligence Feed
           </h2>
-          <div className="space-y-3">
-            {sortedAnnouncements.length > 0 ? sortedAnnouncements.map((ann) => {
-              const isNew = ann.timestamp?.toDate && profile?.lastAnnouncementReadAt && 
-                           ann.timestamp.toDate().getTime() > new Date(profile.lastAnnouncementReadAt).getTime();
-              
-              return (
-                <Card key={ann.id} className={cn(
-                  "border-none shadow-sm transition-all hover:shadow-md group relative overflow-hidden",
-                  ann.type === 'alert' ? "bg-red-500/5 ring-1 ring-red-500/10" : "bg-card"
-                )}>
-                  {ann.type === 'alert' && <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />}
-                  <CardContent className="p-5">
-                    <div className="flex gap-4">
-                      <div className={cn(
-                        "mt-1 h-2 w-2 rounded-full shrink-0",
-                        ann.type === 'alert' ? "bg-red-500 animate-pulse" : 
-                        ann.type === 'update' ? "bg-blue-500" : "bg-green-500"
-                      )} />
-                      <div className="space-y-2 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <h4 className="text-sm font-black text-foreground leading-tight tracking-tight uppercase">{ann.title}</h4>
-                          {isNew && <span className="text-[8px] font-black text-primary uppercase animate-bounce">New</span>}
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed font-medium">{ann.content}</p>
-                        <div className="flex items-center justify-between pt-1 border-t border-border/10">
-                           <p className="text-[9px] font-black text-muted-foreground/30 uppercase tracking-widest">{ann.date}</p>
-                           {ann.type === 'alert' && (
-                             <div className="flex items-center gap-1 text-[8px] font-black text-red-600 uppercase tracking-tighter bg-red-500/10 px-1.5 py-0.5 rounded">
-                               <Zap className="h-2 w-2" /> Critical Priority
-                             </div>
-                           )}
-                        </div>
+          <div className="space-y-3.5">
+            {sortedAnnouncements.length > 0 ? (
+              sortedAnnouncements.map((ann, idx) => {
+                const isNew =
+                  ann.timestamp?.toDate &&
+                  profile?.lastAnnouncementReadAt &&
+                  ann.timestamp.toDate().getTime() >
+                    new Date(profile.lastAnnouncementReadAt).getTime();
+                const glassTints = [
+                  '!bg-amber-500/[0.07] dark:!bg-slate-900/55',
+                  '!bg-indigo-500/[0.07] dark:!bg-indigo-950/35',
+                  '!bg-emerald-500/[0.07] dark:!bg-emerald-950/35',
+                ];
+                const cardTint =
+                  ann.type === 'alert'
+                    ? '!bg-rose-500/[0.08] dark:!bg-rose-950/35 !border-rose-500/25'
+                    : glassTints[idx % glassTints.length];
+
+                return (
+                  <Card
+                    key={ann.id}
+                    className={cn(
+                      'rounded-[22px] transition-all hover:-translate-y-0.5 group relative overflow-hidden',
+                      cardTint
+                    )}
+                  >
+                    <CardContent className="p-5 space-y-2 relative z-10">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="text-[13px] font-semibold text-slate-900 dark:text-slate-100 leading-tight">
+                          {ann.title}
+                        </h4>
+                        {isNew && (
+                          <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
+                            New
+                          </span>
+                        )}
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            }) : (
-              <div className="p-16 text-center border-2 border-dashed rounded-3xl text-muted-foreground/10 flex flex-col items-center gap-4">
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                        <Clock className="h-3 w-3 opacity-60" />
+                        <span>{ann.date}</span>
+                      </div>
+                      <p className="text-[12px] text-slate-600 dark:text-slate-300 leading-relaxed pt-1">
+                        {ann.content}
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            ) : (
+              <div className="p-16 text-center glass-card-surface border-dashed rounded-3xl text-muted-foreground/40 flex flex-col items-center gap-4">
                 <Info className="h-10 w-10 opacity-20" />
-                <p className="text-xs font-black uppercase tracking-[0.2em]">Zero Active Bulletins</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em]">
+                  Zero Active Bulletins
+                </p>
               </div>
             )}
           </div>

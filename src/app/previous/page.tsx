@@ -102,7 +102,7 @@ function PreviousContent() {
 
   const calculateChange = (curr: number, prev: number) => {
     const diff = curr - prev;
-    const percent = prev !== 0 ? ((diff / prev) * 100).toFixed(1) : (curr > 0 ? "100" : "0");
+    const percent = prev !== 0 ? String(Number(((diff / prev) * 100).toFixed(2))) : (curr > 0 ? "100" : "0");
     return { diff, percent, isNegative: diff < 0 };
   };
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Registration, RegistrationStatus, UserProfile } from '@/lib/types';
 import { 
   Table, 
@@ -30,13 +30,19 @@ import {
   X,
   ShieldAlert,
   Loader2,
-  Copy
+  Copy,
+  Check,
+  SquarePen,
+  Building2
 } from 'lucide-react';
 import { StatusBadge } from './status-badge';
 import { AiSuggestionModal } from './ai-suggestion-modal';
+import { RegistrationFormModal } from '@/components/registrations/registration-form-modal';
 import { format } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useFirestore, useUser, useDoc, useMemoFirebase } from '@/firebase';
+import { deleteDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { useRouter } from 'next/navigation';
 import { doc, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { logAuditAction } from '@/lib/audit';
@@ -57,6 +63,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { TablePagination } from "@/components/ui/table-pagination";
 
 interface RegistrationTableProps {
   registrations: Registration[];
@@ -66,6 +73,7 @@ interface RegistrationTableProps {
 export function RegistrationTable({ registrations, isDashboardView = false }: RegistrationTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
   const [isConfirmDeleteDialogOpen, setIsConfirmDeleteDialogOpen] = useState(false);
   const itemsPerPage = 10;
@@ -73,6 +81,7 @@ export function RegistrationTable({ registrations, isDashboardView = false }: Re
   const { toast } = useToast();
   const db = useFirestore();
   const { user } = useUser();
+  const router = useRouter();
 
   const userProfileRef = useMemoFirebase(() => {
     if (!db || !user?.uid) return null;
@@ -107,9 +116,11 @@ export function RegistrationTable({ registrations, isDashboardView = false }: Re
 
   const handleCopyRid = (id: string) => {
     navigator.clipboard.writeText(id);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(prev => (prev === id ? null : prev)), 2000);
     toast({
       title: "RID Copied",
-      description: "Registration ID ready for terminal verification.",
+      description: `Registration ID ${id} copied to clipboard.`,
     });
   };
 
@@ -199,8 +210,8 @@ export function RegistrationTable({ registrations, isDashboardView = false }: Re
 
   return (
     <div className={cn(
-      "relative",
-      isDashboardView ? "" : "rounded-xl border border-border bg-card shadow-sm overflow-hidden"
+      "relative glass-card-surface rounded-[22px] overflow-hidden",
+      isDashboardView ? "" : ""
     )}>
       {selectedIds.size > 0 && (
         <div className="absolute top-0 left-0 right-0 z-20 min-h-[3rem] h-auto bg-primary text-primary-foreground flex flex-col sm:flex-row items-center px-4 sm:px-6 py-2 sm:py-0 gap-3 sm:gap-4 animate-in slide-in-from-top duration-300 shadow-lg">
@@ -257,14 +268,13 @@ export function RegistrationTable({ registrations, isDashboardView = false }: Re
                 <Checkbox 
                   checked={allOnPageSelected} 
                   onCheckedChange={toggleSelectAll}
-                  className="border-muted-foreground/30"
                 />
               </TableHead>
               <TableHead className="text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground">Applicant Registry</TableHead>
               <TableHead className="text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground">Submission</TableHead>
               <TableHead className="text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground">Status</TableHead>
               <TableHead className="text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground hidden sm:table-cell">Region</TableHead>
-              {!isDashboardView && <TableHead className="text-right text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground">Actions</TableHead>}
+              <TableHead className="text-right text-[10px] font-bold uppercase tracking-wider h-10 text-muted-foreground pr-6">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -273,38 +283,50 @@ export function RegistrationTable({ registrations, isDashboardView = false }: Re
                 key={reg.id} 
                 className={cn(
                   "hover:bg-muted/30 transition-colors border-border h-16 group",
-                  selectedIds.has(reg.id) && "bg-primary/5 hover:bg-primary/10"
+                  selectedIds.has(reg.id) && "bg-blue-50/40 dark:bg-blue-950/20"
                 )}
               >
                 <TableCell className="pl-6">
                   <Checkbox 
                     checked={selectedIds.has(reg.id)} 
                     onCheckedChange={() => toggleSelectRow(reg.id)}
-                    className="border-muted-foreground/30"
                   />
                 </TableCell>
                 <TableCell className="py-4">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-foreground">{reg.applicantName}</span>
-                    <div className="flex items-center gap-1 group/rid">
-                      <span className="text-[9px] font-mono font-bold text-muted-foreground/30">{reg.id.substring(0, 15)}...</span>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button 
-                              onClick={() => handleCopyRid(reg.id)}
-                              className="opacity-0 group-hover/rid:opacity-100 p-0.5 rounded hover:bg-primary/10 text-primary transition-all"
-                            >
-                              <Copy className="h-2.5 w-2.5" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent className="bg-popover border-border p-1.5 text-[9px] font-black uppercase tracking-widest">Copy Full RID</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm font-semibold text-foreground">{reg.applicantName}</span>
+                      {(reg.institutionName || reg.schoolName) && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold">
+                          <Building2 className="h-3 w-3 shrink-0" />
+                          <span className="truncate max-w-[150px]">{reg.institutionName || reg.schoolName}</span>
+                        </span>
+                      )}
                     </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyRid(reg.id)}
+                            className="inline-flex items-center gap-1.5 w-fit text-[10px] font-mono font-semibold text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer group/rid"
+                          >
+                            <span>{reg.id.substring(0, 15)}...</span>
+                            {copiedId === reg.id ? (
+                              <Check className="h-3 w-3 text-emerald-500 shrink-0" />
+                            ) : (
+                              <Copy className="h-3 w-3 text-slate-400 group-hover/rid:text-blue-600 dark:group-hover/rid:text-blue-400 shrink-0 transition-colors" />
+                            )}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="bg-popover border-border p-1.5 text-[9px] font-black uppercase tracking-widest">
+                          Click to Copy Full RID
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                 </TableCell>
-                <TableCell className="py-4 text-muted-foreground text-xs font-bold uppercase">
+                <TableCell className="py-4 text-muted-foreground text-xs font-bold uppercase tabular-nums">
                   {format(new Date(reg.submissionDate), 'MMM dd, yyyy')}
                 </TableCell>
                 <TableCell className="py-4">
@@ -313,67 +335,54 @@ export function RegistrationTable({ registrations, isDashboardView = false }: Re
                 <TableCell className="py-4 text-muted-foreground text-[10px] font-black uppercase tracking-widest hidden sm:table-cell">
                   {reg.location.split(',')[0]}
                 </TableCell>
-                {!isDashboardView && (
-                  <TableCell className="text-right py-4 pr-6">
-                    <div className="flex items-center justify-end gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <AiSuggestionModal registration={reg} />
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-muted rounded-full">
-                            <span className="sr-only">Open menu</span>
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48 bg-popover border-border p-1 rounded-xl shadow-xl">
-                          <DropdownMenuLabel className="text-[10px] font-black uppercase text-muted-foreground px-2 py-1.5">Protocols</DropdownMenuLabel>
-                          <DropdownMenuSeparator className="bg-border" />
-                          <DropdownMenuItem className="flex items-center text-xs font-bold rounded-lg cursor-pointer text-foreground hover:bg-muted">
-                            <ExternalLink className="mr-2 h-3.5 w-3.5" /> View Record
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-xs font-bold rounded-lg cursor-pointer text-foreground hover:bg-muted">Verify Status</DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-border" />
-                          <DropdownMenuItem className="text-xs font-bold text-destructive hover:text-destructive focus:text-destructive focus:bg-destructive/5 rounded-lg cursor-pointer">
-                            <Trash2 className="mr-2 h-3.5 w-3.5" /> Purge Entry
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </TableCell>
-                )}
+                <TableCell className="text-right py-4 pr-6">
+                  <div className="inline-flex items-center justify-end gap-1">
+                    {!isDashboardView && <AiSuggestionModal registration={reg} />}
+                    <RegistrationFormModal
+                      registration={reg}
+                      mode="edit"
+                      trigger={
+                        <button
+                          type="button"
+                          title="Edit Record"
+                          className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          <SquarePen className="h-4 w-4" />
+                        </button>
+                      }
+                    />
+                    <button
+                      type="button"
+                      title="Purge Entry"
+                      onClick={() => {
+                        if (!db) return;
+                        deleteDocumentNonBlocking(doc(db, 'registrations', reg.id));
+                        toast({
+                          title: "Record Purged",
+                          description: `Removed ${reg.applicantName} from the active ledger.`,
+                          variant: "destructive"
+                        });
+                      }}
+                      className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
       
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/10">
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest hidden sm:block">
-            Showing {currentItems.length} of {registrations.length} records • Page {currentPage} of {totalPages}
-          </p>
-          <div className="flex items-center gap-2 ml-auto sm:ml-0">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 rounded-lg border-border"
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="sm:hidden text-[10px] font-black uppercase">{currentPage} / {totalPages}</span>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 rounded-lg border-border"
-              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+      <TablePagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        showingCount={currentItems.length}
+        totalCount={registrations.length}
+        itemLabel="records"
+      />
 
       <AlertDialog open={isConfirmDeleteDialogOpen} onOpenChange={setIsConfirmDeleteDialogOpen}>
         <AlertDialogContent className="rounded-[32px] border-none shadow-2xl bg-popover max-w-md p-0 overflow-hidden mx-4">
