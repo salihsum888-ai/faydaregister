@@ -160,6 +160,7 @@ export interface UserProfile {
   profilePhoto?: string;
   lastAnnouncementReadAt?: string;
   lastMessageReadAt?: string;
+  lastCallsViewedAt?: string;
   updatedAt?: string;
   isDutyActive?: boolean;
   twoFactorEnabled?: boolean;

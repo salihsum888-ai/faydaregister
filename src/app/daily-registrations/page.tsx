@@ -72,47 +72,21 @@ import {
 
 import { Checkbox } from '@/components/ui/checkbox';
 import { TablePagination } from '@/components/ui/table-pagination';
+import { useTranslation } from '@/i18n/language-provider';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const dailyReportSchema = z.object({
-  date: z.string().min(1, "Date is required"),
-  ethioCount: z.coerce.number().min(0, "Cannot be negative"),
-  safaricomCount: z.coerce.number().min(0, "Cannot be negative"),
-  remarks: z.string().optional(),
-  isSchoolRegistration: z.boolean().default(false),
-  schoolName: z.string().optional(),
-  studentCount: z.coerce.number().min(0, "Cannot be negative").default(0),
-  nonStudentCount: z.coerce.number().min(0, "Cannot be negative").default(0),
-}).superRefine((data, ctx) => {
-  const total = (Number(data.ethioCount) || 0) + (Number(data.safaricomCount) || 0);
-  if (data.isSchoolRegistration) {
-    if (!data.schoolName || data.schoolName.trim().length < 2) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Institution Name is required when Institution Registration is enabled (min 2 characters)",
-        path: ["schoolName"],
-      });
-    }
-    if (data.studentCount > total) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `Institution count (${data.studentCount}) cannot exceed total people (${total})`,
-        path: ["studentCount"],
-      });
-    }
-    if (data.studentCount + data.nonStudentCount !== total) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `Institution (${data.studentCount}) + Non-Institution (${data.nonStudentCount}) must equal Total (${total})`,
-        path: ["studentCount"],
-      });
-    }
-  }
-});
-
-type DailyReportValues = z.infer<typeof dailyReportSchema>;
+interface DailyReportValues {
+  date: string;
+  ethioCount: number;
+  safaricomCount: number;
+  remarks?: string;
+  isSchoolRegistration: boolean;
+  schoolName?: string;
+  studentCount: number;
+  nonStudentCount: number;
+}
 
 function getReportSplit(entry: DailyReport) {
   const total = Number(entry.total) || 0;
@@ -132,6 +106,7 @@ function getReportSplit(entry: DailyReport) {
 }
 
 export default function DailyRegistrationsPage() {
+  const { t, formatDate, formatNumber } = useTranslation();
   const { user } = useUser();
   const db = useFirestore();
   const { toast } = useToast();
@@ -234,6 +209,53 @@ export default function DailyRegistrationsPage() {
     const start = (currentPage - 1) * itemsPerPage;
     return history.slice(start, start + itemsPerPage);
   }, [history, currentPage]);
+
+  const dailyReportSchema = useMemo(
+    () =>
+      z
+        .object({
+          date: z.string().min(1, t.dailyReport.valDateReq),
+          ethioCount: z.coerce.number().min(0, t.dailyReport.valNonNegative),
+          safaricomCount: z.coerce.number().min(0, t.dailyReport.valNonNegative),
+          remarks: z.string().optional(),
+          isSchoolRegistration: z.boolean().default(false),
+          schoolName: z.string().optional(),
+          studentCount: z.coerce.number().min(0, t.dailyReport.valNonNegative).default(0),
+          nonStudentCount: z.coerce.number().min(0, t.dailyReport.valNonNegative).default(0),
+        })
+        .superRefine((data, ctx) => {
+          const total = (Number(data.ethioCount) || 0) + (Number(data.safaricomCount) || 0);
+          if (data.isSchoolRegistration) {
+            if (!data.schoolName || data.schoolName.trim().length < 2) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: t.dailyReport.valInstNameReq,
+                path: ['schoolName'],
+              });
+            }
+            if (data.studentCount > total) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: t.dailyReport.valInstExceedsTotal
+                  .replace('{inst}', String(data.studentCount))
+                  .replace('{total}', String(total)),
+                path: ['studentCount'],
+              });
+            }
+            if (data.studentCount + data.nonStudentCount !== total) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: t.dailyReport.valSplitMismatch
+                  .replace('{inst}', String(data.studentCount))
+                  .replace('{ind}', String(data.nonStudentCount))
+                  .replace('{total}', String(total)),
+                path: ['studentCount'],
+              });
+            }
+          }
+        }),
+    [t]
+  );
 
   const form = useForm<DailyReportValues>({
     resolver: zodResolver(dailyReportSchema),
@@ -375,8 +397,12 @@ export default function DailyRegistrationsPage() {
         );
 
         toast({
-          title: "Report Updated",
-          description: `Daily report for ${format(new Date(values.date), 'MMM dd')}: ${dailyTotal} total (${finalStudents} institution, ${finalNonStudents} non-institution).`,
+          title: t.dailyReport.toastUpdatedTitle,
+          description: t.dailyReport.toastUpdatedDesc
+            .replace('{date}', formatDate(values.date, { month: 'short', day: '2-digit' }))
+            .replace('{total}', formatNumber(dailyTotal))
+            .replace('{inst}', formatNumber(finalStudents))
+            .replace('{ind}', formatNumber(finalNonStudents)),
         });
         setEditingId(null);
       } else {
@@ -392,8 +418,12 @@ export default function DailyRegistrationsPage() {
         );
 
         toast({
-          title: "Report Submitted",
-          description: `Saved ${dailyTotal} registrations for ${format(new Date(values.date), 'MMM dd')} (${finalStudents} institution, ${finalNonStudents} non-institution).`,
+          title: t.dailyReport.toastSubmittedTitle,
+          description: t.dailyReport.toastSubmittedDesc
+            .replace('{total}', formatNumber(dailyTotal))
+            .replace('{date}', formatDate(values.date, { month: 'short', day: '2-digit' }))
+            .replace('{inst}', formatNumber(finalStudents))
+            .replace('{ind}', formatNumber(finalNonStudents)),
         });
       }
 
@@ -410,8 +440,8 @@ export default function DailyRegistrationsPage() {
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Sync Failure",
-        description: "Could not synchronize report with the bureau database."
+        title: t.dailyReport.toastSyncFailureTitle,
+        description: t.dailyReport.toastSyncFailureDesc,
       });
     } finally {
       setIsSubmitting(false);
@@ -465,15 +495,18 @@ export default function DailyRegistrationsPage() {
       }
 
       toast({
-        title: "Report Removed",
-        description: `The registration report for ${format(new Date(reportToDelete.date), 'MMMM dd')} has been deleted.`,
+        title: t.dailyReport.toastRemovedTitle,
+        description: t.dailyReport.toastRemovedDesc.replace(
+          '{date}',
+          formatDate(reportToDelete.date, { month: 'long', day: '2-digit' })
+        ),
         variant: "destructive",
       });
       setIsDeleteDialogOpen(false);
     } catch (error) {
       toast({
-        title: "Purge Failed",
-        description: "An error occurred during report deletion.",
+        title: t.dailyReport.toastDeleteFailedTitle,
+        description: t.dailyReport.toastDeleteFailedDesc,
         variant: "destructive"
       });
     } finally {
@@ -504,7 +537,7 @@ export default function DailyRegistrationsPage() {
       const split = getReportSplit(h);
       return {
         'Date': h.date,
-        'Institution Name': split.instName || 'Individual / Walk-in',
+        'Institution Name': split.instName || t.dailyReport.individualWalkIn,
         'Ethio Intake': h.ethioCount,
         'Safaricom Intake': h.safaricomCount,
         'Institution Count': split.students,
@@ -528,7 +561,10 @@ export default function DailyRegistrationsPage() {
       `Exported XLSX Daily Throughput Ledger for ${history.length} records.`
     );
 
-    toast({ title: "Excel Synchronized", description: "Operational throughput data downloaded." });
+    toast({
+      title: t.registrationsList.toastExcelCompleteTitle,
+      description: t.registrationsList.toastExcelCompleteDesc.replace('{count}', String(history.length)),
+    });
     setTimeout(() => setIsExporting(false), 800);
   };
 
@@ -536,10 +572,10 @@ export default function DailyRegistrationsPage() {
     if (history.length === 0 || !user || !profile) return;
     setIsExporting(true);
 
-    const doc = new jsPDF('l', 'mm', 'a4');
-    doc.text(`Official Bureau Daily Registration Ledger: ${profile.fullName}`, 14, 15);
-    doc.setFontSize(9);
-    doc.text(
+    const docPdf = new jsPDF('l', 'mm', 'a4');
+    docPdf.text(`Official Bureau Daily Registration Ledger: ${profile.fullName}`, 14, 15);
+    docPdf.setFontSize(9);
+    docPdf.text(
       `Total Registered: ${summaryStats.totalPeople} | Institution Intake: ${summaryStats.totalStudents} | Non-Institution: ${summaryStats.totalNonStudents}`,
       14,
       21
@@ -557,14 +593,14 @@ export default function DailyRegistrationsPage() {
         h.remarks || ''
       ];
     });
-    autoTable(doc, {
+    autoTable(docPdf, {
       startY: 27,
       head: [['Date', 'Institution Name', 'Ethio', 'Safaricom', 'Institution', 'Non-Institution', 'Total', 'Remarks']],
       body: rows,
       theme: 'striped',
       headStyles: { fillColor: [15, 23, 42] }
     });
-    doc.save(`Bureau_Daily_Ledger_${format(new Date(), 'yyyyMMdd')}.pdf`);
+    docPdf.save(`Bureau_Daily_Ledger_${format(new Date(), 'yyyyMMdd')}.pdf`);
 
     logAuditAction(
       db,
@@ -575,7 +611,10 @@ export default function DailyRegistrationsPage() {
       `Exported PDF Daily Throughput Archive for ${history.length} records.`
     );
 
-    toast({ title: "PDF Ledger Generated", description: "Official documentation saved." });
+    toast({
+      title: t.registrationsList.toastPdfCompleteTitle,
+      description: t.registrationsList.toastPdfCompleteDesc,
+    });
     setTimeout(() => setIsExporting(false), 800);
   };
 
@@ -585,10 +624,14 @@ export default function DailyRegistrationsPage() {
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-20">
       <div className="space-y-1">
-        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Field Operations</p>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground font-headline">Registration Reporting</h1>
+        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+          {t.dailyReport.eyebrow}
+        </p>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground font-headline">
+          {t.dailyReport.title}
+        </h1>
         <p className="text-sm text-muted-foreground">
-          Submit your daily counts and specify how many registrations were Institution vs. Non-Institution.
+          {t.dailyReport.subtitle}
         </p>
       </div>
 
@@ -598,10 +641,16 @@ export default function DailyRegistrationsPage() {
           <div aria-hidden="true" className="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full bg-indigo-500/15 blur-2xl" />
           <CardContent className="p-6 flex items-center justify-between relative z-10">
             <div className="space-y-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Total People Registered</p>
-              <p className="text-3xl font-black text-foreground tabular-nums">{summaryStats.totalPeople.toLocaleString()}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                {t.dailyReport.kpiTotalPeople}
+              </p>
+              <p className="text-3xl font-black text-foreground tabular-nums">
+                {formatNumber(summaryStats.totalPeople)}
+              </p>
               <p className="text-[11px] text-muted-foreground tabular-nums">
-                {summaryStats.ethio} Ethio · {summaryStats.safaricom} Safaricom
+                {t.dailyReport.kpiCarrierSub
+                  .replace('{ethio}', formatNumber(summaryStats.ethio))
+                  .replace('{safaricom}', formatNumber(summaryStats.safaricom))}
               </p>
             </div>
             <div className="h-11 w-11 rounded-2xl glass-subpanel flex items-center justify-center text-primary">
@@ -614,12 +663,16 @@ export default function DailyRegistrationsPage() {
           <div aria-hidden="true" className="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full bg-sky-500/15 blur-2xl" />
           <CardContent className="p-6 flex items-center justify-between relative z-10">
             <div className="space-y-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Institution Intake</p>
-              <p className="text-3xl font-black text-foreground tabular-nums">{summaryStats.totalStudents.toLocaleString()}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
+                {t.dailyReport.kpiInstitutionIntake}
+              </p>
+              <p className="text-3xl font-black text-foreground tabular-nums">
+                {formatNumber(summaryStats.totalStudents)}
+              </p>
               <p className="text-[11px] text-muted-foreground tabular-nums">
                 {summaryStats.totalPeople > 0
-                  ? `${Number(((summaryStats.totalStudents / summaryStats.totalPeople) * 100).toFixed(2))}% (${summaryStats.totalStudents}/${summaryStats.totalPeople})`
-                  : 'Schools, Hospitals, Companies'}
+                  ? `${Number(((summaryStats.totalStudents / summaryStats.totalPeople) * 100).toFixed(2))}% (${formatNumber(summaryStats.totalStudents)}/${formatNumber(summaryStats.totalPeople)})`
+                  : t.dailyReport.kpiInstitutionDefaultSub}
               </p>
             </div>
             <div className="h-11 w-11 rounded-2xl glass-subpanel flex items-center justify-center text-sky-500">
@@ -632,12 +685,16 @@ export default function DailyRegistrationsPage() {
           <div aria-hidden="true" className="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full bg-emerald-500/15 blur-2xl" />
           <CardContent className="p-6 flex items-center justify-between relative z-10">
             <div className="space-y-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Non-Institution (Individual)</p>
-              <p className="text-3xl font-black text-foreground tabular-nums">{summaryStats.totalNonStudents.toLocaleString()}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                {t.dailyReport.kpiIndividualIntake}
+              </p>
+              <p className="text-3xl font-black text-foreground tabular-nums">
+                {formatNumber(summaryStats.totalNonStudents)}
+              </p>
               <p className="text-[11px] text-muted-foreground tabular-nums">
                 {summaryStats.totalPeople > 0
-                  ? `${Number(((summaryStats.totalNonStudents / summaryStats.totalPeople) * 100).toFixed(2))}% (${summaryStats.totalNonStudents}/${summaryStats.totalPeople})`
-                  : 'Standard walk-in intake'}
+                  ? `${Number(((summaryStats.totalNonStudents / summaryStats.totalPeople) * 100).toFixed(2))}% (${formatNumber(summaryStats.totalNonStudents)}/${formatNumber(summaryStats.totalPeople)})`
+                  : t.dailyReport.kpiIndividualDefaultSub}
               </p>
             </div>
             <div className="h-11 w-11 rounded-2xl glass-subpanel flex items-center justify-center text-emerald-500">
@@ -657,7 +714,7 @@ export default function DailyRegistrationsPage() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg font-bold text-foreground flex items-center gap-2">
                   <CalendarPlus className="h-5 w-5 text-primary" />
-                  {editingId ? "Update Entry" : "Report Today's Total"}
+                  {editingId ? t.dailyReport.formUpdateTitle : t.dailyReport.formNewTitle}
                 </CardTitle>
                 {editingId && (
                   <Button variant="ghost" size="icon" onClick={cancelEdit} className="h-8 w-8 text-muted-foreground hover:text-destructive">
@@ -666,9 +723,7 @@ export default function DailyRegistrationsPage() {
                 )}
               </div>
               <CardDescription>
-                {editingId
-                  ? "Modify daily counts and Institution vs. Non-Institution breakdown."
-                  : "Enter total registrations and split between Institution and Non-Institution."}
+                {editingId ? t.dailyReport.formUpdateDesc : t.dailyReport.formNewDesc}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -679,7 +734,9 @@ export default function DailyRegistrationsPage() {
                     name="date"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Date</FormLabel>
+                        <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
+                          {t.dailyReport.dateLabel}
+                        </FormLabel>
                         <FormControl>
                           <Input type="date" {...field} className="h-11 bg-background border-border" disabled={isSubmitting} />
                         </FormControl>
@@ -694,7 +751,7 @@ export default function DailyRegistrationsPage() {
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
                           <Sparkles className="h-3.5 w-3.5" />
-                          Records Found on {selectedDate}
+                          {t.dailyReport.recordsFoundBannerTitle.replace('{date}', selectedDate)}
                         </span>
                         <button
                           type="button"
@@ -715,14 +772,20 @@ export default function DailyRegistrationsPage() {
                           }}
                           className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-primary text-white hover:bg-primary/90 transition-colors cursor-pointer"
                         >
-                          Sync Split
+                          {t.dailyReport.syncSplitBtn}
                         </button>
                       </div>
                       <p className="text-[11px] text-slate-700 dark:text-slate-200 tabular-nums">
-                        Individual records logged: <strong>{dateIndividualBreakdown.total}</strong> total (
-                        <strong>{dateIndividualBreakdown.students}</strong> Institution
-                        {dateIndividualBreakdown.schoolName ? ` at ${dateIndividualBreakdown.schoolName}` : ''},{' '}
-                        <strong>{dateIndividualBreakdown.nonStudents}</strong> Non-Institution)
+                        {t.dailyReport.recordsFoundBannerDesc
+                          .replace('{total}', formatNumber(dateIndividualBreakdown.total))
+                          .replace('{students}', formatNumber(dateIndividualBreakdown.students))
+                          .replace(
+                            '{schoolSuffix}',
+                            dateIndividualBreakdown.schoolName
+                              ? ` (${dateIndividualBreakdown.schoolName})`
+                              : ''
+                          )
+                          .replace('{nonStudents}', formatNumber(dateIndividualBreakdown.nonStudents))}
                       </p>
                     </div>
                   )}
@@ -734,7 +797,7 @@ export default function DailyRegistrationsPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider flex items-center gap-1.5">
-                            <Phone className="h-3 w-3 text-emerald-500" /> Ethio
+                            <Phone className="h-3 w-3 text-emerald-500" /> {t.dailyReport.ethioLabel}
                           </FormLabel>
                           <FormControl>
                             <Input 
@@ -756,7 +819,7 @@ export default function DailyRegistrationsPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider flex items-center gap-1.5">
-                            <Smartphone className="h-3 w-3 text-orange-500" /> Safaricom
+                            <Smartphone className="h-3 w-3 text-orange-500" /> {t.dailyReport.safaricomLabel}
                           </FormLabel>
                           <FormControl>
                             <Input 
@@ -792,10 +855,10 @@ export default function DailyRegistrationsPage() {
                             </div>
                             <div>
                               <FormLabel className="text-xs font-bold text-foreground cursor-pointer">
-                                Includes Institution Registration
+                                {t.dailyReport.includesInstitutionLabel}
                               </FormLabel>
                               <p className="text-[10px] text-muted-foreground">
-                                Split total into Institution & Non-Institution
+                                {t.dailyReport.includesInstitutionDesc}
                               </p>
                             </div>
                           </div>
@@ -830,11 +893,11 @@ export default function DailyRegistrationsPage() {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel className="text-[10px] font-bold uppercase text-primary tracking-wider flex items-center gap-1.5">
-                                <Building2 className="h-3.5 w-3.5" /> Institution Name *
+                                <Building2 className="h-3.5 w-3.5" /> {t.dailyReport.institutionNameLabel}
                               </FormLabel>
                               <FormControl>
                                 <Input
-                                  placeholder="Enter institution name (e.g., School, Hospital, Company)..."
+                                  placeholder={t.dailyReport.institutionNamePlaceholder}
                                   {...field}
                                   disabled={isSubmitting}
                                   className="h-10 bg-background border-primary/30"
@@ -848,7 +911,7 @@ export default function DailyRegistrationsPage() {
                         {filteredSchoolSuggestions.length > 0 && (
                           <div className="space-y-1.5">
                             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                              <Sparkles className="h-3 w-3 text-primary" /> Institution Suggestions
+                              <Sparkles className="h-3 w-3 text-primary" /> {t.dailyReport.institutionSuggestionsLabel}
                             </p>
                             <div className="flex flex-wrap gap-1.5">
                               {filteredSchoolSuggestions.map((school) => {
@@ -878,7 +941,7 @@ export default function DailyRegistrationsPage() {
                         <div className="space-y-2 pt-1">
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                              Breakdown of {dailyTotal} Registered People
+                              {t.dailyReport.breakdownHeader.replace('{total}', formatNumber(dailyTotal))}
                             </span>
                             <span className="text-[10px] font-mono font-bold text-primary tabular-nums">
                               {studentCount} + {nonStudentCount} = {dailyTotal}
@@ -892,7 +955,7 @@ export default function DailyRegistrationsPage() {
                               render={({ field }) => (
                                 <FormItem>
                                   <FormLabel className="text-[10px] font-bold uppercase text-primary tracking-wider flex items-center gap-1">
-                                    <Building2 className="h-3 w-3" /> Institution
+                                    <Building2 className="h-3 w-3" /> {t.dailyReport.institutionCountLabel}
                                   </FormLabel>
                                   <FormControl>
                                     <Input
@@ -920,7 +983,7 @@ export default function DailyRegistrationsPage() {
                               render={({ field }) => (
                                 <FormItem>
                                   <FormLabel className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 tracking-wider flex items-center gap-1">
-                                    <User className="h-3 w-3" /> Non-Institution
+                                    <User className="h-3 w-3" /> {t.dailyReport.nonInstitutionCountLabel}
                                   </FormLabel>
                                   <FormControl>
                                     <Input
@@ -951,19 +1014,19 @@ export default function DailyRegistrationsPage() {
                   <div className="p-4 bg-muted/30 rounded-2xl border border-dashed border-border text-center space-y-3 transition-all">
                     <div>
                       <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">
-                        Calculated Daily Aggregate
+                        {t.dailyReport.calculatedAggregateLabel}
                       </p>
-                      <p className="text-4xl font-black text-foreground tabular-nums">{dailyTotal}</p>
+                      <p className="text-4xl font-black text-foreground tabular-nums">{formatNumber(dailyTotal)}</p>
                     </div>
 
                     <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/15 text-primary border border-primary/25 text-[11px] font-bold tabular-nums">
                         <Building2 className="h-3.5 w-3.5" />
-                        {activeStudentsDisplay} Institution
+                        {t.dailyReport.institutionBadge.replace('{count}', formatNumber(activeStudentsDisplay))}
                       </span>
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 text-[11px] font-bold tabular-nums">
                         <User className="h-3.5 w-3.5" />
-                        {activeNonStudentsDisplay} Non-Institution
+                        {t.dailyReport.nonInstitutionBadge.replace('{count}', formatNumber(activeNonStudentsDisplay))}
                       </span>
                     </div>
                   </div>
@@ -973,10 +1036,12 @@ export default function DailyRegistrationsPage() {
                     name="remarks"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Internal Remarks</FormLabel>
+                        <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
+                          {t.dailyReport.remarksLabel}
+                        </FormLabel>
                         <FormControl>
                           <Textarea 
-                            placeholder="e.g. 10 registered at institution + 1 walk-in citizen..." 
+                            placeholder={t.dailyReport.remarksPlaceholder} 
                             className="resize-none min-h-[80px] bg-background border-border" 
                             disabled={isSubmitting}
                             {...field} 
@@ -990,11 +1055,11 @@ export default function DailyRegistrationsPage() {
                   <div className="flex flex-col gap-2">
                     <Button type="submit" className="w-full h-12 bg-primary hover:bg-primary/90 font-bold shadow-md" disabled={isSubmitting}>
                       {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                      {editingId ? "Update Registration Record" : "Finalize Registration Report"}
+                      {editingId ? t.dailyReport.submitUpdateBtn : t.dailyReport.submitNewBtn}
                     </Button>
                     {editingId && (
                       <Button type="button" variant="outline" onClick={cancelEdit} className="w-full h-11 font-bold border-border" disabled={isSubmitting}>
-                        Cancel Update
+                        {t.dailyReport.cancelUpdateBtn}
                       </Button>
                     )}
                   </div>
@@ -1008,20 +1073,20 @@ export default function DailyRegistrationsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-                Report Ledger
+                {t.dailyReport.ledgerTitle}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Daily throughput logs with Institution vs. Non-Institution breakdown
+                {t.dailyReport.ledgerSubtitle}
               </p>
             </div>
             <div className="flex items-center gap-2">
               <Button onClick={handleExportExcel} disabled={isExporting} variant="outline" className="h-9 px-3.5 rounded-full border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-semibold text-xs shadow-2xs">
                 {isExporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />}
-                Export XLS
+                {t.dailyReport.exportXlsBtn}
               </Button>
               <Button onClick={handleExportPDF} disabled={isExporting} variant="outline" className="h-9 px-3.5 rounded-full border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-semibold text-xs shadow-2xs">
                 {isExporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileText className="mr-1.5 h-3.5 w-3.5 text-rose-600" />}
-                Export PDF
+                {t.dailyReport.exportPdfBtn}
               </Button>
             </div>
           </div>
@@ -1032,7 +1097,7 @@ export default function DailyRegistrationsPage() {
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input 
-                  placeholder="Search by date, institution name, or notes..." 
+                  placeholder={t.dailyReport.searchPlaceholder} 
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                   className="h-9 pl-9 border-0 bg-transparent shadow-none focus-visible:ring-0 text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400"
@@ -1048,7 +1113,7 @@ export default function DailyRegistrationsPage() {
                       filterType === 'all' ? "bg-primary text-white" : "text-slate-600 dark:text-slate-300"
                     )}
                   >
-                    All
+                    {t.dailyReport.filterAll}
                   </button>
                   <button
                     type="button"
@@ -1058,7 +1123,7 @@ export default function DailyRegistrationsPage() {
                       filterType === 'school' ? "bg-primary text-white" : "text-slate-600 dark:text-slate-300"
                     )}
                   >
-                    Institution
+                    {t.dailyReport.filterInstitution}
                   </button>
                   <button
                     type="button"
@@ -1068,7 +1133,7 @@ export default function DailyRegistrationsPage() {
                       filterType === 'regular' ? "bg-primary text-white" : "text-slate-600 dark:text-slate-300"
                     )}
                   >
-                    Non-Institution
+                    {t.dailyReport.filterIndividual}
                   </button>
                 </div>
 
@@ -1078,7 +1143,7 @@ export default function DailyRegistrationsPage() {
                   size="icon"
                   onClick={() => { setSearchTerm(''); setFilterType('all'); setCurrentPage(1); }}
                   className="h-9 w-9 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 hover:text-slate-800 shadow-2xs"
-                  title="Reset filter"
+                  title={t.dailyReport.resetFilterTooltip}
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                 </Button>
@@ -1106,25 +1171,25 @@ export default function DailyRegistrationsPage() {
                     </TableHead>
                     <TableHead>
                       <div className="flex items-center justify-between gap-2">
-                        <span>Date & Institution</span>
+                        <span>{t.dailyReport.colDateInst}</span>
                         <ArrowUpDown className="h-3 w-3 text-slate-400" />
                       </div>
                     </TableHead>
-                    <TableHead>Network Split</TableHead>
+                    <TableHead>{t.dailyReport.colNetworkSplit}</TableHead>
                     <TableHead>
                       <div className="flex items-center justify-between gap-2">
-                        <span>Institution vs. Individual</span>
+                        <span>{t.dailyReport.colInstVsInd}</span>
                         <ArrowUpDown className="h-3 w-3 text-slate-400" />
                       </div>
                     </TableHead>
                     <TableHead>
                       <div className="flex items-center justify-between gap-2">
-                        <span>Aggregate</span>
+                        <span>{t.dailyReport.colAggregate}</span>
                         <ArrowUpDown className="h-3 w-3 text-slate-400" />
                       </div>
                     </TableHead>
-                    <TableHead>Remarks</TableHead>
-                    <TableHead className="border-r-0 text-right">Action</TableHead>
+                    <TableHead>{t.dailyReport.colRemarks}</TableHead>
+                    <TableHead className="border-r-0 text-right">{t.dailyReport.colAction}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1155,7 +1220,7 @@ export default function DailyRegistrationsPage() {
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             <span className="text-[13px] font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap">
-                              {format(new Date(entry.date), 'dd MMM yyyy')}
+                              {formatDate(entry.date, { day: '2-digit', month: 'short', year: 'numeric' })}
                             </span>
                             {split.instName ? (
                               <span className="inline-flex items-center gap-1 w-fit px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold">
@@ -1164,7 +1229,7 @@ export default function DailyRegistrationsPage() {
                               </span>
                             ) : (
                               <span className="text-[10px] font-medium text-slate-400">
-                                Individual / Walk-in Intake
+                                {t.dailyReport.individualWalkIn}
                               </span>
                             )}
                           </div>
@@ -1172,10 +1237,10 @@ export default function DailyRegistrationsPage() {
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#ECFDF5] text-[#10B981] dark:bg-emerald-950/50 dark:text-emerald-400 text-[11px] font-semibold tabular-nums">
-                              {entry.ethioCount} E
+                              {formatNumber(entry.ethioCount)} E
                             </span>
                             <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#FFFBEB] text-[#F59E0B] dark:bg-amber-950/50 dark:text-amber-400 text-[11px] font-semibold tabular-nums">
-                              {entry.safaricomCount} S
+                              {formatNumber(entry.safaricomCount)} S
                             </span>
                           </div>
                         </TableCell>
@@ -1184,13 +1249,13 @@ export default function DailyRegistrationsPage() {
                             {split.students > 0 && (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 text-primary border border-primary/20 text-[11px] font-bold tabular-nums">
                                 <Building2 className="h-3 w-3 shrink-0" />
-                                {split.students} Institution
+                                {t.dailyReport.institutionBadge.replace('{count}', formatNumber(split.students))}
                               </span>
                             )}
                             {split.nonStudents > 0 && (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-[11px] font-semibold tabular-nums">
                                 <User className="h-3 w-3 shrink-0" />
-                                {split.nonStudents} Individual
+                                {t.dailyReport.nonInstitutionBadge.replace('{count}', formatNumber(split.nonStudents))}
                               </span>
                             )}
                             {split.students === 0 && split.nonStudents === 0 && (
@@ -1200,7 +1265,7 @@ export default function DailyRegistrationsPage() {
                         </TableCell>
                         <TableCell>
                           <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#EEF2FF] text-[#4F46E5] dark:bg-indigo-950/50 dark:text-indigo-400 text-[11px] font-bold tabular-nums">
-                            {entry.total} Total
+                            {t.dailyReport.totalBadge.replace('{count}', formatNumber(entry.total))}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -1215,7 +1280,7 @@ export default function DailyRegistrationsPage() {
                               size="icon" 
                               className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                               onClick={() => handleEdit(entry)}
-                              title="View / Inspect Report"
+                              title={t.dailyReport.viewReportTooltip}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -1224,7 +1289,7 @@ export default function DailyRegistrationsPage() {
                               size="icon" 
                               className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                               onClick={() => handleEdit(entry)}
-                              title="Edit Report"
+                              title={t.dailyReport.editReportTooltip}
                             >
                               <SquarePen className="h-4 w-4" />
                             </Button>
@@ -1236,7 +1301,7 @@ export default function DailyRegistrationsPage() {
                                 setReportToDelete({id: entry.id, date: entry.date});
                                 setIsDeleteDialogOpen(true);
                               }}
-                              title="Delete Report"
+                              title={t.dailyReport.deleteReportTooltip}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -1249,7 +1314,9 @@ export default function DailyRegistrationsPage() {
                       <TableCell colSpan={7} className="h-48 text-center">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <CalendarPlus className="h-8 w-8 text-slate-300" />
-                          <p className="text-xs font-semibold text-slate-400">Ledger Stream Empty</p>
+                          <p className="text-xs font-semibold text-slate-400">
+                            {t.dailyReport.emptyStream}
+                          </p>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1264,7 +1331,7 @@ export default function DailyRegistrationsPage() {
               totalPages={totalPages}
               totalItems={history.length}
               shownItems={paginatedHistory.length}
-              itemLabel="Bureau Documents"
+              itemLabel={t.dailyReport.paginationItemsLabel}
               onPageChange={setCurrentPage}
             />
           </div>
@@ -1279,12 +1346,21 @@ export default function DailyRegistrationsPage() {
             </div>
             <div className="space-y-2">
               <AlertDialogTitle className="text-2xl font-black text-foreground tracking-tighter uppercase leading-none">
-                {isDeleting ? "PURGING REPORT..." : "PURGE PROTOCOL?"}
+                {isDeleting ? t.dailyReport.deleteDeletingTitle : t.dailyReport.deleteTitle}
               </AlertDialogTitle>
               <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed font-medium">
                 {isDeleting 
-                  ? "Updating the official bureau ledger. Please wait..."
-                  : `You are about to permanently delete the report for ${reportToDelete && format(new Date(reportToDelete.date), 'MMMM dd, yyyy')}. This action is final and subject to audit.`
+                  ? t.dailyReport.deleteDeletingDesc
+                  : t.dailyReport.deleteDesc.replace(
+                      '{date}',
+                      reportToDelete
+                        ? formatDate(reportToDelete.date, {
+                            month: 'long',
+                            day: '2-digit',
+                            year: 'numeric',
+                          })
+                        : ''
+                    )
                 }
               </AlertDialogDescription>
             </div>
@@ -1295,14 +1371,14 @@ export default function DailyRegistrationsPage() {
               disabled={isDeleting}
               className="w-full h-14 bg-destructive hover:bg-destructive/90 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-destructive/10 active:scale-[0.98] transition-all"
             >
-              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Confirm Destruction"}
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t.dailyReport.confirmDeleteBtn}
             </AlertDialogAction>
             {!isDeleting && (
               <AlertDialogCancel 
                 onClick={() => setReportToDelete(null)} 
                 className="w-full h-12 rounded-2xl font-bold uppercase text-[10px] tracking-widest border-none bg-transparent hover:bg-card"
               >
-                Abort Protocol
+                {t.dailyReport.abortDeleteBtn}
               </AlertDialogCancel>
             )}
           </AlertDialogFooter>

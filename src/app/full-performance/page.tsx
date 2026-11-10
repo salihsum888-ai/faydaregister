@@ -77,6 +77,7 @@ import { logAuditAction } from '@/lib/audit';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useTranslation } from '@/i18n/language-provider';
 
 const COLORS = {
   processed: '#10b981', // Emerald
@@ -115,6 +116,7 @@ function MetricGauge({
   trend,
   description,
   inverseTrend = false,
+  isSuccessGauge = false,
   onClick,
 }: {
   label: string;
@@ -125,21 +127,25 @@ function MetricGauge({
   trend: number;
   description: string;
   inverseTrend?: boolean;
+  isSuccessGauge?: boolean;
   onClick?: () => void;
 }) {
+  const { t, formatNumber } = useTranslation();
   const data = [{ name: label, value: value, fill: color }];
   const isUp = trend > 0;
   const isNeutral = trend === 0;
   const isGood = inverseTrend ? trend < 0 : trend > 0;
 
-  const tooltipText =
-    label === 'Success Rate'
-      ? value >= 85
-        ? 'Elite Status: Success efficiency exceeding 85%.'
-        : value >= 80
-        ? 'Cautionary: Success rate dipped below 85% threshold.'
-        : 'Critical Alert: Success rate below minimum 80% protocol.'
-      : `${description} (${count}/${totalCount}) — Click to inspect records in Status Check.`;
+  const tooltipText = isSuccessGauge
+    ? value >= 85
+      ? t.intelMatrix.tooltipElite
+      : value >= 80
+      ? t.intelMatrix.tooltipCaution
+      : t.intelMatrix.tooltipCritical
+    : t.intelMatrix.tooltipInspect
+        .replace('{desc}', description)
+        .replace('{count}', formatNumber(count))
+        .replace('{total}', formatNumber(totalCount));
 
   return (
     <TooltipProvider>
@@ -183,7 +189,7 @@ function MetricGauge({
                   ) : (
                     <ArrowDownRight className="h-3 w-3" />
                   ))}
-                {isNeutral ? 'Stable' : `${Number(Math.abs(trend).toFixed(2))}%`}
+                {isNeutral ? t.intelMatrix.stableBadge : `${Number(Math.abs(trend).toFixed(2))}%`}
               </div>
             </div>
 
@@ -208,7 +214,9 @@ function MetricGauge({
                   {value}%
                 </span>
                 <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 tabular-nums mt-0.5">
-                  {count.toLocaleString()} / {totalCount.toLocaleString()} records
+                  {t.intelMatrix.recordsCountUnit
+                    .replace('{count}', formatNumber(count))
+                    .replace('{total}', formatNumber(totalCount))}
                 </span>
               </div>
             </div>
@@ -229,6 +237,7 @@ export default function FullPerformancePage() {
   const db = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
+  const { t, formatDate, formatNumber } = useTranslation();
 
   const [mounted, setMounted] = useState(false);
   const [analysisScope, setAnalysisScope] = useState<TimeHorizon>('history');
@@ -359,14 +368,14 @@ export default function FullPerformancePage() {
       return {
         current: { start: startOfDay(subDays(now, 6)), end: endOfDay(now) },
         previous: { start: startOfDay(subDays(now, 13)), end: endOfDay(subDays(now, 7)) },
-        label: 'Last 7 Days',
+        label: t.intelMatrix.horizon7dLabel,
       };
     }
     if (analysisScope === 'current') {
       return {
         current: { start: startOfMonth(now), end: endOfMonth(now) },
         previous: { start: startOfMonth(subMonths(now, 1)), end: endOfMonth(subMonths(now, 1)) },
-        label: format(now, 'MMMM yyyy'),
+        label: formatDate(now, { month: 'long', year: 'numeric' }),
       };
     }
     if (analysisScope === 'last_month') {
@@ -375,15 +384,15 @@ export default function FullPerformancePage() {
       return {
         current: { start: startOfMonth(prev), end: endOfMonth(prev) },
         previous: { start: startOfMonth(twoAgo), end: endOfMonth(twoAgo) },
-        label: format(prev, 'MMMM yyyy'),
+        label: formatDate(prev, { month: 'long', year: 'numeric' }),
       };
     }
     return {
       current: null,
       previous: { start: startOfMonth(subMonths(now, 1)), end: endOfMonth(subMonths(now, 1)) },
-      label: 'All-Time Ledger',
+      label: t.intelMatrix.horizonAllTimeLabel,
     };
-  }, [analysisScope]);
+  }, [analysisScope, t.intelMatrix.horizon7dLabel, t.intelMatrix.horizonAllTimeLabel, formatDate]);
 
   const stats = useMemo(() => {
     if (!scopedRegistrationsByInst || !mounted) return null;
@@ -720,8 +729,8 @@ export default function FullPerformancePage() {
     }
 
     toast({
-      title: 'Intel Excel Exported',
-      description: `Saved multi-sheet intelligence workbook for ${horizonIntervals.label}.`,
+      title: t.intelMatrix.toastExcelTitle,
+      description: t.intelMatrix.toastExcelDesc.replace('{horizon}', horizonIntervals.label),
     });
     setTimeout(() => setIsExporting(false), 500);
   };
@@ -827,8 +836,8 @@ export default function FullPerformancePage() {
     }
 
     toast({
-      title: 'Intel PDF Exported',
-      description: `Saved official intelligence PDF for ${horizonIntervals.label}.`,
+      title: t.intelMatrix.toastPdfTitle,
+      description: t.intelMatrix.toastPdfDesc.replace('{horizon}', horizonIntervals.label),
     });
     setTimeout(() => setIsExporting(false), 500);
   };
@@ -849,16 +858,16 @@ export default function FullPerformancePage() {
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
             <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">
-              Bureau High-Command Terminal · {horizonIntervals.label}
+              {t.intelMatrix.eyebrow.replace('{horizon}', horizonIntervals.label)}
             </p>
           </div>
           <h1 className="text-4xl font-black tracking-tight text-foreground font-headline uppercase leading-none">
-            Full Intel Matrix
+            {t.intelMatrix.title}
           </h1>
           <p className="text-sm text-muted-foreground max-w-xl">
             {isAdmin
-              ? 'Global bureau-wide lifecycle intelligence, institution rankings, telecom network velocity, and rejection diagnostics.'
-              : 'Personal registration velocity, institutional completion rates, network intake split, and quality diagnostics.'}
+              ? t.intelMatrix.adminSubtitle
+              : t.intelMatrix.officerSubtitle}
           </p>
         </div>
 
@@ -867,10 +876,10 @@ export default function FullPerformancePage() {
           <div className="flex items-center gap-1 p-1 rounded-xl glass-subpanel">
             {(
               [
-                { id: '7d', label: '7 Days' },
-                { id: 'current', label: 'This Month' },
-                { id: 'last_month', label: 'Last Month' },
-                { id: 'history', label: 'All Time' },
+                { id: '7d', label: t.intelMatrix.tab7d },
+                { id: 'current', label: t.intelMatrix.tabCurrentMonth },
+                { id: 'last_month', label: t.intelMatrix.tabLastMonth },
+                { id: 'history', label: t.intelMatrix.tabAllTime },
               ] as { id: TimeHorizon; label: string }[]
             ).map((tab) => (
               <button
@@ -894,18 +903,18 @@ export default function FullPerformancePage() {
             <SelectTrigger className="glass-subpanel w-auto min-w-[175px] h-9 rounded-xl px-3 text-xs font-bold text-slate-700 dark:text-slate-200">
               <div className="flex items-center gap-1.5">
                 <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                <SelectValue placeholder="All Records" />
+                <SelectValue placeholder={t.intelMatrix.allRecordsScope} />
               </div>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL" className="text-xs font-bold">
-                All Records (Bureau-Wide)
+                {t.intelMatrix.allRecordsScope}
               </SelectItem>
               <SelectItem value="INSTITUTIONS_ONLY" className="text-xs font-semibold">
-                Institutions Only
+                {t.intelMatrix.institutionsOnlyScope}
               </SelectItem>
               <SelectItem value="INDIVIDUALS_ONLY" className="text-xs font-semibold">
-                Non-Institution (Individual)
+                {t.intelMatrix.individualsOnlyScope}
               </SelectItem>
               {institutionNames.map((name) => (
                 <SelectItem key={name} value={name} className="text-xs font-medium">
@@ -922,7 +931,7 @@ export default function FullPerformancePage() {
               size="icon"
               onClick={() => setInstitutionFilter('ALL')}
               className="glass-subpanel h-9 w-9 rounded-xl text-primary"
-              title="Reset institution filter"
+              title={t.intelMatrix.resetFilterTooltip}
             >
               <RotateCcw className="h-3.5 w-3.5" />
             </Button>
@@ -938,7 +947,7 @@ export default function FullPerformancePage() {
             className="glass-subpanel h-9 px-3.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200"
           >
             <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
-            Excel
+            {t.intelMatrix.excelBtn}
           </Button>
           <Button
             type="button"
@@ -948,7 +957,7 @@ export default function FullPerformancePage() {
             className="glass-subpanel h-9 px-3.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200"
           >
             <FileText className="mr-1.5 h-3.5 w-3.5 text-rose-600" />
-            PDF
+            {t.intelMatrix.pdfBtn}
           </Button>
         </div>
       </div>
@@ -957,10 +966,10 @@ export default function FullPerformancePage() {
         <div className="flex flex-col items-center justify-center py-36 clay-card rounded-[32px] text-muted-foreground/40">
           <Layers className="h-14 w-14 mb-4 opacity-20" />
           <p className="text-sm font-black uppercase tracking-[0.25em]">
-            No Records in Selected Horizon
+            {t.intelMatrix.emptyTitle}
           </p>
           <p className="text-xs mt-1.5">
-            Switch to <strong>All Time</strong> or reset the institution filter to inspect historical records.
+            {t.intelMatrix.emptyDesc}
           </p>
           <Button
             type="button"
@@ -971,7 +980,7 @@ export default function FullPerformancePage() {
             }}
             className="mt-4 rounded-xl text-xs font-bold"
           >
-            <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Show All-Time Records
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> {t.intelMatrix.showAllTimeBtn}
           </Button>
         </div>
       ) : (
@@ -979,46 +988,47 @@ export default function FullPerformancePage() {
           {/* Row 1: 4 Standardized & Clickable Rate Gauges */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             <MetricGauge
-              label="Success Rate"
+              label={t.intelMatrix.gaugeSuccessLabel}
               value={stats.rates.processed}
               count={stats.counts.processed}
               totalCount={stats.total}
               color={getThresholdColor(stats.rates.processed)}
               trend={stats.trends.processed}
-              description="Processed Registrations"
+              description={t.intelMatrix.gaugeSuccessDesc}
               inverseTrend={false}
+              isSuccessGauge={true}
               onClick={() => router.push('/status-check?status=Processed')}
             />
             <MetricGauge
-              label="Processing Rate"
+              label={t.intelMatrix.gaugeProcessingLabel}
               value={stats.rates.processing}
               count={stats.counts.processing}
               totalCount={stats.total}
               color={COLORS.processing}
               trend={stats.trends.processing}
-              description="Awaiting Verification"
+              description={t.intelMatrix.gaugeProcessingDesc}
               inverseTrend={true}
               onClick={() => router.push('/status-check?status=Processing')}
             />
             <MetricGauge
-              label="Rejection Rate"
+              label={t.intelMatrix.gaugeRejectionLabel}
               value={stats.rates.rejected}
               count={stats.counts.rejected}
               totalCount={stats.total}
               color={COLORS.rejected}
               trend={stats.trends.rejected}
-              description="Rejected Registrations"
+              description={t.intelMatrix.gaugeRejectionDesc}
               inverseTrend={true}
               onClick={() => router.push('/status-check?status=Rejected')}
             />
             <MetricGauge
-              label="Failed Rate"
+              label={t.intelMatrix.gaugeFailedLabel}
               value={stats.rates.failed}
               count={stats.counts.failed}
               totalCount={stats.total}
               color={COLORS.failed}
               trend={stats.trends.failed}
-              description="System / Sync Failures"
+              description={t.intelMatrix.gaugeFailedDesc}
               inverseTrend={true}
               onClick={() => router.push('/status-check?status=Failed')}
             />
@@ -1030,7 +1040,7 @@ export default function FullPerformancePage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[13px] font-bold text-slate-900 dark:text-white">
-                    Daily Peak Intake
+                    {t.intelMatrix.dailyPeakTitle}
                   </p>
                   <div className="clay-badge h-10 w-10 rounded-2xl bg-primary/15 text-primary flex items-center justify-center">
                     <Award className="h-4 w-4" />
@@ -1040,14 +1050,14 @@ export default function FullPerformancePage() {
                   {temporalTrends?.peakDay}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Highest daily intake in {horizonIntervals.label}.
+                  {t.intelMatrix.dailyPeakDesc.replace('{horizon}', horizonIntervals.label)}
                 </p>
               </div>
               <div className="mt-6 pt-4 border-t border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between">
                 <span className="text-3xl font-extrabold text-primary tabular-nums tracking-tight">
-                  {temporalTrends?.peakAmount}
+                  {formatNumber(temporalTrends?.peakAmount || 0)}
                 </span>
-                <span className="text-xs font-semibold text-slate-400">Units Logged</span>
+                <span className="text-xs font-semibold text-slate-400">{t.intelMatrix.unitsLoggedLabel}</span>
               </div>
             </Card>
 
@@ -1055,7 +1065,7 @@ export default function FullPerformancePage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[13px] font-bold text-slate-900 dark:text-white">
-                    Top Rejection Cause
+                    {t.intelMatrix.topRejectionTitle}
                   </p>
                   <div className="clay-badge h-10 w-10 rounded-2xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center">
                     <AlertTriangle className="h-4 w-4" />
@@ -1065,14 +1075,14 @@ export default function FullPerformancePage() {
                   {stats.topReason}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Primary reason for rejected records.
+                  {t.intelMatrix.topRejectionDesc}
                 </p>
               </div>
               <div className="mt-6 pt-4 border-t border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between">
                 <span className="text-3xl font-extrabold text-rose-600 dark:text-rose-400 tabular-nums tracking-tight">
-                  {stats.counts.rejected}
+                  {formatNumber(stats.counts.rejected)}
                 </span>
-                <span className="text-xs font-semibold text-slate-400">Total Rejected</span>
+                <span className="text-xs font-semibold text-slate-400">{t.intelMatrix.totalRejectedLabel}</span>
               </div>
             </Card>
 
@@ -1080,25 +1090,26 @@ export default function FullPerformancePage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[13px] font-bold text-slate-900 dark:text-white">
-                    Institution Share
+                    {t.intelMatrix.institutionShareTitle}
                   </p>
                   <div className="clay-badge h-10 w-10 rounded-2xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                     <Building2 className="h-4 w-4" />
                   </div>
                 </div>
                 <h3 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight tabular-nums">
-                  {stats.institutionBreakdown.instPct}% Institutional
+                  {t.intelMatrix.institutionalPctText.replace('{pct}', String(stats.institutionBreakdown.instPct))}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {stats.institutionBreakdown.instCount} Institution vs.{' '}
-                  {stats.institutionBreakdown.indivCount} Individual
+                  {t.intelMatrix.instVsIndivSubtext
+                    .replace('{inst}', formatNumber(stats.institutionBreakdown.instCount))
+                    .replace('{indiv}', formatNumber(stats.institutionBreakdown.indivCount))}
                 </p>
               </div>
               <div className="mt-6 pt-4 border-t border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between">
                 <span className="text-3xl font-extrabold text-indigo-600 dark:text-indigo-400 tabular-nums tracking-tight">
-                  {stats.topInstitutions.length}
+                  {formatNumber(stats.topInstitutions.length)}
                 </span>
-                <span className="text-xs font-semibold text-slate-400">Active Institutions</span>
+                <span className="text-xs font-semibold text-slate-400">{t.intelMatrix.activeInstitutionsLabel}</span>
               </div>
             </Card>
 
@@ -1110,7 +1121,7 @@ export default function FullPerformancePage() {
               <div className="space-y-3 relative z-10">
                 <div className="flex items-center justify-between">
                   <p className="text-[13px] font-bold text-amber-900 dark:text-amber-300">
-                    Elite Milestone
+                    {t.intelMatrix.eliteMilestoneTitle}
                   </p>
                   <div className="clay-badge h-10 w-10 rounded-2xl bg-amber-500/25 text-amber-700 dark:text-amber-300 flex items-center justify-center">
                     <Trophy className="h-4 w-4" />
@@ -1125,14 +1136,14 @@ export default function FullPerformancePage() {
                   </p>
                 </div>
                 <p className="text-xs text-amber-900/70 dark:text-amber-200/70">
-                  Highest monthly processed rate recorded.
+                  {t.intelMatrix.eliteMilestoneDesc}
                 </p>
               </div>
               <div className="mt-6 pt-4 border-t border-amber-500/25 flex items-center justify-between relative z-10">
                 <div className="flex items-center gap-1.5">
                   <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
                   <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
-                    All-Time Peak
+                    {t.intelMatrix.allTimePeakBadge}
                   </span>
                 </div>
                 <ShieldCheck className="h-4 w-4 text-amber-600 dark:text-amber-400 opacity-70" />
@@ -1151,10 +1162,10 @@ export default function FullPerformancePage() {
                 <CardHeader className="border-b border-slate-200/70 dark:border-slate-700/60 py-5 px-6 md:px-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
                   <div>
                     <CardTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <Activity className="h-4 w-4 text-primary" /> Inbound Velocity & Telecom Network Split
+                      <Activity className="h-4 w-4 text-primary" /> {t.intelMatrix.velocityCardTitle}
                     </CardTitle>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Daily Ethio Telecom vs. Safaricom intake velocity ({horizonIntervals.label})
+                      {t.intelMatrix.velocityCardSubtitle.replace('{horizon}', horizonIntervals.label)}
                     </p>
                   </div>
                   <div className="flex items-center gap-1 p-1 rounded-xl clay-well">
@@ -1168,7 +1179,7 @@ export default function FullPerformancePage() {
                           : 'text-slate-600 dark:text-slate-300'
                       )}
                     >
-                      Ethio vs. Safaricom
+                      {t.intelMatrix.ethioVsSafaricomBtn}
                     </button>
                     <button
                       type="button"
@@ -1180,7 +1191,7 @@ export default function FullPerformancePage() {
                           : 'text-slate-600 dark:text-slate-300'
                       )}
                     >
-                      Combined Total
+                      {t.intelMatrix.combinedTotalBtn}
                     </button>
                   </div>
                 </CardHeader>
@@ -1197,7 +1208,7 @@ export default function FullPerformancePage() {
                             Ethio Telecom
                           </p>
                           <p className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
-                            {(temporalTrends?.totalEthio || 0).toLocaleString()}
+                            {formatNumber(temporalTrends?.totalEthio || 0)}
                           </p>
                         </div>
                       </div>
@@ -1216,7 +1227,7 @@ export default function FullPerformancePage() {
                             Safaricom
                           </p>
                           <p className="text-lg font-extrabold text-slate-900 dark:text-white tabular-nums">
-                            {(temporalTrends?.totalSafaricom || 0).toLocaleString()}
+                            {formatNumber(temporalTrends?.totalSafaricom || 0)}
                           </p>
                         </div>
                       </div>
@@ -1232,10 +1243,10 @@ export default function FullPerformancePage() {
                         </div>
                         <div>
                           <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                            Total Daily Intake
+                            {t.intelMatrix.totalDailyIntakeLabel}
                           </p>
                           <p className="text-lg font-extrabold text-primary tabular-nums">
-                            {(temporalTrends?.totalCombined || 0).toLocaleString()}
+                            {formatNumber(temporalTrends?.totalCombined || 0)}
                           </p>
                         </div>
                       </div>
@@ -1311,7 +1322,7 @@ export default function FullPerformancePage() {
                                     <span className="font-bold tabular-nums">{row.safaricom}</span>
                                   </div>
                                   <div className="pt-1 border-t border-white/20 flex items-center justify-between gap-4 text-xs">
-                                    <span className="font-bold text-primary">Total Intake:</span>
+                                    <span className="font-bold text-primary">{t.intelMatrix.totalDailyIntakeLabel}:</span>
                                     <span className="font-black tabular-nums">{row.value}</span>
                                   </div>
                                 </div>
@@ -1373,11 +1384,12 @@ export default function FullPerformancePage() {
                         </div>
                         <div>
                           <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                            Rejection & Failure Breakdown
+                            {t.intelMatrix.rejectionBreakdownTitle}
                           </h3>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
-                            Ranked causes across {stats.counts.rejected} Rejected and{' '}
-                            {stats.counts.failed} Failed records
+                            {t.intelMatrix.rejectionBreakdownSubtitle
+                              .replace('{rejected}', formatNumber(stats.counts.rejected))
+                              .replace('{failed}', formatNumber(stats.counts.failed))}
                           </p>
                         </div>
                       </div>
@@ -1387,10 +1399,10 @@ export default function FullPerformancePage() {
                       <div className="clay-well p-6 rounded-2xl text-center">
                         <CheckCircle2 className="h-7 w-7 text-emerald-500 mx-auto mb-1.5" />
                         <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                          Zero Rejections or Failures
+                          {t.intelMatrix.zeroRejectionsTitle}
                         </p>
                         <p className="text-[11px] text-slate-400">
-                          All records in this horizon are Processed or Processing.
+                          {t.intelMatrix.zeroRejectionsDesc}
                         </p>
                       </div>
                     ) : (
@@ -1402,7 +1414,7 @@ export default function FullPerformancePage() {
                                 {item.reason}
                               </span>
                               <span className="font-extrabold text-rose-600 dark:text-rose-400 tabular-nums shrink-0">
-                                {item.count} ({item.pct}%)
+                                {formatNumber(item.count)} ({item.pct}%)
                               </span>
                             </div>
                             <div className="h-1.5 w-full rounded-full bg-slate-200/70 dark:bg-slate-800 overflow-hidden">
@@ -1426,7 +1438,7 @@ export default function FullPerformancePage() {
                       onClick={() => router.push('/status-check?status=Rejected')}
                       className="clay-tab-active w-full h-10 rounded-2xl font-bold text-xs hover:bg-rose-500 hover:text-white hover:border-rose-500 transition-all"
                     >
-                      Inspect Rejected Records ({stats.counts.rejected})
+                      {t.intelMatrix.inspectRejectedBtn.replace('{count}', formatNumber(stats.counts.rejected))}
                     </Button>
                   </div>
                 </Card>
@@ -1440,10 +1452,10 @@ export default function FullPerformancePage() {
                       </div>
                       <div>
                         <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                          Institution vs. Individual Split
+                          {t.intelMatrix.splitCardTitle}
                         </h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Comparing institutional enrollment against individual intake
+                          {t.intelMatrix.splitCardSubtitle}
                         </p>
                       </div>
                     </div>
@@ -1452,11 +1464,11 @@ export default function FullPerformancePage() {
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
                           <Building2 className="h-3.5 w-3.5" />
-                          Institutions ({stats.institutionBreakdown.instCount})
+                          {t.intelMatrix.institutionsCountLabel.replace('{count}', formatNumber(stats.institutionBreakdown.instCount))}
                         </span>
                         <span className="font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
                           <User className="h-3.5 w-3.5" />
-                          Individual ({stats.institutionBreakdown.indivCount})
+                          {t.intelMatrix.individualCountLabel.replace('{count}', formatNumber(stats.institutionBreakdown.indivCount))}
                         </span>
                       </div>
                       <div className="h-2.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex">
@@ -1468,7 +1480,7 @@ export default function FullPerformancePage() {
                       <div className="grid grid-cols-2 gap-3 pt-1">
                         <div className="p-2.5 rounded-xl bg-white/50 dark:bg-white/[0.03]">
                           <p className="text-[10px] font-bold uppercase text-slate-400">
-                            Institution Processed
+                            {t.intelMatrix.institutionProcessedLabel}
                           </p>
                           <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums">
                             {stats.institutionBreakdown.instProcessedPct}%
@@ -1476,7 +1488,7 @@ export default function FullPerformancePage() {
                         </div>
                         <div className="p-2.5 rounded-xl bg-white/50 dark:bg-white/[0.03]">
                           <p className="text-[10px] font-bold uppercase text-slate-400">
-                            Individual Processed
+                            {t.intelMatrix.individualProcessedLabel}
                           </p>
                           <p className="text-lg font-extrabold text-sky-600 dark:text-sky-400 tabular-nums">
                             {stats.institutionBreakdown.indivProcessedPct}%
@@ -1492,7 +1504,7 @@ export default function FullPerformancePage() {
                       asChild
                       className="clay-tab-active w-full h-10 rounded-2xl font-bold text-xs hover:bg-primary hover:text-white hover:border-primary transition-all"
                     >
-                      <Link href="/schools-students">Open Institutions Registry</Link>
+                      <Link href="/schools-students">{t.intelMatrix.openInstitutionsBtn}</Link>
                     </Button>
                   </div>
                 </Card>
@@ -1503,38 +1515,48 @@ export default function FullPerformancePage() {
             <div className="xl:col-span-4 min-w-0 space-y-6">
               <Card className="clay-card rounded-[28px] p-6">
                 <CardTitle className="text-base font-bold text-slate-900 dark:text-white mb-5 flex items-center gap-2">
-                  <PieChartIcon className="h-4 w-4 text-primary" /> Lifecycle Context
+                  <PieChartIcon className="h-4 w-4 text-primary" /> {t.intelMatrix.lifecycleTitle}
                 </CardTitle>
                 <div className="space-y-3">
-                  {stats.pieData.map((item) => (
-                    <button
-                      key={item.name}
-                      type="button"
-                      onClick={() => router.push(`/status-check?status=${encodeURIComponent(item.name)}`)}
-                      className="clay-well w-full flex items-center justify-between p-3.5 rounded-2xl hover:ring-1 hover:ring-primary/40 transition-all text-left cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="h-3.5 w-3.5 rounded-full"
-                          style={{
-                            backgroundColor: item.color,
-                            boxShadow: `0 0 10px ${item.color}88`,
-                          }}
-                        />
-                        <div>
-                          <p className="text-sm font-bold text-slate-900 dark:text-white leading-none">
-                            {item.name}
-                          </p>
-                          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
-                            {item.pct}% of total
-                          </p>
+                  {stats.pieData.map((item) => {
+                    const statusLabel =
+                      item.name === 'Processed'
+                        ? t.common.statusProcessed
+                        : item.name === 'Processing'
+                        ? t.common.statusProcessing
+                        : item.name === 'Rejected'
+                        ? t.common.statusRejected
+                        : t.common.statusFailed;
+                    return (
+                      <button
+                        key={item.name}
+                        type="button"
+                        onClick={() => router.push(`/status-check?status=${encodeURIComponent(item.name)}`)}
+                        className="clay-well w-full flex items-center justify-between p-3.5 rounded-2xl hover:ring-1 hover:ring-primary/40 transition-all text-left cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="h-3.5 w-3.5 rounded-full"
+                            style={{
+                              backgroundColor: item.color,
+                              boxShadow: `0 0 10px ${item.color}88`,
+                            }}
+                          />
+                          <div>
+                            <p className="text-sm font-bold text-slate-900 dark:text-white leading-none">
+                              {statusLabel}
+                            </p>
+                            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
+                              {t.intelMatrix.pctOfTotal.replace('{pct}', String(item.pct))}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <span className="text-base font-extrabold text-slate-900 dark:text-white tabular-nums">
-                        {item.value.toLocaleString()}
-                      </span>
-                    </button>
-                  ))}
+                        <span className="text-base font-extrabold text-slate-900 dark:text-white tabular-nums">
+                          {formatNumber(item.value)}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
                 <div className="mt-6 pt-6 border-t border-slate-200/70 dark:border-slate-700/60 flex items-center justify-center">
                   <div className="clay-well p-3 h-[200px] w-full">
@@ -1549,7 +1571,7 @@ export default function FullPerformancePage() {
                                     {payload[0].name}
                                   </p>
                                   <p className="text-sm font-bold text-foreground tabular-nums">
-                                    {Number(payload[0].value).toLocaleString()} records
+                                    {formatNumber(Number(payload[0].value))}
                                   </p>
                                 </div>
                               );
@@ -1587,16 +1609,15 @@ export default function FullPerformancePage() {
                       <Clock className="h-4 w-4" />
                     </div>
                     <p className="text-xs font-bold text-slate-900 dark:text-white">
-                      Processing Queue Action
+                      {t.intelMatrix.processingQueueTitle}
                     </p>
                   </div>
                   <span className="text-xs font-black text-amber-600 dark:text-amber-400 tabular-nums">
-                    {stats.counts.processing} Active
+                    {t.intelMatrix.activeCountBadge.replace('{count}', formatNumber(stats.counts.processing))}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Jump directly to the Official Portal Gateway to verify the remaining{' '}
-                  <strong>{stats.counts.processing}</strong> processing records.
+                  {t.intelMatrix.processingQueueDesc.replace('{count}', formatNumber(stats.counts.processing))}
                 </p>
                 <Button
                   type="button"
@@ -1604,7 +1625,7 @@ export default function FullPerformancePage() {
                   className="w-full h-10 rounded-2xl bg-primary hover:bg-primary/90 text-white font-bold text-xs"
                 >
                   <ShieldCheck className="mr-1.5 h-4 w-4" />
-                  Verify Processing Queue
+                  {t.intelMatrix.verifyQueueBtn}
                 </Button>
               </div>
             </div>
@@ -1616,10 +1637,10 @@ export default function FullPerformancePage() {
               <CardHeader className="border-b border-slate-200/70 dark:border-slate-700/60 py-5 px-6 md:px-8 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <CardTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-primary" /> Top Institutions Performance Leaderboard
+                    <Building2 className="h-4 w-4 text-primary" /> {t.intelMatrix.leaderboardTitle}
                   </CardTitle>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Institution registration volume, completion rate, and verification status breakdown ({horizonIntervals.label})
+                    {t.intelMatrix.leaderboardSubtitle.replace('{horizon}', horizonIntervals.label)}
                   </p>
                 </div>
                 <Button
@@ -1629,7 +1650,7 @@ export default function FullPerformancePage() {
                   className="clay-tab-active h-9 px-4 rounded-xl text-xs font-bold self-start sm:self-auto"
                 >
                   <Link href="/schools-students">
-                    View All Institutions <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                    {t.intelMatrix.viewAllInstitutionsBtn} <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
                   </Link>
                 </Button>
               </CardHeader>
@@ -1651,7 +1672,9 @@ export default function FullPerformancePage() {
                               {inst.name}
                             </p>
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
-                              {inst.total} Records · {inst.completionRate}% Processed
+                              {t.intelMatrix.instRecordsAndPct
+                                .replace('{total}', formatNumber(inst.total))
+                                .replace('{pct}', String(inst.completionRate))}
                             </p>
                           </div>
                         </div>
@@ -1668,7 +1691,7 @@ export default function FullPerformancePage() {
                             }}
                             className="px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 text-[10px] font-bold tabular-nums shrink-0 cursor-pointer"
                           >
-                            {inst.processing} Verify
+                            {t.intelMatrix.verifyShortBtn.replace('{count}', formatNumber(inst.processing))}
                           </button>
                         )}
                       </div>
@@ -1682,13 +1705,13 @@ export default function FullPerformancePage() {
 
                       <div className="flex items-center justify-between text-[10px] font-bold tabular-nums text-slate-500 dark:text-slate-400">
                         <span className="text-emerald-600 dark:text-emerald-400">
-                          {inst.processed} Processed
+                          {formatNumber(inst.processed)} {t.common.statusProcessed}
                         </span>
                         <span className="text-amber-600 dark:text-amber-400">
-                          {inst.processing} Processing
+                          {formatNumber(inst.processing)} {t.common.statusProcessing}
                         </span>
                         <span className="text-rose-600 dark:text-rose-400">
-                          {inst.rejected} Rejected
+                          {formatNumber(inst.rejected)} {t.common.statusRejected}
                         </span>
                       </div>
                     </div>

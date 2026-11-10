@@ -103,6 +103,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from '@/i18n/language-provider';
 
 const getTs = (d: any): number => {
   if (!d) return 0;
@@ -111,17 +112,18 @@ const getTs = (d: any): number => {
   return new Date(d).getTime();
 };
 
-const formatDateSeparator = (date: Date): string => {
-  if (isToday(date)) return 'Today';
-  if (isYesterday(date)) return 'Yesterday';
-  return format(date, 'MMMM dd, yyyy');
-};
-
 export default function CommunicationPage() {
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
+  const { t, formatDate, formatNumber } = useTranslation();
+
+  const formatDateSeparator = (date: Date): string => {
+    if (isToday(date)) return t.communication.todayDivider;
+    if (isYesterday(date)) return t.communication.yesterdayDivider;
+    return formatDate(date);
+  };
 
   const [inputText, setInputText] = useState('');
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
@@ -130,6 +132,7 @@ export default function CommunicationPage() {
   const [personnelSearchTerm, setPersonnelSearchTerm] = useState('');
   const [sidebarTab, setSidebarTab] = useState<'channels' | 'calls' | 'directory'>('channels');
   const [callHistoryFilter, setCallHistoryFilter] = useState<'all' | 'missed' | 'video' | 'voice'>('all');
+  const [callsViewedAtMs, setCallsViewedAtMs] = useState<number>(0);
 
   // Voice Note recording state
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
@@ -273,6 +276,7 @@ export default function CommunicationPage() {
 
   const isConvUnread = (conv: Conversation): boolean => {
     if (!user?.uid) return false;
+    if (conv.isMeetingRoom) return false;
     if (conv.id === activeConvId) return false;
     if (conv.lastSenderId && conv.lastSenderId === user.uid) return false;
     const lastMsgTs = getTs(conv.lastTimestamp);
@@ -281,7 +285,7 @@ export default function CommunicationPage() {
     const profileReadTs = currentUserProfile?.lastMessageReadAt
       ? getTs(currentUserProfile.lastMessageReadAt)
       : 0;
-    const effectiveReadTs = convReadTs > 0 ? convReadTs : profileReadTs;
+    const effectiveReadTs = Math.max(convReadTs, profileReadTs);
     return lastMsgTs > effectiveReadTs;
   };
 
@@ -346,15 +350,40 @@ export default function CommunicationPage() {
   }, [rawCallLogs, rawConversations, user, callHistoryFilter, channelSearchTerm, allUsers]);
 
   const missedCallsCount = useMemo(() => {
-    if (!rawCallLogs || !rawConversations || !user) return 0;
-    const myConvIds = new Set(rawConversations.filter((c) => !c.isMeetingRoom).map((c) => c.id));
-    return rawCallLogs.filter(
-      (m) =>
-        myConvIds.has(m.conversationId) &&
-        m.senderId !== user.uid &&
-        (m.callLogData?.event === 'missed' || m.callLogData?.event === 'declined')
-    ).length;
-  }, [rawCallLogs, rawConversations, user]);
+    if (!rawCallLogs || !rawConversations || !user || sidebarTab === 'calls') return 0;
+    const myConvMap = new Map<string, Conversation>();
+    rawConversations.forEach((c) => {
+      if (!c.isMeetingRoom) myConvMap.set(c.id, c);
+    });
+    const profileReadTs = currentUserProfile?.lastMessageReadAt
+      ? getTs(currentUserProfile.lastMessageReadAt)
+      : 0;
+    const profileCallsViewedTs = currentUserProfile?.lastCallsViewedAt
+      ? getTs(currentUserProfile.lastCallsViewedAt)
+      : 0;
+
+    return rawCallLogs.filter((m) => {
+      const conv = myConvMap.get(m.conversationId);
+      if (!conv) return false;
+      if (conv.id === activeConvId) return false;
+      if (m.senderId === user.uid) return false;
+      if (m.callLogData?.event !== 'missed' && m.callLogData?.event !== 'declined') return false;
+      const callTs = getTs(m.timestamp);
+      if (!callTs) return false;
+      const convReadTs = conv.lastReadBy?.[user.uid] ? getTs(conv.lastReadBy[user.uid]) : 0;
+      const effectiveSeenTs = Math.max(convReadTs, profileReadTs, profileCallsViewedTs, callsViewedAtMs);
+      return callTs > effectiveSeenTs;
+    }).length;
+  }, [
+    rawCallLogs,
+    rawConversations,
+    user,
+    sidebarTab,
+    activeConvId,
+    currentUserProfile?.lastMessageReadAt,
+    currentUserProfile?.lastCallsViewedAt,
+    callsViewedAtMs,
+  ]);
 
   const directorySections = useMemo(() => {
     if (!allUsers || !user) return { command: [], units: [] };
@@ -442,19 +471,39 @@ export default function CommunicationPage() {
     }
   }, [conversations, activeConvId]);
 
-  // Sync per-conversation & user read timestamps whenever active conversation changes or new messages arrive
+  const activeConvLastTs = activeConv ? getTs(activeConv.lastTimestamp) : 0;
+
+  // Sync per-conversation & user read timestamps whenever active conversation changes, new messages arrive, or lastTimestamp updates
   useEffect(() => {
     if (!db || !user?.uid) return;
-    const nowIso = new Date().toISOString();
+    const maxKnownTs = Math.max(Date.now(), activeConvLastTs ? activeConvLastTs + 2000 : 0);
+    const nowIso = new Date(maxKnownTs).toISOString();
     updateDocumentNonBlocking(doc(db, 'users', user.uid), {
       lastMessageReadAt: nowIso,
+      lastCallsViewedAt: nowIso,
     });
     if (activeConvId) {
       updateDocumentNonBlocking(doc(db, 'conversations', activeConvId), {
         [`lastReadBy.${user.uid}`]: nowIso,
       });
     }
-  }, [db, user?.uid, activeConvId, rawMessages?.length]);
+  }, [db, user?.uid, activeConvId, rawMessages?.length, activeConvLastTs]);
+
+  // Mark missed calls as viewed when opening the Calls tab
+  useEffect(() => {
+    if (sidebarTab !== 'calls' || !db || !user?.uid) return;
+    const latestCallTs =
+      rawCallLogs && rawCallLogs.length > 0
+        ? Math.max(...rawCallLogs.map((m) => getTs(m.timestamp) || 0))
+        : 0;
+    const seenMs = Math.max(Date.now(), latestCallTs ? latestCallTs + 2000 : 0);
+    setCallsViewedAtMs(seenMs);
+    const seenIso = new Date(seenMs).toISOString();
+    updateDocumentNonBlocking(doc(db, 'users', user.uid), {
+      lastCallsViewedAt: seenIso,
+      lastMessageReadAt: seenIso,
+    });
+  }, [sidebarTab, db, user?.uid, rawCallLogs?.length]);
 
   // Reset composer helpers when switching channels
   useEffect(() => {
@@ -514,8 +563,8 @@ export default function CommunicationPage() {
     if (file.size > 700 * 1024) {
       toast({
         variant: 'destructive',
-        title: 'Attachment Too Large',
-        description: 'Please select an image or document under 700 KB for instant transmission.',
+        title: t.communication.toastAttachmentLargeTitle,
+        description: t.communication.toastAttachmentLargeDesc,
       });
       e.target.value = '';
       return;
@@ -541,8 +590,8 @@ export default function CommunicationPage() {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       toast({
         variant: 'destructive',
-        title: 'Microphone Unavailable',
-        description: 'Your browser does not support voice recording in this context.',
+        title: t.communication.toastMicUnavailableTitle,
+        description: t.communication.toastMicUnavailableDesc,
       });
       return;
     }
@@ -570,8 +619,8 @@ export default function CommunicationPage() {
     } catch {
       toast({
         variant: 'destructive',
-        title: 'Microphone Permission Required',
-        description: 'Please allow microphone access to record a voice note.',
+        title: t.communication.toastMicPermissionTitle,
+        description: t.communication.toastMicPermissionDesc,
       });
     }
   };
@@ -600,8 +649,8 @@ export default function CommunicationPage() {
       if (blob.size > 750 * 1024) {
         toast({
           variant: 'destructive',
-          title: 'Voice Note Too Long',
-          description: 'Please keep voice notes under 60 seconds for instant delivery.',
+          title: t.communication.toastVoiceLongTitle,
+          description: t.communication.toastVoiceLongDesc,
         });
         return;
       }
@@ -667,8 +716,8 @@ export default function CommunicationPage() {
         updatedAt: serverTimestamp(),
       });
       toast({
-        title: 'Transmission Updated',
-        description: 'Your message has been edited.',
+        title: t.communication.toastMsgUpdatedTitle,
+        description: t.communication.toastMsgUpdatedDesc,
       });
       setEditingMessage(null);
       setInputText('');
@@ -800,13 +849,13 @@ export default function CommunicationPage() {
       setActiveConvId(newDmRef.id);
       setSidebarTab('channels');
       toast({
-        title: 'Secure Link Established',
-        description: 'Direct communication path initialized.',
+        title: t.communication.toastLinkEstablishedTitle,
+        description: t.communication.toastLinkEstablishedDesc,
       });
     } catch {
       toast({
-        title: 'Handshake Failed',
-        description: 'Could not initialize channel.',
+        title: t.communication.toastHandshakeFailedTitle,
+        description: t.communication.toastHandshakeFailedDesc,
         variant: 'destructive',
       });
     } finally {
@@ -839,8 +888,8 @@ export default function CommunicationPage() {
         await setDocumentNonBlocking(newGroupRef, groupData, { merge: true });
         setActiveConvId(newGroupRef.id);
         toast({
-          title: 'Group Assembled',
-          description: `"${groupData.name}" is now online.`,
+          title: t.communication.toastGroupAssembledTitle,
+          description: t.communication.toastGroupAssembledDesc.replace('{name}', groupData.name),
         });
       }
 
@@ -851,8 +900,8 @@ export default function CommunicationPage() {
       setPersonnelSearchTerm('');
     } catch {
       toast({
-        title: 'Handshake Failed',
-        description: 'Could not initialize channel.',
+        title: t.communication.toastHandshakeFailedTitle,
+        description: t.communication.toastHandshakeFailedDesc,
         variant: 'destructive',
       });
     } finally {
@@ -875,8 +924,8 @@ export default function CommunicationPage() {
       description: editGroupDescription.trim(),
     });
     toast({
-      title: 'Channel Updated',
-      description: 'Group designation and details saved.',
+      title: t.communication.toastChannelUpdatedTitle,
+      description: t.communication.toastChannelUpdatedDesc,
     });
   };
 
@@ -888,8 +937,10 @@ export default function CommunicationPage() {
       lastTimestamp: serverTimestamp(),
     });
     toast({
-      title: 'Personnel Added',
-      description: `${memberName} has been added to ${activeConv.name || 'the group'}.`,
+      title: t.communication.toastMemberAddedTitle,
+      description: t.communication.toastMemberAddedDesc
+        .replace('{name}', memberName)
+        .replace('{group}', activeConv.name || 'the group'),
     });
   };
 
@@ -900,8 +951,8 @@ export default function CommunicationPage() {
     });
     toast({
       variant: 'destructive',
-      title: 'Personnel Removed',
-      description: `${memberName} was removed from the group.`,
+      title: t.communication.toastMemberRemovedTitle,
+      description: t.communication.toastMemberRemovedDesc.replace('{name}', memberName),
     });
   };
 
@@ -913,8 +964,11 @@ export default function CommunicationPage() {
     setIsManageChannelOpen(false);
     setActiveConvId(null);
     toast({
-      title: 'Left Channel',
-      description: `You have exited ${activeConv.name || 'the group'}.`,
+      title: t.communication.toastLeftChannelTitle,
+      description: t.communication.toastLeftChannelDesc.replace(
+        '{group}',
+        activeConv.name || 'the group'
+      ),
     });
   };
 
@@ -925,8 +979,8 @@ export default function CommunicationPage() {
     setActiveConvId(null);
     toast({
       variant: 'destructive',
-      title: 'Channel Deleted',
-      description: 'The communication channel was permanently removed.',
+      title: t.communication.toastChannelDeletedTitle,
+      description: t.communication.toastChannelDeletedDesc,
     });
   };
 
@@ -939,16 +993,21 @@ export default function CommunicationPage() {
       pinnedMessageId: isCurrentlyPinned ? '' : msg.id,
     });
     toast({
-      title: isCurrentlyPinned ? 'Intelligence Unpinned' : 'Intelligence Pinned',
+      title: isCurrentlyPinned
+        ? t.communication.toastUnpinnedTitle
+        : t.communication.toastPinnedTitle,
       description: isCurrentlyPinned
-        ? 'Removed message from channel header.'
-        : 'Message pinned to channel header.',
+        ? t.communication.toastUnpinnedDesc
+        : t.communication.toastPinnedDesc,
     });
   };
 
-  const handleCopyText = (text: string, label = 'Transmission') => {
+  const handleCopyText = (text: string, label = 'Message') => {
     navigator.clipboard.writeText(text);
-    toast({ title: 'Copied', description: `${label} copied to clipboard.` });
+    toast({
+      title: t.communication.toastCopiedTitle,
+      description: t.communication.toastCopiedDesc.replace('{label}', label),
+    });
   };
 
   const handleConfirmDeleteMessage = () => {
@@ -961,8 +1020,8 @@ export default function CommunicationPage() {
       });
     }
     toast({
-      title: 'Transmission Purged',
-      description: 'Message removed from viewport.',
+      title: t.communication.toastMsgDeletedTitle,
+      description: t.communication.toastMsgDeletedDesc,
       variant: 'destructive',
     });
     setIsDeleteDialogOpen(false);
@@ -1010,11 +1069,13 @@ export default function CommunicationPage() {
       { merge: true }
     );
 
+    const readIso = new Date(Date.now() + 5000).toISOString();
     updateDocumentNonBlocking(doc(db, 'conversations', convId), {
       lastMessage: summaryText,
       lastTimestamp: serverTimestamp(),
       lastSenderId: user.uid,
       lastSenderName: senderFullName,
+      [`lastReadBy.${user.uid}`]: readIso,
     });
   };
 
@@ -1070,8 +1131,11 @@ export default function CommunicationPage() {
     postCallLogMessage(activeConv.id, callType, 'started');
 
     toast({
-      title: `${callType === 'video' ? 'Video' : 'Voice'} Call Initialized`,
-      description: `Ringing ${getConvName(activeConv)}...`,
+      title: t.communication.toastCallInitTitle.replace(
+        '{type}',
+        callType === 'video' ? t.communication.videoLabel : t.communication.voiceLabel
+      ),
+      description: t.communication.toastCallInitDesc.replace('{name}', getConvName(activeConv)),
     });
   };
 
@@ -1179,11 +1243,17 @@ export default function CommunicationPage() {
       });
       postCallLogMessage(conv.id, call.callType, reason, durationSeconds);
       toast({
-        title: reason === 'missed' ? 'Call Unanswered' : 'Call Ended',
+        title:
+          reason === 'missed'
+            ? t.communication.toastCallUnansweredTitle
+            : t.communication.toastCallEndedTitle,
         description:
           reason === 'missed'
-            ? 'Recipient did not answer the call.'
-            : `Call duration: ${formatCallDuration(durationSeconds)}`,
+            ? t.communication.toastCallUnansweredDesc
+            : t.communication.toastCallEndedDesc.replace(
+                '{duration}',
+                formatCallDuration(durationSeconds)
+              ),
       });
     } else {
       const nextParticipants = { ...(call.participants || {}) };
@@ -1198,8 +1268,8 @@ export default function CommunicationPage() {
         },
       });
       toast({
-        title: 'Left Group Call',
-        description: 'You have disconnected from the group call.',
+        title: t.communication.toastLeftGroupCallTitle,
+        description: t.communication.toastLeftGroupCallDesc,
       });
     }
   };
@@ -1219,16 +1289,19 @@ export default function CommunicationPage() {
         <div className="space-y-0.5 min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-foreground font-headline uppercase leading-none truncate">
-              Coordination Portal
+              {t.communication.title}
             </h1>
             {totalUnreadChannels > 0 && (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-[#FF6B4A] text-white shadow-sm shrink-0">
-                {totalUnreadChannels} Unread
+                {t.communication.unreadBadge.replace(
+                  '{count}',
+                  formatNumber(totalUnreadChannels)
+                )}
               </span>
             )}
           </div>
           <p className="text-[9px] sm:text-[10px] text-muted-foreground uppercase tracking-widest font-black mt-0.5 hidden sm:block">
-            Authorized Tactical Link • Direct & Group Channels
+            {t.communication.subtitle}
           </p>
         </div>
 
@@ -1241,7 +1314,7 @@ export default function CommunicationPage() {
             className="rounded-full px-3 sm:px-4 h-8 sm:h-9 md:h-10 font-black text-[9px] sm:text-[10px] uppercase tracking-widest border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
           >
             <GraduationCap className="mr-1 sm:mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            <span>Meetings & Exams</span>
+            <span>{t.communication.meetingsBtn}</span>
           </Button>
 
           <Dialog open={isCreateGroupOpen} onOpenChange={setIsCreateGroupOpen}>
@@ -1251,16 +1324,16 @@ export default function CommunicationPage() {
                 className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-full px-3 sm:px-5 h-8 sm:h-9 md:h-10 font-black text-[9px] sm:text-[10px] uppercase tracking-widest shadow-xl shadow-primary/10"
               >
                 <Plus className="mr-1 sm:mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span>New Chat</span>
+                <span>{t.communication.newChatBtn}</span>
               </Button>
             </DialogTrigger>
           <DialogContent className="w-[calc(100%-2rem)] sm:max-w-[460px] p-0 overflow-hidden rounded-[32px] border-none shadow-2xl bg-popover max-h-[90vh] flex flex-col">
             <DialogHeader className="p-6 border-b bg-muted/30">
               <DialogTitle className="text-lg font-black text-foreground uppercase tracking-tight">
-                Initialize Tactical Link
+                {t.communication.newChatModalTitle}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                Select 1 official for a Direct Message or multiple officials to assemble a Group channel.
+                {t.communication.newChatModalDesc}
               </DialogDescription>
             </DialogHeader>
             <div className="p-6 space-y-5 flex-1 overflow-hidden flex flex-col">
@@ -1268,10 +1341,10 @@ export default function CommunicationPage() {
                 <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
                   <div className="space-y-1.5">
                     <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">
-                      Group Designation
+                      {t.communication.groupNameLabel}
                     </Label>
                     <Input
-                      placeholder="e.g. Sector A Response Team"
+                      placeholder={t.communication.groupNamePlaceholder}
                       value={newGroupName}
                       onChange={(e) => setNewGroupName(e.target.value)}
                       className="h-10 rounded-xl bg-background border-border font-bold text-xs"
@@ -1279,10 +1352,10 @@ export default function CommunicationPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">
-                      Channel Purpose (Optional)
+                      {t.communication.groupPurposeLabel}
                     </Label>
                     <Input
-                      placeholder="e.g. Daily registration & institution verification sync"
+                      placeholder={t.communication.groupPurposePlaceholder}
                       value={newGroupDescription}
                       onChange={(e) => setNewGroupDescription(e.target.value)}
                       className="h-9 rounded-xl bg-background border-border text-xs"
@@ -1294,17 +1367,20 @@ export default function CommunicationPage() {
               <div className="space-y-3 flex-1 overflow-hidden flex flex-col">
                 <div className="flex items-center justify-between">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">
-                    Select Personnel
+                    {t.communication.selectPersonnelLabel}
                   </Label>
                   <span className="text-[9px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                    {selectedUserIds.length} Selected
+                    {t.communication.selectedCountBadge.replace(
+                      '{count}',
+                      formatNumber(selectedUserIds.length)
+                    )}
                   </span>
                 </div>
 
                 <div className="relative mb-2">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/40" />
                   <Input
-                    placeholder="Search name, role, or region..."
+                    placeholder={t.communication.searchPersonnelPlaceholder}
                     className="pl-9 h-10 text-xs bg-muted/20 border-border rounded-xl font-medium"
                     value={personnelSearchTerm}
                     onChange={(e) => setPersonnelSearchTerm(e.target.value)}
@@ -1388,7 +1464,7 @@ export default function CommunicationPage() {
                       <div className="py-14 text-center opacity-30">
                         <Search className="h-8 w-8 mx-auto mb-2" />
                         <p className="text-[10px] font-black uppercase tracking-widest">
-                          No matching personnel
+                          {t.communication.noMatchingPersonnel}
                         </p>
                       </div>
                     )}
@@ -1405,9 +1481,12 @@ export default function CommunicationPage() {
                 {isCreating ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : selectedUserIds.length > 1 ? (
-                  `Create Group (${selectedUserIds.length + 1} Members)`
+                  t.communication.createGroupBtn.replace(
+                    '{count}',
+                    formatNumber(selectedUserIds.length + 1)
+                  )
                 ) : (
-                  'Open Direct Channel'
+                  t.communication.openDirectBtn
                 )}
               </Button>
             </DialogFooter>
@@ -1436,10 +1515,10 @@ export default function CommunicationPage() {
                   value="channels"
                   className="text-[10px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1"
                 >
-                  <span>Channels</span>
+                  <span>{t.communication.tabChannels}</span>
                   {totalUnreadChannels > 0 && (
                     <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-[#FF6B4A] text-white text-[9px] font-black">
-                      {totalUnreadChannels}
+                      {formatNumber(totalUnreadChannels)}
                     </span>
                   )}
                 </TabsTrigger>
@@ -1447,10 +1526,10 @@ export default function CommunicationPage() {
                   value="calls"
                   className="text-[10px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1"
                 >
-                  <span>Calls</span>
+                  <span>{t.communication.tabCalls}</span>
                   {missedCallsCount > 0 && (
                     <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-black">
-                      {missedCallsCount}
+                      {formatNumber(missedCallsCount)}
                     </span>
                   )}
                 </TabsTrigger>
@@ -1458,7 +1537,10 @@ export default function CommunicationPage() {
                   value="directory"
                   className="text-[10px] font-black uppercase tracking-wider rounded-xl"
                 >
-                  Staff ({allUsers ? Math.max(0, allUsers.length - 1) : 0})
+                  {t.communication.tabDirectory.replace(
+                    '{count}',
+                    formatNumber(allUsers ? Math.max(0, allUsers.length - 1) : 0)
+                  )}
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -1468,10 +1550,10 @@ export default function CommunicationPage() {
               <Input
                 placeholder={
                   sidebarTab === 'channels'
-                    ? 'Search channels or messages...'
+                    ? t.communication.searchChannelsPlaceholder
                     : sidebarTab === 'calls'
-                    ? 'Search call history...'
-                    : 'Search personnel...'
+                    ? t.communication.searchCallsPlaceholder
+                    : t.communication.searchStaffPlaceholder
                 }
                 className="pl-9 h-10 text-xs bg-background border-border rounded-xl font-semibold"
                 value={sidebarTab === 'directory' ? personnelSearchTerm : channelSearchTerm}
@@ -1497,7 +1579,13 @@ export default function CommunicationPage() {
                         : 'text-muted-foreground hover:bg-muted/60'
                     )}
                   >
-                    {tab}
+                    {tab === 'all'
+                      ? t.communication.filterAll
+                      : tab === 'unread'
+                      ? t.communication.filterUnread
+                      : tab === 'groups'
+                      ? t.communication.filterGroups
+                      : t.communication.filterDirect}
                   </button>
                 ))}
               </div>
@@ -1517,7 +1605,13 @@ export default function CommunicationPage() {
                         : 'text-muted-foreground hover:bg-muted/60'
                     )}
                   >
-                    {tab}
+                    {tab === 'all'
+                      ? t.communication.filterAll
+                      : tab === 'missed'
+                      ? t.communication.filterMissed
+                      : tab === 'video'
+                      ? t.communication.filterVideo
+                      : t.communication.filterVoice}
                   </button>
                 ))}
               </div>
@@ -1539,7 +1633,17 @@ export default function CommunicationPage() {
                       return (
                         <button
                           key={conv.id}
-                          onClick={() => setActiveConvId(conv.id)}
+                          onClick={() => {
+                            setActiveConvId(conv.id);
+                            if (db && user?.uid) {
+                              const seenIso = new Date(
+                                Math.max(Date.now(), lastTs ? lastTs + 2000 : 0)
+                              ).toISOString();
+                              updateDocumentNonBlocking(doc(db, 'conversations', conv.id), {
+                                [`lastReadBy.${user.uid}`]: seenIso,
+                              });
+                            }
+                          }}
                           className={cn(
                             'w-full flex items-center gap-3 p-3 rounded-2xl transition-all text-left mb-1 relative border border-transparent cursor-pointer',
                             isSelected
@@ -1603,8 +1707,8 @@ export default function CommunicationPage() {
                                     : 'text-muted-foreground font-medium'
                                 )}
                               >
-                                {conv.lastSenderId === user?.uid ? 'You: ' : ''}
-                                {conv.lastMessage || 'Link active'}
+                                {conv.lastSenderId === user?.uid ? t.communication.youPrefix : ''}
+                                {conv.lastMessage || t.communication.linkActiveFallback}
                               </p>
                               {unread && (
                                 <span className="h-2.5 w-2.5 rounded-full bg-[#FF6B4A] shrink-0 shadow-[0_0_8px_rgba(255,107,74,0.7)]" />
@@ -1618,7 +1722,7 @@ export default function CommunicationPage() {
                     <div className="py-20 text-center px-6 opacity-30">
                       <MessageSquare className="h-10 w-10 mx-auto mb-3" />
                       <p className="text-[10px] font-black uppercase tracking-widest">
-                        No matching channels
+                        {t.communication.noMatchingChannels}
                       </p>
                     </div>
                   )}
@@ -1678,14 +1782,17 @@ export default function CommunicationPage() {
                                       : 'text-muted-foreground'
                                   )}
                                 >
-                                  {data.callType === 'video' ? 'Video' : 'Voice'} •{' '}
+                                  {data.callType === 'video'
+                                    ? t.communication.videoLabel
+                                    : t.communication.voiceLabel}{' '}
+                                  •{' '}
                                   {data.event === 'missed'
-                                    ? 'Missed'
+                                    ? t.communication.callMissed
                                     : data.event === 'declined'
-                                    ? 'Declined'
+                                    ? t.communication.callDeclined
                                     : data.event === 'ended'
                                     ? formatCallDuration(data.durationSeconds || 0)
-                                    : 'Initialized'}
+                                    : t.communication.callInitialized}
                                 </span>
                                 {ts > 0 && (
                                   <span className="text-muted-foreground/60 font-mono">
@@ -1711,7 +1818,10 @@ export default function CommunicationPage() {
                                 }, 80);
                               }}
                               className="h-9 w-9 rounded-xl shrink-0 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
-                              title={`Call back (${data.callType})`}
+                              title={t.communication.callBackTooltip.replace(
+                                '{type}',
+                                data.callType
+                              )}
                             >
                               {data.callType === 'video' ? (
                                 <Video className="h-4 w-4" />
@@ -1727,7 +1837,7 @@ export default function CommunicationPage() {
                     <div className="py-20 text-center px-6 opacity-30">
                       <PhoneCall className="h-10 w-10 mx-auto mb-3" />
                       <p className="text-[10px] font-black uppercase tracking-widest">
-                        No call logs found
+                        {t.communication.noCallLogs}
                       </p>
                     </div>
                   )}
@@ -1737,10 +1847,15 @@ export default function CommunicationPage() {
                   {directorySections.command.length > 0 && (
                     <div className="space-y-2">
                       <p className="text-[9px] font-black text-primary uppercase tracking-[0.2em] px-3 flex items-center gap-1.5">
-                        <Shield className="h-3 w-3" /> Bureau Command
+                        <Shield className="h-3 w-3" /> {t.communication.bureauCommandHeader}
                       </p>
                       {directorySections.command.map((u) => (
-                        <DirectoryRow key={u.id} user={u} onOpen={handleOpenDirectMessage} />
+                        <DirectoryRow
+                          key={u.id}
+                          user={u}
+                          commandBadgeLabel={t.communication.commandBadge}
+                          onOpen={handleOpenDirectMessage}
+                        />
                       ))}
                     </div>
                   )}
@@ -1748,10 +1863,15 @@ export default function CommunicationPage() {
                   {directorySections.units.length > 0 && (
                     <div className="space-y-2">
                       <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em] px-3 flex items-center gap-1.5">
-                        <User className="h-3 w-3" /> Field Units
+                        <User className="h-3 w-3" /> {t.communication.fieldUnitsHeader}
                       </p>
                       {directorySections.units.map((u) => (
-                        <DirectoryRow key={u.id} user={u} onOpen={handleOpenDirectMessage} />
+                        <DirectoryRow
+                          key={u.id}
+                          user={u}
+                          commandBadgeLabel={t.communication.commandBadge}
+                          onOpen={handleOpenDirectMessage}
+                        />
                       ))}
                     </div>
                   )}
@@ -1761,7 +1881,7 @@ export default function CommunicationPage() {
                       <div className="py-20 text-center px-6 opacity-20">
                         <User className="h-10 w-10 mx-auto mb-3" />
                         <p className="text-[10px] font-black uppercase tracking-widest">
-                          No personnel found
+                          {t.communication.noPersonnelFound}
                         </p>
                       </div>
                     )}
@@ -1821,7 +1941,10 @@ export default function CommunicationPage() {
                         <div className="flex items-center gap-1.5 mt-1">
                           {activeTypingNames.length > 0 ? (
                             <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider animate-pulse truncate">
-                              {activeTypingNames.join(', ')} typing...
+                              {t.communication.typingIndicator.replace(
+                                '{names}',
+                                activeTypingNames.join(', ')
+                              )}
                             </span>
                           ) : (
                             <>
@@ -1835,10 +1958,13 @@ export default function CommunicationPage() {
                               />
                               <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.1em] truncate">
                                 {activeConv.type === 'group'
-                                  ? `${activeConv.members?.length || 0} Members`
+                                  ? t.communication.membersCountLabel.replace(
+                                      '{count}',
+                                      formatNumber(activeConv.members?.length || 0)
+                                    )
                                   : getOtherUserStatus(activeConv)
-                                  ? 'Active Duty'
-                                  : 'Offline'}
+                                  ? t.communication.activeDutyStatus
+                                  : t.communication.offlineStatus}
                               </p>
                             </>
                           )}
@@ -1855,10 +1981,10 @@ export default function CommunicationPage() {
                       size="sm"
                       onClick={() => handleStartCall('voice')}
                       className="h-8 sm:h-9 rounded-xl px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
-                      title="Start Voice Call"
+                      title={t.communication.startVoiceTooltip}
                     >
                       <PhoneCall className="h-3.5 w-3.5 sm:mr-1.5" />
-                      <span className="hidden sm:inline">Voice</span>
+                      <span className="hidden sm:inline">{t.communication.voiceLabel}</span>
                     </Button>
                     <Button
                       type="button"
@@ -1866,10 +1992,10 @@ export default function CommunicationPage() {
                       size="sm"
                       onClick={() => handleStartCall('video')}
                       className="h-8 sm:h-9 rounded-xl px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
-                      title="Start Video & Screen-Share Call"
+                      title={t.communication.startVideoTooltip}
                     >
                       <Video className="h-3.5 w-3.5 sm:mr-1.5" />
-                      <span className="hidden sm:inline">Video</span>
+                      <span className="hidden sm:inline">{t.communication.videoLabel}</span>
                     </Button>
                     <Button
                       type="button"
@@ -1880,7 +2006,7 @@ export default function CommunicationPage() {
                         if (isMessageSearchOpen) setMessageSearchTerm('');
                       }}
                       className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl"
-                      title="Search in conversation"
+                      title={t.communication.searchInConvTooltip}
                     >
                       <Search className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     </Button>
@@ -1890,11 +2016,13 @@ export default function CommunicationPage() {
                       size="sm"
                       onClick={openManageChannelModal}
                       className="h-8 sm:h-9 rounded-xl px-2 sm:px-3 text-[10px] font-black uppercase tracking-wider"
-                      title="Channel Info"
+                      title={t.communication.channelInfoTooltip}
                     >
                       <Settings2 className="h-3.5 w-3.5 md:mr-1.5" />
                       <span className="hidden md:inline">
-                        {activeConv.type === 'group' ? 'Manage' : 'Info'}
+                        {activeConv.type === 'group'
+                          ? t.communication.manageBtn
+                          : t.communication.infoBtn}
                       </span>
                     </Button>
                   </div>
@@ -1910,11 +2038,20 @@ export default function CommunicationPage() {
                         <Radio className="h-4 w-4 text-emerald-500 animate-pulse shrink-0" />
                         <div className="min-w-0">
                           <p className="text-xs font-black text-emerald-700 dark:text-emerald-300 truncate">
-                            Live {activeConv.activeCall.callType === 'video' ? 'Video' : 'Voice'}{' '}
-                            Call • {activeConv.activeCall.callerName}
+                            {t.communication.liveCallBannerTitle
+                              .replace(
+                                '{type}',
+                                activeConv.activeCall.callType === 'video'
+                                  ? t.communication.videoLabel
+                                  : t.communication.voiceLabel
+                              )
+                              .replace('{caller}', activeConv.activeCall.callerName)}
                           </p>
                           <p className="text-[10px] text-muted-foreground">
-                            {activeConv.activeCall.activeParticipantIds?.length || 1} connected
+                            {t.communication.connectedCountText.replace(
+                              '{count}',
+                              formatNumber(activeConv.activeCall.activeParticipantIds?.length || 1)
+                            )}
                           </p>
                         </div>
                       </div>
@@ -1925,7 +2062,7 @@ export default function CommunicationPage() {
                           onClick={() => handleAcceptIncomingCall(activeConv, true)}
                           className="h-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-wider px-2.5"
                         >
-                          <Video className="h-3.5 w-3.5 mr-1" /> Video
+                          <Video className="h-3.5 w-3.5 mr-1" /> {t.communication.videoLabel}
                         </Button>
                         <Button
                           type="button"
@@ -1934,7 +2071,7 @@ export default function CommunicationPage() {
                           onClick={() => handleAcceptIncomingCall(activeConv, false)}
                           className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider px-2.5"
                         >
-                          <PhoneCall className="h-3.5 w-3.5 mr-1" /> Voice
+                          <PhoneCall className="h-3.5 w-3.5 mr-1" /> {t.communication.voiceLabel}
                         </Button>
                       </div>
                     </div>
@@ -1946,7 +2083,7 @@ export default function CommunicationPage() {
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                       <Input
-                        placeholder="Search messages, sender, or 29-digit RID in this channel..."
+                        placeholder={t.communication.searchInChannelPlaceholder}
                         value={messageSearchTerm}
                         onChange={(e) => setMessageSearchTerm(e.target.value)}
                         className="h-9 pl-9 pr-8 text-xs rounded-xl bg-muted/30"
@@ -1963,7 +2100,10 @@ export default function CommunicationPage() {
                       )}
                     </div>
                     <span className="text-[10px] font-bold text-muted-foreground whitespace-nowrap tabular-nums">
-                      {filteredMessages.length} results
+                      {t.communication.resultsCountText.replace(
+                        '{count}',
+                        formatNumber(filteredMessages.length)
+                      )}
                     </span>
                   </div>
                 )}
@@ -1982,7 +2122,7 @@ export default function CommunicationPage() {
                     </div>
                     <div className="overflow-hidden">
                       <p className="text-[9px] font-black text-primary uppercase tracking-[0.2em] leading-none mb-0.5">
-                        Pinned Intelligence • {pinnedMessage.senderName}
+                        {t.communication.pinnedHeader.replace('{sender}', pinnedMessage.senderName)}
                       </p>
                       <p className="text-xs text-foreground truncate font-semibold">
                         &ldquo;{pinnedMessage.text}&rdquo;
@@ -1994,7 +2134,7 @@ export default function CommunicationPage() {
                     size="icon"
                     className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground shrink-0"
                     onClick={() => handleTogglePin(pinnedMessage)}
-                    title="Unpin message"
+                    title={t.communication.unpinTooltip}
                   >
                     <PinOff className="h-3.5 w-3.5" />
                   </Button>
@@ -2025,8 +2165,8 @@ export default function CommunicationPage() {
                         <MessageSquare className="h-10 w-10 mx-auto mb-2" />
                         <p className="text-xs font-bold uppercase tracking-wider">
                           {messageSearchTerm
-                            ? 'No messages match your search'
-                            : 'No messages yet — send the first transmission below'}
+                            ? t.communication.noMessagesMatch
+                            : t.communication.noMessagesYet}
                         </p>
                       </div>
                     ) : (
@@ -2074,7 +2214,7 @@ export default function CommunicationPage() {
                                 </span>
                                 {msg.isEdited && (
                                   <span className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground/60 italic">
-                                    (edited)
+                                    {t.communication.editedTag}
                                   </span>
                                 )}
 
@@ -2084,7 +2224,7 @@ export default function CommunicationPage() {
                                     type="button"
                                     onClick={() => handleStartReplyMessage(msg)}
                                     className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors cursor-pointer"
-                                    title="Reply to message"
+                                    title={t.communication.replyTooltip}
                                   >
                                     <Reply className="h-3 w-3" />
                                   </button>
@@ -2093,7 +2233,7 @@ export default function CommunicationPage() {
                                       type="button"
                                       onClick={() => handleStartEditMessage(msg)}
                                       className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors cursor-pointer"
-                                      title="Edit message"
+                                      title={t.communication.editTooltip}
                                     >
                                       <SquarePen className="h-3 w-3" />
                                     </button>
@@ -2105,7 +2245,11 @@ export default function CommunicationPage() {
                                       'p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors cursor-pointer',
                                       isPinned && 'text-primary'
                                     )}
-                                    title={isPinned ? 'Unpin message' : 'Pin message'}
+                                    title={
+                                      isPinned
+                                        ? t.communication.unpinTooltip
+                                        : t.communication.pinTooltip
+                                    }
                                   >
                                     {isPinned ? (
                                       <PinOff className="h-3 w-3" />
@@ -2117,7 +2261,7 @@ export default function CommunicationPage() {
                                     type="button"
                                     onClick={() => handleCopyText(msg.text || '')}
                                     className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                                    title="Copy message"
+                                    title={t.communication.copyTooltip}
                                   >
                                     <Copy className="h-3 w-3" />
                                   </button>
@@ -2128,7 +2272,7 @@ export default function CommunicationPage() {
                                       setIsDeleteDialogOpen(true);
                                     }}
                                     className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
-                                    title="Delete message"
+                                    title={t.communication.deleteTooltip}
                                   >
                                     <Trash2 className="h-3 w-3" />
                                   </button>
@@ -2158,7 +2302,10 @@ export default function CommunicationPage() {
                                     )}
                                   >
                                     <span className="text-[9px] font-black uppercase tracking-wider block opacity-80">
-                                      Replying to {msg.replyToSenderName || 'Official'}
+                                      {t.communication.replyingToHeader.replace(
+                                        '{name}',
+                                        msg.replyToSenderName || 'Official'
+                                      )}
                                     </span>
                                     <span className="truncate block opacity-90 text-[11px]">
                                       {msg.replyToText}
@@ -2182,7 +2329,7 @@ export default function CommunicationPage() {
                                     <div className="flex items-center justify-between gap-2">
                                       <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider">
                                         <FileDigit className="h-3.5 w-3.5" />
-                                        Shared Registration RID
+                                        {t.communication.sharedRidHeader}
                                       </span>
                                       <StatusBadge status={msg.sharedRegistration.status} />
                                     </div>
@@ -2201,7 +2348,7 @@ export default function CommunicationPage() {
                                       </div>
                                     )}
                                     <div className="flex items-center justify-between pt-1 border-t border-current/10 text-[10px] font-bold opacity-80">
-                                      <span>Click to inspect record</span>
+                                      <span>{t.communication.clickToInspect}</span>
                                       <Eye className="h-3 w-3" />
                                     </div>
                                   </div>
@@ -2219,7 +2366,7 @@ export default function CommunicationPage() {
                                   >
                                     <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider">
                                       <span className="inline-flex items-center gap-1.5">
-                                        <Mic className="h-3.5 w-3.5" /> Voice Note
+                                        <Mic className="h-3.5 w-3.5" /> {t.communication.voiceNoteLabel}
                                       </span>
                                       {msg.audioDurationSeconds ? (
                                         <span className="font-mono tabular-nums">
@@ -2265,19 +2412,22 @@ export default function CommunicationPage() {
                                       <div className="min-w-0">
                                         <p className="text-xs font-black uppercase tracking-tight">
                                           {msg.callLogData.callType === 'video'
-                                            ? 'Video Call'
-                                            : 'Voice Call'}
+                                            ? t.communication.videoCallTitle
+                                            : t.communication.voiceCallTitle}
                                         </p>
                                         <p className="text-[10px] font-bold opacity-85">
                                           {msg.callLogData.event === 'missed'
-                                            ? 'Unanswered / Missed'
+                                            ? t.communication.unansweredMissed
                                             : msg.callLogData.event === 'declined'
-                                            ? 'Declined'
+                                            ? t.communication.callDeclined
                                             : msg.callLogData.event === 'ended'
-                                            ? `Duration ${formatCallDuration(
-                                                msg.callLogData.durationSeconds || 0
-                                              )}`
-                                            : 'Call Started'}
+                                            ? t.communication.durationLabel.replace(
+                                                '{duration}',
+                                                formatCallDuration(
+                                                  msg.callLogData.durationSeconds || 0
+                                                )
+                                              )
+                                            : t.communication.callStartedLabel}
                                         </p>
                                       </div>
                                     </div>
@@ -2290,7 +2440,7 @@ export default function CommunicationPage() {
                                       }
                                       className="h-7 px-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider shrink-0"
                                     >
-                                      Call Again
+                                      {t.communication.callAgainBtn}
                                     </Button>
                                   </div>
                                 )}
@@ -2345,22 +2495,25 @@ export default function CommunicationPage() {
                                   className="flex items-center gap-1 mt-1 pr-1"
                                   title={
                                     seenInfo.isSeen
-                                      ? `Seen by ${seenInfo.seenByNames.join(', ')}`
-                                      : 'Sent'
+                                      ? t.communication.seenByTooltip.replace(
+                                          '{names}',
+                                          seenInfo.seenByNames.join(', ')
+                                        )
+                                      : t.communication.sentLabel
                                   }
                                 >
                                   {seenInfo.isSeen ? (
                                     <>
                                       <CheckCheck className="h-3.5 w-3.5 text-emerald-500" />
                                       <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
-                                        Seen
+                                        {t.communication.seenLabel}
                                       </span>
                                     </>
                                   ) : (
                                     <>
                                       <Check className="h-3 w-3 text-muted-foreground/60" />
                                       <span className="text-[9px] font-medium text-muted-foreground/60">
-                                        Sent
+                                        {t.communication.sentLabel}
                                       </span>
                                     </>
                                   )}
@@ -2381,8 +2534,10 @@ export default function CommunicationPage() {
                     <div className="flex items-center gap-2 px-3 py-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 animate-pulse">
                       <span className="h-2 w-2 rounded-full bg-emerald-500" />
                       <span>
-                        {activeTypingNames.join(', ')}{' '}
-                        {activeTypingNames.length === 1 ? 'is' : 'are'} typing...
+                        {t.communication.typingIndicator.replace(
+                          '{names}',
+                          activeTypingNames.join(', ')
+                        )}
                       </span>
                     </div>
                   )}
@@ -2399,8 +2554,11 @@ export default function CommunicationPage() {
                         <div className="min-w-0">
                           <span className="text-[10px] font-black uppercase tracking-wider text-primary block">
                             {editingMessage
-                              ? 'Editing Message'
-                              : `Replying to ${replyingTo?.senderName}`}
+                              ? t.communication.editingMessageBanner
+                              : t.communication.replyingToHeader.replace(
+                                  '{name}',
+                                  replyingTo?.senderName || ''
+                                )}
                           </span>
                           <span className="text-xs text-muted-foreground truncate block">
                             {editingMessage ? editingMessage.text : replyingTo?.text}
@@ -2430,7 +2588,10 @@ export default function CommunicationPage() {
                         <Volume2 className="h-4 w-4 text-amber-500 shrink-0" />
                         <div className="min-w-0 flex-1">
                           <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
-                            Voice Note Ready ({formatCallDuration(pendingAudio.duration)})
+                            {t.communication.voiceNoteReadyBanner.replace(
+                              '{duration}',
+                              formatCallDuration(pendingAudio.duration)
+                            )}
                           </span>
                           <audio
                             src={pendingAudio.url}
@@ -2443,7 +2604,7 @@ export default function CommunicationPage() {
                         type="button"
                         onClick={() => setPendingAudio(null)}
                         className="p-1 rounded-lg hover:bg-amber-500/15 text-muted-foreground hover:text-foreground cursor-pointer"
-                        title="Discard voice note"
+                        title={t.communication.discardVoiceTooltip}
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
@@ -2456,7 +2617,10 @@ export default function CommunicationPage() {
                       <div className="flex items-center gap-2.5">
                         <span className="h-2.5 w-2.5 rounded-full bg-rose-500 animate-ping" />
                         <span className="font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                          Recording Voice Note • {formatCallDuration(recordingSeconds)}
+                          {t.communication.recordingVoiceBanner.replace(
+                            '{duration}',
+                            formatCallDuration(recordingSeconds)
+                          )}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -2467,7 +2631,7 @@ export default function CommunicationPage() {
                           onClick={() => handleStopVoiceRecording(true)}
                           className="h-7 px-2.5 rounded-lg text-[10px] font-bold text-muted-foreground hover:text-rose-600"
                         >
-                          Cancel
+                          {t.common.cancel}
                         </Button>
                         <Button
                           type="button"
@@ -2475,7 +2639,7 @@ export default function CommunicationPage() {
                           onClick={() => handleStopVoiceRecording(false)}
                           className="h-7 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-wider"
                         >
-                          <Square className="h-3 w-3 mr-1" /> Done
+                          <Square className="h-3 w-3 mr-1" /> {t.communication.doneBtn}
                         </Button>
                       </div>
                     </div>
@@ -2488,7 +2652,10 @@ export default function CommunicationPage() {
                         <FileDigit className="h-4 w-4 text-indigo-500 shrink-0" />
                         <div className="min-w-0">
                           <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 block">
-                            Sharing Registration Record ({pendingSharedReg.status})
+                            {t.communication.sharingRecordBanner.replace(
+                              '{status}',
+                              pendingSharedReg.status
+                            )}
                           </span>
                           <span className="text-xs font-bold text-foreground truncate block">
                             {pendingSharedReg.applicantName} • {pendingSharedReg.id}
@@ -2520,7 +2687,10 @@ export default function CommunicationPage() {
                         )}
                         <div className="min-w-0">
                           <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block">
-                            Ready to Attach ({pendingAttachment.type})
+                            {t.communication.readyToAttachBanner.replace(
+                              '{type}',
+                              pendingAttachment.type
+                            )}
                           </span>
                           <span className="text-xs font-bold text-foreground truncate block">
                             {pendingAttachment.name}
@@ -2552,7 +2722,7 @@ export default function CommunicationPage() {
                       size="icon"
                       onClick={() => fileInputRef.current?.click()}
                       className="h-11 w-11 rounded-2xl shrink-0 text-muted-foreground hover:text-primary"
-                      title="Attach image or document"
+                      title={t.communication.attachTooltip}
                     >
                       <Paperclip className="h-4 w-4" />
                     </Button>
@@ -2563,7 +2733,7 @@ export default function CommunicationPage() {
                       size="icon"
                       onClick={() => setIsRidPickerOpen(true)}
                       className="h-11 w-11 rounded-2xl shrink-0 text-muted-foreground hover:text-primary"
-                      title="Share a 29-Digit Registration Record (RID)"
+                      title={t.communication.shareRidTooltip}
                     >
                       <FileDigit className="h-4 w-4" />
                     </Button>
@@ -2579,7 +2749,9 @@ export default function CommunicationPage() {
                       }
                       className="h-11 w-11 rounded-2xl shrink-0 text-muted-foreground hover:text-primary"
                       title={
-                        isRecordingAudio ? 'Stop recording voice note' : 'Record a voice note'
+                        isRecordingAudio
+                          ? t.communication.stopRecordingTooltip
+                          : t.communication.recordVoiceTooltip
                       }
                     >
                       {isRecordingAudio ? (
@@ -2592,10 +2764,13 @@ export default function CommunicationPage() {
                     <Input
                       placeholder={
                         editingMessage
-                          ? 'Update your message...'
+                          ? t.communication.editMessagePlaceholder
                           : replyingTo
-                          ? `Reply to ${replyingTo.senderName}...`
-                          : 'Secure transmission payload...'
+                          ? t.communication.replyPlaceholder.replace(
+                              '{name}',
+                              replyingTo.senderName
+                            )
+                          : t.communication.messagePlaceholder
                       }
                       value={inputText}
                       onChange={(e) => handleInputTyping(e.target.value)}
@@ -2628,10 +2803,10 @@ export default function CommunicationPage() {
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-black uppercase tracking-[0.3em] text-foreground">
-                  Ready for Transmission
+                  {t.communication.emptyViewportTitle}
                 </p>
                 <p className="text-xs font-medium opacity-60 max-w-xs mx-auto leading-relaxed">
-                  Select a coordination channel or browse the bureau directory to initialize a new secure transmission link.
+                  {t.communication.emptyViewportDesc}
                 </p>
               </div>
             </div>
@@ -2645,17 +2820,17 @@ export default function CommunicationPage() {
           <DialogHeader className="p-6 border-b bg-muted/20">
             <DialogTitle className="text-base font-black uppercase tracking-tight flex items-center gap-2">
               <FileDigit className="h-5 w-5 text-primary" />
-              Share Registration Record (RID)
+              {t.communication.shareRidModalTitle}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Select a registered citizen or institution record to embed in this conversation.
+              {t.communication.shareRidModalDesc}
             </DialogDescription>
           </DialogHeader>
           <div className="p-5 space-y-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by applicant name, 29-digit RID, phone, or institution..."
+                placeholder={t.communication.searchRidModalPlaceholder}
                 value={ridSearchTerm}
                 onChange={(e) => setRidSearchTerm(e.target.value)}
                 className="pl-9 h-10 rounded-xl text-xs"
@@ -2706,7 +2881,7 @@ export default function CommunicationPage() {
                   })
                 ) : (
                   <div className="py-16 text-center text-xs text-muted-foreground">
-                    No matching registration records found.
+                    {t.communication.noMatchingRecords}
                   </div>
                 )}
               </div>
@@ -2727,19 +2902,19 @@ export default function CommunicationPage() {
                 <div className="flex items-center justify-between gap-3">
                   <DialogTitle className="text-base font-black uppercase tracking-tight flex items-center gap-2">
                     <FileDigit className="h-5 w-5 text-primary" />
-                    Shared Registration Record
+                    {t.communication.sharedRecordModalTitle}
                   </DialogTitle>
                   <StatusBadge status={inspectedSharedReg.status} />
                 </div>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Shared directly inside Coordination Portal
+                  {t.communication.sharedRecordModalDesc}
                 </DialogDescription>
               </DialogHeader>
               <div className="p-6 space-y-4">
                 <div className="rounded-2xl bg-muted/30 border border-border p-4 space-y-3 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                      Applicant Name
+                      {t.institutionsPage.colApplicantName}
                     </span>
                     <span className="font-bold text-foreground">
                       {inspectedSharedReg.applicantName}
@@ -2748,7 +2923,7 @@ export default function CommunicationPage() {
                   {inspectedSharedReg.institutionName && (
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                        Institution Name
+                        {t.institutionsPage.colInstitutionName}
                       </span>
                       <span className="font-bold text-primary flex items-center gap-1">
                         <Building2 className="h-3.5 w-3.5" />
@@ -2758,7 +2933,7 @@ export default function CommunicationPage() {
                   )}
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                      29-Digit RID
+                      {t.institutionsPage.colRegistrationId}
                     </span>
                     <button
                       type="button"
@@ -2772,7 +2947,7 @@ export default function CommunicationPage() {
                   {inspectedSharedReg.phone && (
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                        Phone
+                        {t.institutionsPage.colPhone}
                       </span>
                       <span className="font-mono font-semibold">{inspectedSharedReg.phone}</span>
                     </div>
@@ -2780,7 +2955,7 @@ export default function CommunicationPage() {
                   {inspectedSharedReg.location && (
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                        Location
+                        {t.common.location}
                       </span>
                       <span className="font-semibold">{inspectedSharedReg.location}</span>
                     </div>
@@ -2798,7 +2973,8 @@ export default function CommunicationPage() {
                       }}
                       className="rounded-xl text-xs font-bold"
                     >
-                      <Building2 className="mr-1.5 h-3.5 w-3.5" /> Open in Institutions
+                      <Building2 className="mr-1.5 h-3.5 w-3.5" />{' '}
+                      {t.communication.openInInstitutionsBtn}
                     </Button>
                   ) : (
                     <Button
@@ -2810,7 +2986,8 @@ export default function CommunicationPage() {
                       }}
                       className="rounded-xl text-xs font-bold"
                     >
-                      <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open in Records
+                      <ExternalLink className="mr-1.5 h-3.5 w-3.5" />{' '}
+                      {t.communication.openInRecordsBtn}
                     </Button>
                   )}
                   <Button
@@ -2818,7 +2995,7 @@ export default function CommunicationPage() {
                     onClick={() => setInspectedSharedReg(null)}
                     className="rounded-xl text-xs font-bold"
                   >
-                    Done
+                    {t.communication.doneBtn}
                   </Button>
                 </div>
               </div>
@@ -2837,19 +3014,19 @@ export default function CommunicationPage() {
                   {activeConv.type === 'group' ? (
                     <>
                       <Users className="h-5 w-5 text-primary" />
-                      Group Channel Management
+                      {t.communication.groupManageTitle}
                     </>
                   ) : (
                     <>
                       <User className="h-5 w-5 text-primary" />
-                      Direct Channel Intelligence
+                      {t.communication.directInfoTitle}
                     </>
                   )}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
                   {activeConv.type === 'group'
-                    ? 'Update group designation, inspect members, or add/remove personnel.'
-                    : 'Direct encrypted link between bureau personnel.'}
+                    ? t.communication.groupManageDesc
+                    : t.communication.directInfoDesc}
                 </DialogDescription>
               </DialogHeader>
 
@@ -2859,19 +3036,19 @@ export default function CommunicationPage() {
                     {/* Rename Group */}
                     <div className="space-y-3">
                       <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                        Group Designation & Purpose
+                        {t.communication.groupNameLabel}
                       </Label>
                       <div className="space-y-2">
                         <Input
                           value={editGroupName}
                           onChange={(e) => setEditGroupName(e.target.value)}
-                          placeholder="Group Name"
+                          placeholder={t.communication.groupNameLabel}
                           className="h-10 rounded-xl text-xs font-bold"
                         />
                         <Input
                           value={editGroupDescription}
                           onChange={(e) => setEditGroupDescription(e.target.value)}
-                          placeholder="Channel description..."
+                          placeholder={t.communication.groupPurposePlaceholder}
                           className="h-9 rounded-xl text-xs"
                         />
                         <Button
@@ -2879,7 +3056,7 @@ export default function CommunicationPage() {
                           onClick={handleSaveGroupDetails}
                           className="h-9 rounded-xl text-xs font-bold"
                         >
-                          Save Group Info
+                          {t.communication.saveGroupInfoBtn}
                         </Button>
                       </div>
                     </div>
@@ -2887,7 +3064,10 @@ export default function CommunicationPage() {
                     {/* Current Group Members */}
                     <div className="space-y-2.5">
                       <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                        Current Members ({activeConv.members?.length || 0})
+                        {t.communication.currentMembersHeader.replace(
+                          '{count}',
+                          formatNumber(activeConv.members?.length || 0)
+                        )}
                       </Label>
                       <div className="space-y-1.5 border border-border rounded-2xl p-2 bg-muted/10">
                         {(activeConv.members || []).map((memberId) => {
@@ -2917,7 +3097,7 @@ export default function CommunicationPage() {
                                       (memberId === user?.uid ? 'You' : 'Bureau Official')}
                                     {isCreator && (
                                       <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-primary/10 text-primary">
-                                        Creator
+                                        {t.communication.creatorBadge}
                                       </span>
                                     )}
                                   </p>
@@ -2938,7 +3118,7 @@ export default function CommunicationPage() {
                                     )
                                   }
                                   className="h-8 w-8 text-muted-foreground hover:text-destructive rounded-lg"
-                                  title="Remove from group"
+                                  title={t.communication.removeFromGroupTooltip}
                                 >
                                   <UserMinus className="h-4 w-4" />
                                 </Button>
@@ -2952,10 +3132,10 @@ export default function CommunicationPage() {
                     {/* Add Personnel to Group */}
                     <div className="space-y-2.5">
                       <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                        Add Personnel to Group
+                        {t.communication.addPersonnelHeader}
                       </Label>
                       <Input
-                        placeholder="Filter available personnel..."
+                        placeholder={t.communication.filterAvailablePlaceholder}
                         value={addMemberSearch}
                         onChange={(e) => setAddMemberSearch(e.target.value)}
                         className="h-9 rounded-xl text-xs"
@@ -2991,7 +3171,7 @@ export default function CommunicationPage() {
                                 onClick={() => handleAddMemberToGroup(u.id, u.fullName)}
                                 className="h-7 px-2.5 rounded-lg text-[10px] font-bold"
                               >
-                                <UserPlus className="h-3 w-3 mr-1" /> Add
+                                <UserPlus className="h-3 w-3 mr-1" /> {t.communication.addBtn}
                               </Button>
                             </div>
                           ))}
@@ -3006,7 +3186,7 @@ export default function CommunicationPage() {
                         onClick={handleLeaveGroup}
                         className="rounded-xl text-xs font-bold text-rose-600 border-rose-500/20 hover:bg-rose-500/10"
                       >
-                        <LogOut className="h-3.5 w-3.5 mr-1.5" /> Leave Group
+                        <LogOut className="h-3.5 w-3.5 mr-1.5" /> {t.communication.leaveGroupBtn}
                       </Button>
                       {isAdmin && (
                         <Button
@@ -3015,7 +3195,7 @@ export default function CommunicationPage() {
                           onClick={handleDeleteConversation}
                           className="rounded-xl text-xs font-bold"
                         >
-                          <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete Group
+                          <Trash2 className="h-3.5 w-3.5 mr-1.5" /> {t.communication.deleteGroupBtn}
                         </Button>
                       )}
                     </div>
@@ -3046,7 +3226,7 @@ export default function CommunicationPage() {
                           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border text-xs">
                             <div>
                               <span className="text-[10px] font-black uppercase text-muted-foreground block">
-                                Role
+                                {t.common.role}
                               </span>
                               <span className="font-bold uppercase">
                                 {other?.role || 'Official'}
@@ -3054,10 +3234,12 @@ export default function CommunicationPage() {
                             </div>
                             <div>
                               <span className="text-[10px] font-black uppercase text-muted-foreground block">
-                                Duty Status
+                                {t.communication.dutyStatusLabel}
                               </span>
                               <span className="font-bold">
-                                {other?.isDutyActive ? 'Active Duty (Online)' : 'Offline'}
+                                {other?.isDutyActive
+                                  ? t.communication.activeDutyStatus
+                                  : t.communication.offlineStatus}
                               </span>
                             </div>
                           </div>
@@ -3072,7 +3254,8 @@ export default function CommunicationPage() {
                           onClick={handleDeleteConversation}
                           className="rounded-xl text-xs font-bold"
                         >
-                          <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete Channel
+                          <Trash2 className="h-3.5 w-3.5 mr-1.5" />{' '}
+                          {t.communication.deleteChannelBtn}
                         </Button>
                       </div>
                     )}
@@ -3088,7 +3271,7 @@ export default function CommunicationPage() {
       <Dialog open={Boolean(previewImageUrl)} onOpenChange={(o) => !o && setPreviewImageUrl(null)}>
         <DialogContent className="sm:max-w-[720px] p-2 rounded-3xl overflow-hidden bg-black/90 border-white/10">
           <DialogHeader className="sr-only">
-            <DialogTitle>Attachment Preview</DialogTitle>
+            <DialogTitle>{t.common.view}</DialogTitle>
           </DialogHeader>
           {previewImageUrl && (
             <div className="flex flex-col items-center justify-center p-2">
@@ -3107,12 +3290,12 @@ export default function CommunicationPage() {
         <AlertDialogContent className="rounded-[32px] border-none shadow-2xl bg-popover max-w-sm mx-4">
           <AlertDialogHeader className="p-6 text-center">
             <AlertDialogTitle className="text-xl font-black uppercase tracking-tight">
-              Purge Transmission?
+              {t.communication.deleteMsgTitle}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs font-medium text-muted-foreground mt-2">
               {msgToDelete?.senderId === user?.uid || isAdmin
-                ? 'Permanently delete this message for everyone in the channel.'
-                : 'Remove this message from your local terminal viewport.'}
+                ? t.communication.deleteMsgDescAll
+                : t.communication.deleteMsgDescLocal}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="p-6 pt-0 bg-muted/30 flex flex-col gap-3">
@@ -3121,10 +3304,10 @@ export default function CommunicationPage() {
               className="w-full h-11 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-destructive/10"
               onClick={handleConfirmDeleteMessage}
             >
-              Purge Record
+              {t.communication.deleteMsgConfirmBtn}
             </Button>
             <AlertDialogCancel className="w-full h-11 rounded-2xl font-bold uppercase text-[10px] tracking-widest border-none bg-transparent">
-              Abort
+              {t.common.cancel}
             </AlertDialogCancel>
           </div>
         </AlertDialogContent>
@@ -3153,9 +3336,11 @@ export default function CommunicationPage() {
 
 function DirectoryRow({
   user,
+  commandBadgeLabel,
   onOpen,
 }: {
   user: UserProfile;
+  commandBadgeLabel?: string;
   onOpen: (id: string) => void;
 }) {
   return (
@@ -3190,7 +3375,7 @@ function DirectoryRow({
           </p>
           {user.role === 'admin' && (
             <span className="text-[7px] font-black bg-primary text-primary-foreground px-1.5 py-0.5 rounded tracking-widest uppercase">
-              Command
+              {commandBadgeLabel || 'Admin'}
             </span>
           )}
         </div>

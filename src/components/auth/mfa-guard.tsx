@@ -6,6 +6,7 @@ import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { UserProfile } from '@/lib/types';
 import { VerificationAnimation } from '@/components/auth/verification-animation';
+import { useTranslation } from '@/i18n/language-provider';
 
 /**
  * MFA & Role Guard Component
@@ -17,6 +18,7 @@ export function MfaGuard({ children }: { children: React.ReactNode }) {
   const db = useFirestore();
   const router = useRouter();
   const pathname = usePathname();
+  const { t } = useTranslation();
   const [isVerified, setIsVerified] = useState<boolean | null>(null);
 
   const userProfileRef = useMemoFirebase(() => {
@@ -76,7 +78,13 @@ export function MfaGuard({ children }: { children: React.ReactNode }) {
           <VerificationAnimation
             variant="session"
             userName={profile?.fullName}
-            userRole={profile?.role === 'admin' ? 'Bureau Administrator' : profile?.role ? 'Field Officer' : undefined}
+            userRole={
+              profile?.role === 'admin'
+                ? t.common.adminRole
+                : profile?.role
+                ? t.common.officerRole
+                : undefined
+            }
             durationMs={600}
             compact
           />

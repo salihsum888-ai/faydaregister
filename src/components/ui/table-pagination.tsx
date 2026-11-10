@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/i18n/language-provider';
 
 interface TablePaginationProps {
   currentPage: number;
@@ -25,13 +26,15 @@ export function TablePagination({
   totalCount,
   shownItems,
   totalItems,
-  itemLabel = 'records',
+  itemLabel,
   className,
   compact = false,
 }: TablePaginationProps) {
+  const { t, formatNumber } = useTranslation();
   const safeTotalPages = Math.max(1, totalPages);
   const resolvedShowing = showingCount ?? shownItems;
   const resolvedTotal = totalCount ?? totalItems;
+  const resolvedItemLabel = itemLabel || t('common.records');
   const [inputValue, setInputValue] = React.useState(String(currentPage));
 
   React.useEffect(() => {
@@ -90,11 +93,12 @@ export function TablePagination({
     >
       {/* Left: Showing X of Y label */}
       {typeof resolvedShowing === 'number' && typeof resolvedTotal === 'number' ? (
-        <p className="text-xs text-slate-500 dark:text-muted-foreground order-2 sm:order-1 text-center sm:text-left">
-          <span className="font-semibold text-[#1e3a8a] dark:text-blue-400">
-            Showing {resolvedShowing}
-          </span>{' '}
-          of {resolvedTotal} {itemLabel}
+        <p className="text-xs text-slate-500 dark:text-muted-foreground order-2 sm:order-1 text-center sm:text-left font-medium">
+          {t('common.showingOf', {
+            showing: formatNumber(resolvedShowing),
+            total: formatNumber(resolvedTotal),
+            items: resolvedItemLabel,
+          })}
         </p>
       ) : (
         <div className="hidden sm:block order-1" />
@@ -107,7 +111,8 @@ export function TablePagination({
             type="button"
             onClick={() => onPageChange(Math.max(1, currentPage - 1))}
             className="h-7 w-7 rounded-[6px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-card text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center justify-center transition-colors"
-            aria-label="Previous page"
+            aria-label={t('common.previousPage')}
+            title={t('common.previousPage')}
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </button>
@@ -133,7 +138,7 @@ export function TablePagination({
                   : 'border border-slate-200 dark:border-slate-800 bg-white dark:bg-card text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 font-medium'
               )}
             >
-              {page}
+              {formatNumber(page)}
             </button>
           )
         )}
@@ -143,7 +148,8 @@ export function TablePagination({
           onClick={() => onPageChange(Math.min(safeTotalPages, currentPage + 1))}
           disabled={currentPage >= safeTotalPages}
           className="h-7 w-7 rounded-[6px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-card text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center transition-colors"
-          aria-label="Next page"
+          aria-label={t('common.nextPage')}
+          title={t('common.nextPage')}
         >
           <ChevronRight className="h-3.5 w-3.5" />
         </button>
@@ -156,7 +162,7 @@ export function TablePagination({
           className="flex items-center gap-2.5 order-3"
         >
           <span className="text-xs font-medium text-slate-500 dark:text-muted-foreground whitespace-nowrap">
-            Go to page
+            {t('common.goToPage')}
           </span>
           <input
             type="text"

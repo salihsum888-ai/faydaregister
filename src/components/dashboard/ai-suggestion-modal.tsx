@@ -20,6 +20,7 @@ import { StatusBadge } from './status-badge';
 import { useFirestore } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { updateDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { useTranslation } from '@/i18n/language-provider';
 
 interface AiSuggestionModalProps {
   registration: Registration;
@@ -31,6 +32,7 @@ export function AiSuggestionModal({ registration }: AiSuggestionModalProps) {
   const [suggestion, setSuggestion] = useState<{ status: string; reason: string } | null>(null);
   const { toast } = useToast();
   const db = useFirestore();
+  const { locale, t } = useTranslation();
 
   const handleSuggest = async () => {
     setLoading(true);
@@ -41,6 +43,7 @@ export function AiSuggestionModal({ registration }: AiSuggestionModalProps) {
         applicantName: registration.applicantName,
         attachmentsIncluded: registration.attachmentsIncluded,
         submissionDate: registration.submissionDate,
+        locale,
       });
       setSuggestion({
         status: result.suggestedStatus,
@@ -48,8 +51,8 @@ export function AiSuggestionModal({ registration }: AiSuggestionModalProps) {
       });
     } catch (error) {
       toast({
-        title: "Analysis Failed",
-        description: "The AI assistant could not analyze this submission at this time.",
+        title: t.aiModal.toastFailedTitle,
+        description: t.aiModal.toastFailedDesc,
         variant: "destructive",
       });
     } finally {
@@ -68,19 +71,19 @@ export function AiSuggestionModal({ registration }: AiSuggestionModalProps) {
     };
 
     const newStatus = statusMap[suggestion.status] || suggestion.status;
+    const localizedStatus = t.common.status[newStatus as keyof typeof t.common.status] || newStatus;
 
     updateDocumentNonBlocking(doc(db, 'registrations', registration.id), {
       status: newStatus,
-      remarks: `AI RECOMMENDED: ${suggestion.reason}`,
+      remarks: `AI: ${suggestion.reason}`,
       updatedAt: new Date().toISOString(),
     });
 
     toast({
-      title: "Recommendation Applied",
-      description: `Status updated to ${newStatus} based on AI analysis.`,
+      title: t.aiModal.toastAppliedTitle,
+      description: t.aiModal.toastAppliedDesc.replace('{status}', localizedStatus),
     });
 
-    // Close modal implicitly via parent state if needed, or just let user see success
     setTimeout(() => {
       setIsApplying(false);
       setSuggestion(null);
@@ -92,17 +95,17 @@ export function AiSuggestionModal({ registration }: AiSuggestionModalProps) {
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5 text-primary hover:text-primary hover:bg-primary/5">
           <Sparkles className="h-3 w-3" />
-          AI Suggest
+          {t.aiModal.triggerBtn}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md border-border bg-card">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
             <Sparkles className="h-5 w-5 text-primary" />
-            AI Status Recommendation
+            {t.aiModal.title}
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            FaydaTrack AI analyzes the submission content and metadata to recommend an initial status.
+            {t.aiModal.description}
           </DialogDescription>
         </DialogHeader>
 
@@ -110,7 +113,7 @@ export function AiSuggestionModal({ registration }: AiSuggestionModalProps) {
           <div className="p-3 bg-muted/50 rounded-lg text-sm border border-border">
             <h4 className="font-bold mb-1 flex items-center gap-2 text-foreground">
               <Info className="h-4 w-4 text-muted-foreground" /> 
-              Submission Context
+              {t.aiModal.submissionContext}
             </h4>
             <p className="text-muted-foreground line-clamp-3 italic font-medium">
               "{registration.content}"
@@ -121,7 +124,7 @@ export function AiSuggestionModal({ registration }: AiSuggestionModalProps) {
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Sparkles className="h-12 w-12 text-muted-foreground/20 mb-4" />
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground max-w-[240px]">
-                Ready to analyze registration details for {registration.applicantName}.
+                {t.aiModal.readyPrompt.replace('{name}', registration.applicantName)}
               </p>
             </div>
           )}
@@ -129,18 +132,18 @@ export function AiSuggestionModal({ registration }: AiSuggestionModalProps) {
           {loading && (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Analyzing content patterns...</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{t.aiModal.analyzingPrompt}</p>
             </div>
           )}
 
           {suggestion && (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
               <div className="flex items-center justify-between p-4 bg-primary/5 rounded-xl border border-primary/20">
-                <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Recommended Status</span>
+                <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{t.aiModal.recommendedStatusLabel}</span>
                 <StatusBadge status={suggestion.status as any} />
               </div>
               <div className="space-y-2">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Reasoning</h4>
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{t.aiModal.reasoningLabel}</h4>
                 <p className="text-sm text-foreground p-4 bg-muted/30 rounded-xl border border-border leading-relaxed">
                   {suggestion.reason}
                 </p>
@@ -156,19 +159,19 @@ export function AiSuggestionModal({ registration }: AiSuggestionModalProps) {
               disabled={loading}
               className="w-full bg-primary hover:bg-primary/90 font-bold"
             >
-              {loading ? "Analyzing..." : "Analyze Submission"}
+              {loading ? t.aiModal.analyzingBtn : t.aiModal.analyzeBtn}
             </Button>
           ) : (
             <div className="grid grid-cols-2 gap-3 w-full">
               <Button variant="outline" onClick={() => setSuggestion(null)} className="font-bold border-border">
-                Recalculate
+                {t.aiModal.recalculateBtn}
               </Button>
               <Button 
                 onClick={handleApplySuggestion} 
                 disabled={isApplying}
                 className="bg-primary hover:bg-primary/90 font-bold"
               >
-                {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Check className="mr-2 h-4 w-4" /> Apply</>}
+                {isApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Check className="mr-2 h-4 w-4" /> {t.aiModal.applyBtn}</>}
               </Button>
             </div>
           )}

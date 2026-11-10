@@ -1,11 +1,9 @@
-
 "use client"
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { 
-  LayoutDashboard, 
   FileCheck, 
   Database, 
   Bell, 
@@ -26,11 +24,8 @@ import {
   ShieldCheck,
   History,
   ChevronDown,
-  ChevronUp,
   ChevronsUpDown,
   LineChart,
-  Wifi,
-  WifiOff,
   MoreHorizontal,
   ClipboardList,
   LayoutGrid,
@@ -39,8 +34,8 @@ import {
   GraduationCap,
   PhoneIncoming,
   Video,
-  PanelBottomClose,
-  PanelBottomOpen
+  Menu,
+  ArrowRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -60,12 +55,9 @@ import { UserProfile, Notification, SystemSettings, Conversation } from '@/lib/t
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useTheme } from 'next-themes';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  Tooltip,
-  TooltipProvider,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/components/ui/tooltip"
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { useTranslation } from '@/i18n/language-provider';
+import { LanguageSwitcher } from '@/components/layout/language-switcher';
 
 const DEFAULT_LOGO = "https://services.eaes.et/NID-Logos/Fayda%20For%20Ethiopia%20logo-%20english-2-01.png";
 
@@ -76,24 +68,17 @@ export function Navbar() {
   const auth = useAuth();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const { t, formatNumber } = useTranslation();
   const [mounted, setMounted] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isPublicMenuOpen, setIsPublicMenuOpen] = useState(false);
   const [isNavVisible, setIsNavVisible] = useState(true);
-  const [isTabDockHidden, setIsTabDockHidden] = useState(false);
   const lastScrollY = useRef(0);
 
   useEffect(() => {
     setMounted(true);
     setIsOnline(navigator.onLine);
-    try {
-      const savedHidden = localStorage.getItem('fayda_hide_mobile_tabs');
-      if (savedHidden === 'true') {
-        setIsTabDockHidden(true);
-      }
-    } catch {
-      // Ignore storage access errors
-    }
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
@@ -117,19 +102,6 @@ export function Navbar() {
       window.removeEventListener('scroll', handleScroll);
     };
   }, []);
-
-  const toggleMobileTabDock = (nextState?: boolean) => {
-    const target = typeof nextState === 'boolean' ? nextState : !isTabDockHidden;
-    setIsTabDockHidden(target);
-    if (!target) {
-      setIsNavVisible(true);
-    }
-    try {
-      localStorage.setItem('fayda_hide_mobile_tabs', String(target));
-    } catch {
-      // Ignore storage errors
-    }
-  };
 
   const brandingRef = useMemoFirebase(() => {
     if (!db) return null;
@@ -172,11 +144,12 @@ export function Navbar() {
     };
     const profileReadTs = profile?.lastMessageReadAt ? getTs(profile.lastMessageReadAt) : 0;
     return userConversations.filter((c) => {
+      if (c.isMeetingRoom) return false;
       if (c.lastSenderId && c.lastSenderId === user.uid) return false;
       const lastMsgTs = getTs(c.lastTimestamp);
       if (!lastMsgTs) return false;
       const convReadTs = c.lastReadBy?.[user.uid] ? getTs(c.lastReadBy[user.uid]) : 0;
-      const effectiveReadTs = convReadTs > 0 ? convReadTs : profileReadTs;
+      const effectiveReadTs = Math.max(convReadTs, profileReadTs);
       return lastMsgTs > effectiveReadTs;
     }).length;
   }, [userConversations, user?.uid, profile?.lastMessageReadAt]);
@@ -198,44 +171,52 @@ export function Navbar() {
   const isAdmin = profile?.role === 'admin';
 
   const PRIMARY_NAV = [
-    { name: 'Home', href: isAdmin ? '/admin' : '/dashboard', icon: LayoutGrid },
-    { name: 'Institutions', href: '/schools-students', icon: Building2 },
-    { name: 'Intel', href: '/full-performance', icon: LineChart },
-    { name: 'Full Record', href: '/full-registration', icon: Activity },
-    { name: 'Chat', href: '/communication', icon: MessageSquare },
+    { name: t('nav.home'), href: isAdmin ? '/admin' : '/dashboard', icon: LayoutGrid },
+    { name: t('nav.institutions'), href: '/schools-students', icon: Building2 },
+    { name: t('nav.intel'), href: '/full-performance', icon: LineChart },
+    { name: t('nav.fullRecord'), href: '/full-registration', icon: Activity },
+    { name: t('nav.chat'), href: '/communication', icon: MessageSquare },
+  ];
+
+  const PUBLIC_NAV = [
+    { name: t('nav.overview'), href: '/#capabilities', icon: LayoutGrid },
+    { name: t('nav.statusCheck'), href: '/status-check', icon: Search },
+    { name: t('nav.liveRegistry'), href: '/full-registration', icon: Activity },
+    { name: t('nav.institutions'), href: '/schools-students', icon: Building2 },
+    { name: t('nav.performance'), href: '/full-performance', icon: LineChart },
   ];
 
   const MOBILE_NAV = [
-    { name: 'HOME', href: isAdmin ? '/admin' : '/dashboard', icon: Home },
-    { name: 'INSTITUTIONS', href: '/schools-students', icon: Building2 },
-    { name: 'INTEL', href: '/full-performance', icon: LineChart },
-    { name: 'FULL RECORD', href: '/full-registration', icon: Activity },
+    { name: t('nav.home'), href: isAdmin ? '/admin' : '/dashboard', icon: Home },
+    { name: t('nav.institutions'), href: '/schools-students', icon: Building2 },
+    { name: t('nav.intel'), href: '/full-performance', icon: LineChart },
+    { name: t('nav.fullRecord'), href: '/full-registration', icon: Activity },
   ];
 
   const SECONDARY_NAV = isAdmin ? [
-    { name: 'Meetings & Exams', href: '/meetings', icon: GraduationCap },
-    { name: 'Audit', href: '/admin/audit-ledger', icon: ShieldCheck },
-    { name: 'Performance', href: '/performance', icon: TrendingUp },
-    { name: 'Comparison', href: '/previous', icon: History },
-    { name: 'Status Check', href: '/status-check', icon: Search },
-    { name: 'Printing', href: '/printing', icon: Printer },
-    { name: 'Personnel', href: '/admin/officers', icon: Users },
-    { name: 'Proxy Entry', href: '/admin/reports-entry', icon: FilePenLine },
-    { name: 'Broadcasts', href: '/admin/announcements', icon: Megaphone },
-    { name: 'Branding', href: '/admin/settings', icon: Settings },
-    { name: 'Chat', href: '/communication', icon: MessageSquare },
+    { name: t('nav.meetingsExams'), href: '/meetings', icon: GraduationCap },
+    { name: t('nav.audit'), href: '/admin/audit-ledger', icon: ShieldCheck },
+    { name: t('nav.performance'), href: '/performance', icon: TrendingUp },
+    { name: t('nav.comparison'), href: '/previous', icon: History },
+    { name: t('nav.statusCheck'), href: '/status-check', icon: Search },
+    { name: t('nav.printing'), href: '/printing', icon: Printer },
+    { name: t('nav.personnel'), href: '/admin/officers', icon: Users },
+    { name: t('nav.proxyEntry'), href: '/admin/reports-entry', icon: FilePenLine },
+    { name: t('nav.broadcasts'), href: '/admin/announcements', icon: Megaphone },
+    { name: t('nav.branding'), href: '/admin/settings', icon: Settings },
+    { name: t('nav.chat'), href: '/communication', icon: MessageSquare },
   ] : [
-    { name: 'Meetings & Exams', href: '/meetings', icon: GraduationCap },
-    { name: 'Performance', href: '/performance', icon: TrendingUp },
-    { name: 'Comparison', href: '/previous', icon: History },
-    { name: 'Status Check', href: '/status-check', icon: Search },
-    { name: 'Printing', href: '/printing', icon: Printer },
-    { name: 'Daily Reports', href: '/daily-registrations', icon: CalendarPlus },
-    { name: 'Records', href: '/registrations', icon: FileCheck },
-    { name: 'History', href: '/historical', icon: Database },
-    { name: 'Analytics', href: '/reports', icon: ClipboardList },
-    { name: 'Ranks', href: '/leaderboard', icon: Trophy },
-    { name: 'Chat', href: '/communication', icon: MessageSquare },
+    { name: t('nav.meetingsExams'), href: '/meetings', icon: GraduationCap },
+    { name: t('nav.performance'), href: '/performance', icon: TrendingUp },
+    { name: t('nav.comparison'), href: '/previous', icon: History },
+    { name: t('nav.statusCheck'), href: '/status-check', icon: Search },
+    { name: t('nav.printing'), href: '/printing', icon: Printer },
+    { name: t('nav.dailyReports'), href: '/daily-registrations', icon: CalendarPlus },
+    { name: t('nav.records'), href: '/registrations', icon: FileCheck },
+    { name: t('nav.history'), href: '/historical', icon: Database },
+    { name: t('nav.analytics'), href: '/reports', icon: ClipboardList },
+    { name: t('nav.ranks'), href: '/leaderboard', icon: Trophy },
+    { name: t('nav.chat'), href: '/communication', icon: MessageSquare },
   ];
 
   const DESKTOP_SECONDARY_NAV = SECONDARY_NAV.filter((item) => item.href !== '/communication');
@@ -258,26 +239,27 @@ export function Navbar() {
     .substring(0, 2)
     .toUpperCase();
 
+  const localizedRole = profile?.role === 'admin'
+    ? t('common.adminRole')
+    : profile?.role
+    ? t('common.officerRole')
+    : t('common.personnel');
+
   return (
     <TooltipProvider>
-      <header className="sticky top-0 z-50 w-full glass-navbar transition-all duration-300 print:hidden">
-        {/* Top Specular Edge Highlight */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/90 dark:via-white/25 to-transparent" />
-        {/* Subtle Ambient Glow Underlay */}
-        <div className="pointer-events-none absolute left-1/3 -top-10 h-20 w-72 rounded-full bg-primary/10 dark:bg-primary/15 blur-2xl" />
-
-        <div className="relative w-full max-w-7xl mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8 gap-2 sm:gap-4">
-          {/* Left Navigation Group */}
-          <div className="flex items-center gap-3 lg:gap-4 min-w-0 flex-1">
+      <header className="sticky top-2.5 sm:top-3 z-50 w-full px-2.5 sm:px-5 lg:px-8 transition-all duration-300 print:hidden">
+        <div className="relative w-full max-w-7xl mx-auto flex h-14 sm:h-16 items-center justify-between px-2.5 sm:px-4 lg:px-5 rounded-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-white/90 dark:border-slate-800 shadow-[0_14px_40px_rgba(15,23,42,0.07)] gap-1.5 sm:gap-2.5 overflow-hidden">
+          {/* Left Brand & Desktop Navigation Group */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 xl:gap-3.5 min-w-0 flex-1 overflow-hidden">
             <Link
-              href={isAdmin ? '/admin' : '/dashboard'}
-              className="flex items-center gap-2.5 pr-1 group shrink-0"
+              href={user ? (isAdmin ? '/admin' : '/dashboard') : '/'}
+              className="flex items-center gap-1.5 sm:gap-2 pr-0.5 group shrink-0"
             >
-              <div className="relative h-9 w-9 overflow-hidden rounded-xl glass-subpanel p-1 transition-all duration-300 group-hover:scale-105 group-hover:border-primary/40">
+              <div className="relative h-8 w-8 sm:h-9 sm:w-9 overflow-hidden rounded-xl bg-[#F4F5F8] dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 p-1 transition-all duration-300 group-hover:scale-105 shrink-0">
                 <div className="relative h-full w-full overflow-hidden rounded-lg">
                   <Image
                     src={logoUrl}
-                    alt="Logo"
+                    alt={bureauName}
                     fill
                     sizes="36px"
                     className="object-cover"
@@ -285,19 +267,14 @@ export function Navbar() {
                   />
                 </div>
               </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-bold tracking-tight text-slate-900 dark:text-white truncate max-w-[140px] leading-tight">
-                  {bureauName}
-                </span>
-                <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 leading-none mt-0.5 hidden sm:inline">
-                  {isAdmin ? 'Command' : 'Portal'}
-                </span>
-              </div>
+              <span className="text-[14px] sm:text-[16px] xl:text-[17px] font-extrabold tracking-[-0.03em] text-[#0B1238] dark:text-white truncate max-w-[92px] sm:max-w-[130px] xl:max-w-[145px] leading-tight">
+                {bureauName}
+              </span>
             </Link>
 
-            {user && (
-              <nav className="hidden lg:flex items-center min-w-0 overflow-x-auto no-scrollbar py-1">
-                <div className="flex items-center gap-1.5 p-1.5 rounded-2xl clay-tab-pill">
+            {user ? (
+              <nav className="hidden lg:flex items-center justify-center min-w-0 flex-1 py-1 overflow-hidden">
+                <div className="flex items-center gap-0.5 xl:gap-1 p-1 rounded-full bg-[#F4F5F8] dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 max-w-full overflow-hidden">
                   {PRIMARY_NAV.map((item) => {
                     const isActive = pathname === item.href;
 
@@ -305,66 +282,67 @@ export function Navbar() {
                       <Link
                         key={item.href}
                         href={item.href}
+                        title={item.name}
                         className={cn(
-                          "group relative flex items-center gap-1.5 lg:gap-2 px-3.5 lg:px-4 py-1.5 text-xs lg:text-[13px] rounded-xl transition-all duration-300 whitespace-nowrap shrink-0",
+                          "group relative flex items-center gap-1 xl:gap-1.5 px-2 xl:px-2.5 2xl:px-3 py-1.5 text-[11px] xl:text-[12px] rounded-full transition-all duration-200 whitespace-nowrap min-w-0 shrink",
                           isActive
-                            ? "clay-tab-active text-slate-900 dark:text-white font-bold scale-[1.02]"
-                            : "border border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/[0.06] font-semibold active:scale-95"
+                            ? "bg-[#0B1238] dark:bg-[#EC4899] text-white font-bold shadow-sm"
+                            : "text-[#1D2549] dark:text-slate-300 hover:text-[#EC4899] dark:hover:text-white hover:bg-white/80 dark:hover:bg-white/[0.06] font-semibold"
                         )}
                       >
                         <item.icon
                           className={cn(
-                            "h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110",
+                            "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
                             isActive
-                              ? "text-[#FF6B4A] drop-shadow-[0_2px_6px_rgba(255,107,74,0.35)]"
-                              : "text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300"
+                              ? "text-[#EC4899] dark:text-white"
+                              : "text-slate-400 dark:text-slate-400 group-hover:text-[#EC4899]"
                           )}
                         />
-                        <span>{item.name}</span>
+                        <span className="max-w-[74px] xl:max-w-[104px] 2xl:max-w-[132px] truncate">{item.name}</span>
                         {item.href === '/communication' && unreadChatCount > 0 && (
-                          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#FF6B4A] text-white text-[10px] font-black tabular-nums shadow-sm">
-                            {unreadChatCount}
+                          <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-[#EC4899] text-white text-[9.5px] font-black tabular-nums shadow-sm shrink-0">
+                            {formatNumber(unreadChatCount)}
                           </span>
-                        )}
-                        {isActive && (
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#FF6B4A] shadow-[0_0_8px_rgba(255,107,74,0.8)]" />
                         )}
                       </Link>
                     );
                   })}
 
-                  <div className="h-4 w-px bg-slate-300/70 dark:bg-white/10 mx-0.5" />
+                  <div className="h-4 w-px bg-slate-300/70 dark:bg-white/10 mx-0.5 shrink-0" />
 
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
+                        title={t('nav.bureauHub')}
                         className={cn(
-                          "group relative flex items-center gap-1.5 lg:gap-2 px-3.5 lg:px-4 py-1.5 text-xs lg:text-[13px] rounded-xl transition-all duration-300 whitespace-nowrap shrink-0 cursor-pointer focus:outline-none",
+                          "group relative flex items-center gap-1 xl:gap-1.5 px-2 xl:px-2.5 2xl:px-3 py-1.5 text-[11px] xl:text-[12px] rounded-full transition-all duration-200 whitespace-nowrap min-w-0 shrink cursor-pointer focus:outline-none",
                           isDesktopSecondaryActive
-                            ? "clay-tab-active text-slate-900 dark:text-white font-bold scale-[1.02]"
-                            : "border border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/[0.06] font-semibold active:scale-95"
+                            ? "bg-[#0B1238] dark:bg-[#EC4899] text-white font-bold shadow-sm"
+                            : "text-[#1D2549] dark:text-slate-300 hover:text-[#EC4899] dark:hover:text-white hover:bg-white/80 dark:hover:bg-white/[0.06] font-semibold"
                         )}
                       >
                         <ClipboardList
                           className={cn(
-                            "h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110",
+                            "h-3.5 w-3.5 shrink-0",
                             isDesktopSecondaryActive
-                              ? "text-[#FF6B4A] drop-shadow-[0_2px_6px_rgba(255,107,74,0.35)]"
-                              : "text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300"
+                              ? "text-[#EC4899] dark:text-white"
+                              : "text-slate-400 group-hover:text-[#EC4899]"
                           )}
                         />
-                        <span>Bureau Hub</span>
-                        <ChevronDown className="h-3.5 w-3.5 opacity-60 transition-transform duration-300 group-data-[state=open]:rotate-180" />
+                        <span className="max-w-[74px] xl:max-w-[104px] 2xl:max-w-[132px] truncate">
+                          {t('nav.bureauHub')}
+                        </span>
+                        <ChevronDown className="h-3.5 w-3.5 opacity-60 shrink-0 transition-transform duration-300 group-data-[state=open]:rotate-180" />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                       align="start"
                       sideOffset={8}
-                      className="w-60 p-1.5 rounded-2xl glass-dropdown"
+                      className="w-64 p-1.5 rounded-2xl glass-dropdown"
                     >
                       <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 px-3 py-2">
-                        Operational Terminals
+                        {t('nav.operationalTerminals')}
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator className="bg-slate-200/60 dark:bg-white/10" />
                       <div className="space-y-0.5 pt-1">
@@ -377,19 +355,19 @@ export function Navbar() {
                               className={cn(
                                 "rounded-xl text-[13px] font-medium cursor-pointer py-2.5 px-3 transition-all duration-200 focus:bg-white/70 dark:focus:bg-white/10",
                                 activeSub
-                                  ? "glass-nav-item-active font-semibold text-slate-900 dark:text-white"
-                                  : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                                  ? "glass-nav-item-active font-semibold text-[#0B1238] dark:text-white"
+                                  : "text-slate-600 dark:text-slate-300 hover:text-[#0B1238] dark:hover:text-white"
                               )}
                             >
                               <item.icon
                                 className={cn(
-                                  "mr-2.5 h-4 w-4 transition-colors",
-                                  activeSub ? "text-[#FF6B4A]" : "text-slate-400 dark:text-slate-500"
+                                  "mr-2.5 h-4 w-4 shrink-0 transition-colors",
+                                  activeSub ? "text-[#EC4899]" : "text-slate-400 dark:text-slate-500"
                                 )}
                               />
-                              <span className="flex-1">{item.name}</span>
+                              <span className="flex-1 truncate">{item.name}</span>
                               {activeSub && (
-                                <span className="h-1.5 w-1.5 rounded-full bg-[#FF6B4A]" />
+                                <span className="h-1.5 w-1.5 rounded-full bg-[#EC4899] shrink-0" />
                               )}
                             </DropdownMenuItem>
                           );
@@ -399,64 +377,68 @@ export function Navbar() {
                   </DropdownMenu>
                 </div>
               </nav>
+            ) : (
+              <nav className="hidden lg:flex items-center justify-center gap-2.5 xl:gap-5 min-w-0 flex-1 mx-2 text-[11.5px] xl:text-[13px] font-semibold text-[#1D2549] dark:text-slate-200 overflow-hidden">
+                {PUBLIC_NAV.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    title={item.name}
+                    className={cn(
+                      "transition-colors whitespace-nowrap min-w-0 shrink max-w-[92px] xl:max-w-[130px] 2xl:max-w-[155px] truncate",
+                      pathname === item.href
+                        ? "text-[#EC4899] font-bold"
+                        : "hover:text-[#EC4899]"
+                    )}
+                  >
+                    {item.name}
+                  </Link>
+                ))}
+              </nav>
             )}
           </div>
 
-          {/* Right Utility & Profile Group */}
+          {/* Right Utility, Language Switcher & Profile Group */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Global Language Switcher — Visible on every screen */}
+            <LanguageSwitcher />
+
             {user && (
               <>
                 {/* Quick Chat Button on Tablet & Mobile */}
                 <Link
                   href="/communication"
-                  title="Chat & Calls"
+                  title={t('nav.chatAndCalls')}
+                  aria-label={t('nav.chatAndCalls')}
                   className={cn(
-                    "lg:hidden relative h-9 w-9 flex items-center justify-center rounded-xl transition-all duration-300 active:scale-95",
+                    "lg:hidden relative h-8 w-8 sm:h-9 sm:w-9 flex items-center justify-center rounded-full transition-all duration-300 active:scale-95",
                     pathname === '/communication'
-                      ? "glass-nav-item-active text-primary"
-                      : "glass-subpanel text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-white/85 dark:hover:bg-white/10"
+                      ? "bg-[#0B1238] text-white"
+                      : "bg-[#F4F5F8] dark:bg-slate-800 text-slate-600 hover:text-slate-900 dark:text-slate-300"
                   )}
                 >
-                  <MessageSquare className="h-[17px] w-[17px]" />
+                  <MessageSquare className="h-[15px] w-[15px] sm:h-[16px] sm:w-[16px]" />
                   {unreadChatCount > 0 && (
-                    <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-[#FF6B4A] text-white text-[9px] font-black tabular-nums ring-2 ring-white dark:ring-slate-900">
-                      {unreadChatCount}
+                    <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-[#EC4899] text-white text-[9px] font-black tabular-nums ring-2 ring-white dark:ring-slate-900">
+                      {formatNumber(unreadChatCount)}
                     </span>
                   )}
                 </Link>
 
-                {/* Quick Hide / Show Bottom Tabs Button on Tablet & Mobile */}
-                <button
-                  type="button"
-                  onClick={() => toggleMobileTabDock()}
-                  title={isTabDockHidden ? "Show bottom navigation tabs" : "Hide bottom navigation tabs"}
-                  className={cn(
-                    "lg:hidden relative h-9 w-9 flex items-center justify-center rounded-xl transition-all duration-300 cursor-pointer active:scale-95",
-                    isTabDockHidden
-                      ? "bg-primary/15 text-primary border border-primary/30"
-                      : "glass-subpanel text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-white/85 dark:hover:bg-white/10"
-                  )}
-                >
-                  {isTabDockHidden ? (
-                    <PanelBottomOpen className="h-[17px] w-[17px]" />
-                  ) : (
-                    <PanelBottomClose className="h-[17px] w-[17px]" />
-                  )}
-                </button>
-
                 <Link
                   href="/notifications"
-                  title="Notifications"
+                  title={t('nav.notifications')}
+                  aria-label={t('nav.notifications')}
                   className={cn(
-                    "relative h-9 w-9 flex items-center justify-center rounded-xl transition-all duration-300 active:scale-95",
+                    "relative h-8 w-8 sm:h-9 sm:w-9 flex items-center justify-center rounded-full transition-all duration-300 active:scale-95",
                     pathname === '/notifications'
-                      ? "glass-nav-item-active text-primary"
-                      : "glass-subpanel text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-white/85 dark:hover:bg-white/10"
+                      ? "bg-[#0B1238] text-white"
+                      : "bg-[#F4F5F8] dark:bg-slate-800 text-slate-600 hover:text-slate-900 dark:text-slate-300"
                   )}
                 >
-                  <Bell className="h-[17px] w-[17px]" />
+                  <Bell className="h-[15px] w-[15px] sm:h-[16px] sm:w-[16px]" />
                   {((unreadNotifications && unreadNotifications.length > 0) || unreadChatCount > 0) && (
-                    <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-[#FF6B4A] rounded-full ring-2 ring-white dark:ring-slate-900 animate-pulse" />
+                    <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-[#EC4899] rounded-full ring-2 ring-white dark:ring-slate-900" />
                   )}
                 </Link>
               </>
@@ -466,13 +448,14 @@ export function Navbar() {
               <button
                 type="button"
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                title="Toggle theme"
-                className="h-9 w-9 flex items-center justify-center rounded-xl glass-subpanel text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-white/85 dark:hover:bg-white/10 transition-all duration-300 cursor-pointer active:scale-95"
+                title={t('nav.toggleTheme')}
+                aria-label={t('nav.toggleTheme')}
+                className="h-8 w-8 sm:h-9 sm:w-9 flex items-center justify-center rounded-full bg-[#F4F5F8] dark:bg-slate-800 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-all duration-300 cursor-pointer active:scale-95"
               >
                 {theme === 'dark' ? (
-                  <Sun className="h-[17px] w-[17px] text-amber-400" />
+                  <Sun className="h-[15px] w-[15px] sm:h-[16px] sm:w-[16px] text-amber-400" />
                 ) : (
-                  <Moon className="h-[17px] w-[17px]" />
+                  <Moon className="h-[15px] w-[15px] sm:h-[16px] sm:w-[16px]" />
                 )}
               </button>
             )}
@@ -482,12 +465,12 @@ export function Navbar() {
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="flex items-center gap-2.5 pl-1.5 pr-2.5 py-1 rounded-2xl glass-subpanel hover:bg-white/85 dark:hover:bg-white/10 transition-all duration-300 cursor-pointer focus:outline-none active:scale-[0.99]"
+                    className="flex items-center gap-1.5 pl-1 pr-1.5 md:pr-2.5 lg:pr-1.5 2xl:pr-3 py-1 rounded-full bg-[#F4F5F8] dark:bg-slate-800 hover:bg-[#E8EBF2] dark:hover:bg-slate-700 transition-all duration-300 cursor-pointer focus:outline-none active:scale-[0.99] shrink-0"
                   >
                     <div className="relative">
-                      <Avatar className="h-8 w-8 rounded-xl border border-white/80 dark:border-white/20 overflow-hidden shrink-0 shadow-sm">
+                      <Avatar className="h-7 w-7 sm:h-8 sm:w-8 rounded-full border border-white dark:border-slate-700 overflow-hidden shrink-0 shadow-sm">
                         <AvatarImage src={profile?.profilePhoto} />
-                        <AvatarFallback className="rounded-xl text-xs font-bold bg-gradient-to-br from-primary to-indigo-600 text-white">
+                        <AvatarFallback className="rounded-full text-[11px] font-bold bg-[#0B1238] text-white">
                           {userInitials}
                         </AvatarFallback>
                       </Avatar>
@@ -498,15 +481,15 @@ export function Navbar() {
                         )}
                       />
                     </div>
-                    <div className="hidden sm:flex flex-col items-start text-left min-w-0">
-                      <span className="text-[12px] font-bold text-slate-900 dark:text-slate-100 leading-tight truncate max-w-[130px]">
-                        {profile?.fullName || 'Official'}
+                    <div className="hidden md:flex lg:hidden 2xl:flex flex-col items-start text-left min-w-0">
+                      <span className="text-[11.5px] font-bold text-[#0B1238] dark:text-slate-100 leading-tight truncate max-w-[105px]">
+                        {profile?.fullName || t('common.official')}
                       </span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 leading-tight truncate max-w-[130px]">
-                        {profile?.role || 'Personnel'}
+                      <span className="text-[9.5px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 leading-tight truncate max-w-[105px]">
+                        {localizedRole}
                       </span>
                     </div>
-                    <ChevronsUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0 hidden sm:block ml-0.5" />
+                    <ChevronsUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0 hidden md:block lg:hidden 2xl:block ml-0.5" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -517,17 +500,19 @@ export function Navbar() {
                   <DropdownMenuLabel className="flex items-center gap-3 p-2.5 rounded-xl glass-subpanel mb-1">
                     <Avatar className="h-10 w-10 rounded-xl border border-white/80 dark:border-white/20">
                       <AvatarImage src={profile?.profilePhoto} />
-                      <AvatarFallback className="rounded-xl text-xs font-bold bg-gradient-to-br from-primary to-indigo-600 text-white">
+                      <AvatarFallback className="rounded-xl text-xs font-bold bg-[#0B1238] text-white">
                         {userInitials}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col min-w-0">
                       <span className="text-[13px] font-bold text-slate-900 dark:text-white truncate">
-                        {profile?.fullName || 'Official'}
+                        {profile?.fullName || t('common.official')}
                       </span>
-                      <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 capitalize truncate flex items-center gap-1.5">
-                        <span className={cn("h-1.5 w-1.5 rounded-full", isOnline ? "bg-emerald-500" : "bg-amber-500")} />
-                        {profile?.role || 'Personnel'} · {isOnline ? 'Synced' : 'Offline'}
+                      <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate flex items-center gap-1.5">
+                        <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", isOnline ? "bg-emerald-500" : "bg-amber-500")} />
+                        <span className="truncate">
+                          {localizedRole} · {isOnline ? t('common.synced') : t('common.offline')}
+                        </span>
                       </span>
                     </div>
                   </DropdownMenuLabel>
@@ -535,21 +520,133 @@ export function Navbar() {
                     onClick={() => router.push('/profile')}
                     className="rounded-xl text-[13px] font-medium cursor-pointer py-2.5 px-3 focus:bg-white/70 dark:focus:bg-white/10"
                   >
-                    <Settings className="mr-2.5 h-4 w-4 text-slate-400" /> Profile Settings
+                    <Settings className="mr-2.5 h-4 w-4 text-slate-400 shrink-0" />
+                    <span className="truncate">{t('nav.profileSettings')}</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-slate-200/60 dark:bg-white/10" />
                   <DropdownMenuItem
                     className="text-rose-600 dark:text-rose-400 focus:text-rose-600 focus:bg-rose-500/10 rounded-xl text-[13px] font-semibold cursor-pointer py-2.5 px-3"
                     onClick={handleLogout}
                   >
-                    <LogOut className="mr-2.5 h-4 w-4" /> Sign Out
+                    <LogOut className="mr-2.5 h-4 w-4 shrink-0" />
+                    <span className="truncate">{t('nav.signOut')}</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <Button variant="default" size="sm" asChild className="rounded-xl h-9 text-xs font-semibold px-5 shadow-md shadow-primary/20">
-                <Link href="/login">Portal Login</Link>
-              </Button>
+              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                <Link
+                  href="/login"
+                  title={t('nav.login')}
+                  className="hidden md:inline-flex px-3 xl:px-3.5 py-1.5 sm:py-2 rounded-full bg-[#F4F5F8] hover:bg-[#E7EAF2] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#0B1238] dark:text-white text-[11px] xl:text-xs font-semibold transition-colors whitespace-nowrap max-w-[95px] xl:max-w-[115px] truncate"
+                >
+                  {t('nav.login')}
+                </Link>
+                <Link
+                  href="/login"
+                  title={t('nav.trackPortal')}
+                  className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full bg-[#0B1238] hover:bg-[#17235E] dark:bg-[#EC4899] dark:hover:bg-[#DB2777] text-white text-[10.5px] sm:text-xs font-semibold shadow-[0_6px_16px_rgba(11,18,56,0.2)] transition-all whitespace-nowrap max-w-[98px] sm:max-w-[135px] xl:max-w-[155px] truncate"
+                >
+                  {t('nav.trackPortal')}
+                </Link>
+
+                {/* Responsive Mobile & Tablet Navigation Drawer for Public Visitors */}
+                <Sheet open={isPublicMenuOpen} onOpenChange={setIsPublicMenuOpen}>
+                  <SheetTrigger asChild>
+                    <button
+                      type="button"
+                      title={t('nav.openNavigationMenu')}
+                      aria-label={t('nav.openNavigationMenu')}
+                      className="lg:hidden h-8 w-8 sm:h-9 sm:w-9 flex items-center justify-center rounded-full bg-[#F4F5F8] dark:bg-slate-800 text-[#0B1238] dark:text-white hover:bg-[#E7EAF2] dark:hover:bg-slate-700 transition-colors cursor-pointer active:scale-95"
+                    >
+                      <Menu className="h-4 w-4 sm:h-[17px] sm:w-[17px]" />
+                    </button>
+                  </SheetTrigger>
+                  <SheetContent
+                    side="right"
+                    className="w-[86vw] max-w-sm rounded-l-[28px] glass-dropdown p-0 overflow-hidden border-l border-white/60 dark:border-slate-800"
+                  >
+                    <SheetHeader className="p-5 sm:p-6 border-b border-slate-200/70 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60">
+                      <div className="flex items-center gap-3">
+                        <div className="relative h-9 w-9 overflow-hidden rounded-xl bg-[#F4F5F8] dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 p-1 shrink-0">
+                          <div className="relative h-full w-full overflow-hidden rounded-lg">
+                            <Image
+                              src={logoUrl}
+                              alt={bureauName}
+                              fill
+                              sizes="36px"
+                              className="object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                        </div>
+                        <div className="text-left min-w-0">
+                          <SheetTitle className="text-base font-extrabold tracking-tight text-[#0B1238] dark:text-white truncate">
+                            {bureauName}
+                          </SheetTitle>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-[#EC4899] truncate">
+                            {t('nav.registrationStatusTracker')}
+                          </p>
+                        </div>
+                      </div>
+                    </SheetHeader>
+
+                    <div className="p-4 sm:p-5 flex flex-col justify-between h-[calc(100vh-88px)] overflow-y-auto">
+                      <div className="space-y-1.5">
+                        <p className="px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+                          {t('nav.publicPortals')}
+                        </p>
+                        {PUBLIC_NAV.map((item) => {
+                          const isActive = pathname === item.href;
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              onClick={() => setIsPublicMenuOpen(false)}
+                              className={cn(
+                                "flex items-center justify-between gap-3 px-4 py-3.5 rounded-2xl text-sm font-bold transition-all",
+                                isActive
+                                  ? "bg-[#0B1238] text-white dark:bg-[#EC4899] shadow-md"
+                                  : "text-[#0B1238] dark:text-slate-200 hover:bg-white/80 dark:hover:bg-slate-800/70"
+                              )}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <item.icon
+                                  className={cn(
+                                    "h-4 w-4 shrink-0",
+                                    isActive ? "text-[#EC4899] dark:text-white" : "text-[#EC4899]"
+                                  )}
+                                />
+                                <span className="truncate">{item.name}</span>
+                              </div>
+                              <ArrowRight className="h-4 w-4 opacity-50 shrink-0" />
+                            </Link>
+                          );
+                        })}
+                      </div>
+
+                      <div className="pt-4 border-t border-slate-200/70 dark:border-slate-800 space-y-2.5">
+                        <Link
+                          href="/status-check"
+                          onClick={() => setIsPublicMenuOpen(false)}
+                          className="w-full min-h-11 px-4 py-2.5 rounded-full bg-[#F4F5F8] dark:bg-slate-800 text-[#0B1238] dark:text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-[#E7EAF2] transition-colors text-center"
+                        >
+                          <Search className="h-3.5 w-3.5 text-[#EC4899] shrink-0" />
+                          <span className="truncate">{t('nav.check29DigitRid')}</span>
+                        </Link>
+                        <Link
+                          href="/login"
+                          onClick={() => setIsPublicMenuOpen(false)}
+                          className="w-full min-h-11 px-4 py-2.5 rounded-full bg-[#0B1238] hover:bg-[#17235E] dark:bg-[#EC4899] dark:hover:bg-[#DB2777] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg transition-all text-center"
+                        >
+                          <span className="truncate">{t('nav.officerLoginPortal')}</span>
+                          <ArrowRight className="h-3.5 w-3.5 shrink-0" />
+                        </Link>
+                      </div>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              </div>
             )}
           </div>
         </div>
@@ -569,7 +666,9 @@ export function Navbar() {
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-black uppercase tracking-tight truncate">
-                  Incoming {incomingRingingConv.activeCall.callType === 'video' ? 'Video' : 'Voice'} Call
+                  {incomingRingingConv.activeCall.callType === 'video'
+                    ? t('nav.incomingVideoCall')
+                    : t('nav.incomingVoiceCall')}
                 </p>
                 <p className="text-[11px] text-emerald-300 truncate">
                   {incomingRingingConv.activeCall.callerName} • {incomingRingingConv.activeCall.conversationName}
@@ -581,24 +680,9 @@ export function Navbar() {
               onClick={() => router.push('/communication')}
               className="h-9 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[10px] uppercase tracking-wider shrink-0"
             >
-              Answer Call
+              {t('nav.answerCall')}
             </Button>
           </div>
-        </div>
-      )}
-
-      {/* Compact Floating "Show Tabs" Restore Pill when Mobile/Tablet Tab Dock is Hidden */}
-      {user && (isTabDockHidden || !isNavVisible) && (
-        <div className="lg:hidden fixed bottom-3 right-3 z-50 print:hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <button
-            type="button"
-            onClick={() => toggleMobileTabDock(false)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-slate-900/90 dark:bg-slate-950/95 text-white border border-white/15 shadow-xl backdrop-blur-xl text-[10px] font-black uppercase tracking-wider cursor-pointer active:scale-95"
-            title="Show navigation tabs"
-          >
-            <ChevronUp className="h-3.5 w-3.5 text-[#FF6B4A]" />
-            <span>Show Tabs</span>
-          </button>
         </div>
       )}
 
@@ -607,47 +691,36 @@ export function Navbar() {
         <nav
           className={cn(
             "lg:hidden fixed bottom-4 left-4 right-4 z-50 transition-all duration-500 ease-in-out print:hidden",
-            isNavVisible && !isTabDockHidden
+            isNavVisible
               ? "translate-y-0 opacity-100"
               : "translate-y-[150%] opacity-0 pointer-events-none"
           )}
         >
-          <div className="relative h-[82px] w-full max-w-lg mx-auto clay-tab-bar rounded-[32px] flex items-center justify-around px-3 pb-2">
-            {/* Quick Hide Tabs Pill attached to top-right of mobile/tablet tab bar */}
-            <button
-              type="button"
-              onClick={() => toggleMobileTabDock(true)}
-              className="absolute -top-3.5 right-4 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-900/90 dark:bg-slate-950/90 text-white border border-white/15 shadow-md text-[9px] font-black uppercase tracking-wider cursor-pointer active:scale-95"
-              title="Hide bottom tabs"
-            >
-              <ChevronDown className="h-3 w-3 text-[#FF6B4A]" />
-              <span>Hide Tabs</span>
-            </button>
-
+          <div className="relative h-[80px] w-full max-w-lg mx-auto clay-tab-bar rounded-[32px] flex items-center justify-around px-2 sm:px-3 pb-2">
             {MOBILE_NAV.map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="flex-1 h-full flex flex-col items-center justify-center relative group"
+                  title={item.name}
+                  className="flex-1 min-w-0 h-full flex flex-col items-center justify-center relative group px-0.5"
                 >
                   {isActive ? (
-                    <div className="flex flex-col items-center justify-center w-full h-full">
-                      {/* Sculpted Clay Cutout Well + Puffy 3D Icon Badge */}
+                    <div className="flex flex-col items-center justify-center w-full h-full min-w-0">
                       <div className="relative -mt-7 p-1.5 rounded-2xl clay-tab-pill transition-all duration-300">
-                        <div className="h-11 w-13 px-3.5 clay-tab-active rounded-xl flex items-center justify-center text-primary">
-                          <item.icon className="h-6 w-6 transition-transform duration-300 scale-105 drop-shadow-[0_2px_6px_rgba(37,99,235,0.3)]" strokeWidth={2.4} />
+                        <div className="h-11 w-13 px-3.5 clay-tab-active rounded-xl flex items-center justify-center text-[#0B1238] dark:text-[#EC4899]">
+                          <item.icon className="h-6 w-6 transition-transform duration-300 scale-105" strokeWidth={2.4} />
                         </div>
                       </div>
-                      <span className="text-[10px] font-black uppercase tracking-[0.1em] text-primary mt-1 leading-none">
+                      <span className="text-[9.5px] font-black uppercase tracking-wider text-[#0B1238] dark:text-white mt-1 leading-none max-w-full truncate px-1">
                         {item.name}
                       </span>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center gap-1 h-12 w-12 rounded-2xl text-slate-500 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 group-hover:bg-white/60 dark:group-hover:bg-white/[0.06] transition-all duration-300 active:scale-95">
-                      <item.icon className="h-5 w-5" strokeWidth={2.2} />
-                      <span className="text-[9px] font-bold uppercase tracking-wider opacity-80">
+                    <div className="flex flex-col items-center justify-center gap-1 h-12 w-full rounded-2xl text-slate-500 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 group-hover:bg-white/60 dark:group-hover:bg-white/[0.06] transition-all duration-300 active:scale-95 min-w-0 px-1">
+                      <item.icon className="h-5 w-5 shrink-0" strokeWidth={2.2} />
+                      <span className="text-[8.5px] sm:text-[9px] font-bold uppercase tracking-wider opacity-85 max-w-full truncate">
                         {item.name}
                       </span>
                     </div>
@@ -661,24 +734,25 @@ export function Navbar() {
               <SheetTrigger asChild>
                 <button
                   type="button"
-                  className="flex-1 h-full flex flex-col items-center justify-center relative group cursor-pointer focus:outline-none"
+                  title={t('nav.more')}
+                  className="flex-1 min-w-0 h-full flex flex-col items-center justify-center relative group cursor-pointer focus:outline-none px-0.5"
                 >
                   {isSheetOpen || isSecondaryActive ? (
-                    <div className="flex flex-col items-center justify-center w-full h-full">
+                    <div className="flex flex-col items-center justify-center w-full h-full min-w-0">
                       <div className="relative -mt-7 p-1.5 rounded-2xl clay-tab-pill transition-all duration-300">
-                        <div className="h-11 w-13 px-3.5 clay-tab-active rounded-xl flex items-center justify-center text-primary">
+                        <div className="h-11 w-13 px-3.5 clay-tab-active rounded-xl flex items-center justify-center text-[#0B1238] dark:text-[#EC4899]">
                           <MoreHorizontal className="h-6 w-6 transition-transform duration-300 scale-105" strokeWidth={2.4} />
                         </div>
                       </div>
-                      <span className="text-[10px] font-black uppercase tracking-[0.1em] text-primary mt-1 leading-none">
-                        MORE
+                      <span className="text-[9.5px] font-black uppercase tracking-wider text-[#0B1238] dark:text-white mt-1 leading-none max-w-full truncate px-1">
+                        {t('nav.more')}
                       </span>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center gap-1 h-12 w-12 rounded-2xl text-slate-500 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 group-hover:bg-white/60 dark:group-hover:bg-white/[0.06] transition-all duration-300 active:scale-95">
-                      <MoreHorizontal className="h-5 w-5" strokeWidth={2.2} />
-                      <span className="text-[9px] font-bold uppercase tracking-wider opacity-80">
-                        MORE
+                    <div className="flex flex-col items-center justify-center gap-1 h-12 w-full rounded-2xl text-slate-500 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 group-hover:bg-white/60 dark:group-hover:bg-white/[0.06] transition-all duration-300 active:scale-95 min-w-0 px-1">
+                      <MoreHorizontal className="h-5 w-5 shrink-0" strokeWidth={2.2} />
+                      <span className="text-[8.5px] sm:text-[9px] font-bold uppercase tracking-wider opacity-85 max-w-full truncate">
+                        {t('nav.more')}
                       </span>
                     </div>
                   )}
@@ -693,30 +767,19 @@ export function Navbar() {
                     <div className="flex items-center gap-4 min-w-0">
                       <Avatar className="h-12 w-12 rounded-2xl border border-white/80 dark:border-white/20 shadow-sm shrink-0">
                         <AvatarImage src={profile?.profilePhoto} />
-                        <AvatarFallback className="rounded-2xl font-black bg-gradient-to-br from-primary to-indigo-600 text-white">
+                        <AvatarFallback className="rounded-2xl font-black bg-[#0B1238] text-white">
                           {(profile?.fullName || "OFF").substring(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                       <div className="text-left min-w-0">
                         <SheetTitle className="text-lg font-black uppercase tracking-tight truncate">
-                          {profile?.fullName || 'Official'}
+                          {profile?.fullName || t('common.official')}
                         </SheetTitle>
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                          {profile?.role || 'Personnel'} · {isOnline ? 'Online' : 'Offline'}
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest truncate">
+                          {localizedRole} · {isOnline ? t('common.online') : t('common.offline')}
                         </p>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        toggleMobileTabDock(true);
-                        setIsSheetOpen(false);
-                      }}
-                      className="px-3 py-1.5 rounded-xl glass-subpanel text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-1.5 shrink-0 cursor-pointer"
-                    >
-                      <PanelBottomClose className="h-3.5 w-3.5 text-[#FF6B4A]" />
-                      Hide Bottom Tabs
-                    </button>
                   </div>
                 </SheetHeader>
                 <div className="p-4 grid grid-cols-2 gap-3 overflow-y-auto max-h-[calc(72vh-130px)]">
@@ -728,9 +791,9 @@ export function Navbar() {
                         href={item.href}
                         onClick={() => setIsSheetOpen(false)}
                         className={cn(
-                          "flex items-center gap-3 p-4 rounded-2xl transition-all duration-300",
+                          "flex items-center gap-3 p-4 rounded-2xl transition-all duration-300 min-w-0",
                           activeMobileItem
-                            ? "glass-nav-item-active text-primary font-black"
+                            ? "glass-nav-item-active text-[#0B1238] dark:text-white font-black"
                             : "glass-subpanel text-foreground hover:bg-white/80 dark:hover:bg-white/10"
                         )}
                       >
@@ -738,16 +801,16 @@ export function Navbar() {
                           <item.icon
                             className={cn(
                               "h-4 w-4 shrink-0",
-                              activeMobileItem ? "text-[#FF6B4A]" : "text-slate-500 dark:text-slate-400"
+                              activeMobileItem ? "text-[#EC4899]" : "text-slate-500 dark:text-slate-400"
                             )}
                           />
                         )}
-                        <span className="text-[10px] font-black uppercase tracking-widest truncate flex-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider truncate flex-1">
                           {item.name}
                         </span>
                         {item.href === '/communication' && unreadChatCount > 0 && (
-                          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#FF6B4A] text-white text-[10px] font-black tabular-nums">
-                            {unreadChatCount}
+                          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#EC4899] text-white text-[10px] font-black tabular-nums shrink-0">
+                            {formatNumber(unreadChatCount)}
                           </span>
                         )}
                       </Link>
@@ -757,7 +820,8 @@ export function Navbar() {
                     onClick={handleLogout}
                     className="col-span-2 flex items-center justify-center gap-3 p-4 mt-2 rounded-2xl bg-rose-500/90 hover:bg-rose-500 text-white font-black uppercase text-[10px] tracking-widest shadow-lg shadow-rose-500/25 transition-all active:scale-98"
                   >
-                    <LogOut className="h-4 w-4" /> Terminate Session
+                    <LogOut className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{t('nav.terminateSession')}</span>
                   </button>
                 </div>
               </SheetContent>
@@ -771,4 +835,3 @@ export function Navbar() {
     </TooltipProvider>
   );
 }
-

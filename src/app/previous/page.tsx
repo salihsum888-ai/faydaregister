@@ -30,6 +30,7 @@ import { format, addMonths, subMonths, setMonth, setYear } from 'date-fns';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where } from 'firebase/firestore';
 import { MonthlySummary } from '@/lib/types';
+import { useTranslation } from '@/i18n/language-provider';
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June", 
@@ -40,6 +41,7 @@ function PreviousContent() {
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
   const searchParams = useSearchParams();
+  const { t, formatNumber } = useTranslation();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -83,11 +85,11 @@ function PreviousContent() {
     const previous = summaries.find(s => s.month === prevMonthLabel && s.year === prevYearLabel);
 
     const breakdown = [
-      { label: 'Processed', value: current?.processed || 0, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-      { label: 'Processing', value: current?.processing || 0, icon: RefreshCcw, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-      { label: 'Rejected', value: current?.rejected || 0, icon: XCircle, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-      { label: 'Failed', value: current?.failed || 0, icon: AlertCircle, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-      { label: 'Pending Review', value: current?.pendingReview || 0, icon: Clock, color: 'text-muted-foreground', bg: 'bg-muted' },
+      { label: t.common.statusProcessed, value: current?.processed || 0, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+      { label: t.common.statusProcessing, value: current?.processing || 0, icon: RefreshCcw, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+      { label: t.common.statusRejected, value: current?.rejected || 0, icon: XCircle, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+      { label: t.common.statusFailed, value: current?.failed || 0, icon: AlertCircle, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+      { label: t.common.statusPendingReview, value: current?.pendingReview || 0, icon: Clock, color: 'text-muted-foreground', bg: 'bg-muted' },
     ];
 
     return {
@@ -98,7 +100,7 @@ function PreviousContent() {
       prevLabel: `${prevMonthLabel} ${prevYearLabel}`,
       prevShort: prevMonthLabel
     };
-  }, [selectedDate, summaries]);
+  }, [selectedDate, summaries, t]);
 
   const calculateChange = (curr: number, prev: number) => {
     const diff = curr - prev;
@@ -123,14 +125,14 @@ function PreviousContent() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-20">
-      <Link href="/historical" className="flex items-center text-[10px] font-black text-muted-foreground hover:text-primary transition-colors uppercase tracking-widest gap-1.5 gap-1.5">
-        <ArrowLeft className="h-3 w-3" /> Return to Ledger
+      <Link href="/historical" className="flex items-center text-[10px] font-black text-muted-foreground hover:text-primary transition-colors uppercase tracking-widest gap-1.5">
+        <ArrowLeft className="h-3 w-3" /> {t.previousPage.returnToLedger}
       </Link>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1">
-          <h1 className="text-3xl font-black tracking-tight text-foreground font-headline uppercase leading-none">Comparative Analysis</h1>
-          <p className="text-sm text-muted-foreground">Historical throughput vs. preceding period metrics.</p>
+          <h1 className="text-3xl font-black tracking-tight text-foreground font-headline uppercase leading-none">{t.previousPage.pageTitle}</h1>
+          <p className="text-sm text-muted-foreground">{t.previousPage.pageSub}</p>
         </div>
         
         <div className="flex items-center bg-card border border-border rounded-xl shadow-sm overflow-hidden">
@@ -159,47 +161,55 @@ function PreviousContent() {
       {!stats.current.total && stats.current.total === 0 ? (
         <div className="py-32 flex flex-col items-center justify-center text-center bg-card border-2 border-dashed rounded-[32px] border-border text-muted-foreground/30">
           <Database className="h-16 w-16 mb-4 opacity-10" />
-          <p className="text-sm font-black uppercase tracking-[0.3em]">Vault Record Empty</p>
-          <p className="text-xs font-medium mt-2">No finalized summary detected for this period.</p>
+          <p className="text-sm font-black uppercase tracking-[0.3em]">{t.previousPage.vaultEmptyTitle}</p>
+          <p className="text-xs font-medium mt-2">{t.previousPage.vaultEmptySub}</p>
         </div>
       ) : (
         <>
           <section className="space-y-4">
             <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-              <Activity className="h-3 w-3" /> Comparative Momentum
+              <Activity className="h-3 w-3" /> {t.previousPage.comparativeMomentumTitle}
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <ComparisonCard 
-                title="Total Intake" 
+                title={t.previousPage.totalIntakeTitle} 
                 currentValue={stats.current.total} 
                 change={totalChange}
                 prevMonthLabel={stats.prevLabel}
                 prevMonthShort={stats.prevShort}
                 prevValue={stats.previous.total}
+                vsPrefix={t.previousPage.vsPrefix}
+                formatNumber={formatNumber}
               />
               <ComparisonCard 
-                title="Ethio Line" 
+                title={t.previousPage.ethioLineTitle} 
                 currentValue={stats.current.ethio} 
                 change={ethioChange}
                 prevMonthLabel={stats.prevLabel}
                 prevMonthShort={stats.prevShort}
                 prevValue={stats.previous.ethio}
+                vsPrefix={t.previousPage.vsPrefix}
+                formatNumber={formatNumber}
               />
               <ComparisonCard 
-                title="Safaricom Line" 
+                title={t.previousPage.safaricomLineTitle} 
                 currentValue={stats.current.safaricom} 
                 change={safaricomChange}
                 prevMonthLabel={stats.prevLabel}
                 prevMonthShort={stats.prevShort}
                 prevValue={stats.previous.safaricom}
+                vsPrefix={t.previousPage.vsPrefix}
+                formatNumber={formatNumber}
               />
               <ComparisonCard 
-                title="Full Cycle Total" 
+                title={t.previousPage.fullCycleTotalTitle} 
                 currentValue={stats.current.total} 
                 change={totalChange}
                 prevMonthLabel={stats.prevLabel}
                 prevMonthShort={stats.prevShort}
                 prevValue={stats.previous.total}
+                vsPrefix={t.previousPage.vsPrefix}
+                formatNumber={formatNumber}
               />
             </div>
           </section>
@@ -207,19 +217,19 @@ function PreviousContent() {
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
             <section className="xl:col-span-2 space-y-4">
               <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-                <TrendingUp className="h-3 w-3" /> Operational Summary
+                <TrendingUp className="h-3 w-3" /> {t.previousPage.operationalSummaryTitle}
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <SummaryCard title="Aggregate" value={stats.current.total} subtitle={`${stats.currentLabel} Intake`} icon={TrendingUp} iconColor="text-primary" iconBg="bg-primary/10" />
-                <SummaryCard title="Ethio" value={stats.current.ethio} subtitle="Verified Network Intake" icon={Phone} iconColor="text-emerald-500" iconBg="bg-emerald-500/10" />
-                <SummaryCard title="Safaricom" value={stats.current.safaricom} subtitle="Verified Network Intake" icon={Smartphone} iconColor="text-orange-500" iconBg="bg-orange-500/10" />
-                <SummaryCard title="Full Audit" value={stats.current.total} subtitle="Verified Cycle Count" icon={Calendar} iconColor="text-purple-500" iconBg="bg-purple-500/10" />
+                <SummaryCard title={t.previousPage.aggregateTitle} value={stats.current.total} subtitle={`${stats.currentLabel} ${t.previousPage.intakeSuffix}`} icon={TrendingUp} iconColor="text-primary" iconBg="bg-primary/10" formatNumber={formatNumber} />
+                <SummaryCard title={t.previousPage.ethioTitle} value={stats.current.ethio} subtitle={t.previousPage.verifiedNetworkIntake} icon={Phone} iconColor="text-emerald-500" iconBg="bg-emerald-500/10" formatNumber={formatNumber} />
+                <SummaryCard title={t.previousPage.safaricomTitle} value={stats.current.safaricom} subtitle={t.previousPage.verifiedNetworkIntake} icon={Smartphone} iconColor="text-orange-500" iconBg="bg-orange-500/10" formatNumber={formatNumber} />
+                <SummaryCard title={t.previousPage.fullAuditTitle} value={stats.current.total} subtitle={t.previousPage.verifiedCycleCount} icon={Calendar} iconColor="text-purple-500" iconBg="bg-purple-500/10" formatNumber={formatNumber} />
               </div>
             </section>
 
             <section className="space-y-4">
               <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-                <History className="h-3 w-3" /> Archive Breakdown
+                <History className="h-3 w-3" /> {t.previousPage.archiveBreakdownTitle}
               </h2>
               <Card className="border border-border shadow-sm bg-card overflow-hidden rounded-[32px]">
                 <CardContent className="p-6 space-y-1">
@@ -231,7 +241,7 @@ function PreviousContent() {
                         </div>
                         <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{item.label}</span>
                       </div>
-                      <span className="text-xl font-black text-foreground tabular-nums">{item.value.toLocaleString()}</span>
+                      <span className="text-xl font-black text-foreground tabular-nums">{formatNumber(item.value)}</span>
                     </div>
                   ))}
                 </CardContent>
@@ -244,13 +254,13 @@ function PreviousContent() {
   );
 }
 
-function ComparisonCard({ title, currentValue, change, prevMonthLabel, prevMonthShort, prevValue }: any) {
+function ComparisonCard({ title, currentValue, change, prevMonthLabel, prevMonthShort, prevValue, vsPrefix, formatNumber }: any) {
   return (
     <Card className="border border-border shadow-sm bg-card overflow-hidden rounded-[32px] group transition-all hover:shadow-md">
       <CardContent className="p-8 space-y-8">
         <div className="space-y-1">
           <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">{title}</p>
-          <p className="text-5xl font-black text-foreground tracking-tighter">{currentValue.toLocaleString()}</p>
+          <p className="text-5xl font-black text-foreground tracking-tighter">{formatNumber ? formatNumber(currentValue) : currentValue.toLocaleString()}</p>
         </div>
 
         <div className={cn(
@@ -268,24 +278,24 @@ function ComparisonCard({ title, currentValue, change, prevMonthLabel, prevMonth
           )}>
             {change.isNegative ? '' : '+'}{change.diff} ({change.percent}%)
           </span>
-          <span className="text-[9px] text-muted-foreground font-black uppercase whitespace-nowrap opacity-40">vs {prevMonthShort}</span>
+          <span className="text-[9px] text-muted-foreground font-black uppercase whitespace-nowrap opacity-40">{vsPrefix || 'vs'} {prevMonthShort}</span>
         </div>
 
         <div className="pt-4 border-t border-border border-dashed">
           <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1.5 opacity-50">{prevMonthLabel}</p>
-          <p className="text-2xl font-black text-muted-foreground/30">{prevValue.toLocaleString()}</p>
+          <p className="text-2xl font-black text-muted-foreground/30">{formatNumber ? formatNumber(prevValue) : prevValue.toLocaleString()}</p>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function SummaryCard({ title, value, subtitle, icon: Icon, iconColor, iconBg }: any) {
+function SummaryCard({ title, value, subtitle, icon: Icon, iconColor, iconBg, formatNumber }: any) {
   return (
     <Card className="border border-border shadow-sm bg-card flex items-center p-8 rounded-[32px] group hover:shadow-md transition-all">
       <div className="flex-1 space-y-0.5">
         <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em]">{title}</p>
-        <p className="text-4xl font-black text-foreground tracking-tighter">{value.toLocaleString()}</p>
+        <p className="text-4xl font-black text-foreground tracking-tighter">{formatNumber ? formatNumber(value) : value.toLocaleString()}</p>
         <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest">{subtitle}</p>
       </div>
       <div className={cn("p-5 rounded-[24px] shadow-inner transition-transform group-hover:scale-110", iconBg)}>

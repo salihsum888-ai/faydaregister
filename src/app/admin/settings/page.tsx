@@ -47,10 +47,12 @@ import { logAuditAction } from '@/lib/audit';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
+import { useTranslation } from '@/i18n/language-provider';
 
 const DEFAULT_LOGO = "https://services.eaes.et/NID-Logos/Fayda%20For%20Ethiopia%20logo-%20english-2-01.png";
 
 export default function AdminSettingsPage() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const db = useFirestore();
   const { toast } = useToast();
@@ -197,8 +199,8 @@ export default function AdminSettingsPage() {
       }
 
       toast({
-        title: 'Full Bureau Backup Exported',
-        description: `Downloaded 4-sheet workbook (${filename}).`,
+        title: t.adminSettings.toastBackupTitle,
+        description: t.adminSettings.toastBackupDesc.replace('{filename}', filename),
       });
     } finally {
       setTimeout(() => setIsExportingBackup(false), 500);
@@ -246,10 +248,10 @@ export default function AdminSettingsPage() {
         img.onerror = reject;
       });
       setAssetStatus('valid');
-      toast({ title: "Asset Verified", description: "The logo source is reachable and valid." });
+      toast({ title: t.adminSettings.toastAssetValidTitle, description: t.adminSettings.toastAssetValidDesc });
     } catch {
       setAssetStatus('invalid');
-      toast({ title: "Verification Failed", description: "The logo source could not be resolved.", variant: "destructive" });
+      toast({ title: t.adminSettings.toastAssetInvalidTitle, description: t.adminSettings.toastAssetInvalidDesc, variant: "destructive" });
     } finally {
       setIsAssetValidating(false);
     }
@@ -276,15 +278,15 @@ export default function AdminSettingsPage() {
       );
 
       toast({
-        title: "Profile Synchronized",
-        description: "Institutional branding and gate protocols updated globally.",
+        title: t.adminSettings.toastSavedTitle,
+        description: t.adminSettings.toastSavedDesc,
       });
       setIsEditing(false);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Sync Failed",
-        description: "Protocol error during identity synchronization.",
+        title: t.adminSettings.toastSaveFailedTitle,
+        description: t.adminSettings.toastSaveFailedDesc,
       });
     } finally {
       setIsSaving(false);
@@ -306,7 +308,7 @@ export default function AdminSettingsPage() {
       dateFormat: 'MMM dd, yyyy',
     });
     setAssetStatus('idle');
-    toast({ title: "Defaults Restored", description: "Standard bureau configuration loaded." });
+    toast({ title: t.adminSettings.toastDefaultsTitle, description: t.adminSettings.toastDefaultsDesc });
   };
 
   if (isLoading) {
@@ -314,7 +316,7 @@ export default function AdminSettingsPage() {
       <div className="flex h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary opacity-20" />
-          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground">Synchronizing Root Config</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground">{t.adminSettings.loadingText}</p>
         </div>
       </div>
     );
@@ -327,16 +329,16 @@ export default function AdminSettingsPage() {
         <div className="space-y-2">
           <div className="flex items-center gap-2">
              <div className="px-2 py-0.5 bg-primary/10 rounded border border-primary/20 text-[9px] font-black text-primary uppercase tracking-widest">
-               Root Configuration
+               {t.adminSettings.rootConfigBadge}
              </div>
              {profile && (
                <div className="flex items-center gap-1.5 text-[9px] font-bold text-muted-foreground uppercase tracking-tighter">
-                 <UserCircle className="h-3 w-3" /> Signed: {profile.fullName}
+                 <UserCircle className="h-3 w-3" /> {t.adminSettings.signedPrefix.replace('{name}', profile.fullName)}
                </div>
              )}
           </div>
-          <h1 className="text-4xl font-black tracking-tight text-foreground font-headline uppercase leading-none">Branding Terminal</h1>
-          <p className="text-sm text-muted-foreground">Institutional identity, global gate protocols, and localized system standards.</p>
+          <h1 className="text-4xl font-black tracking-tight text-foreground font-headline uppercase leading-none">{t.adminSettings.title}</h1>
+          <p className="text-sm text-muted-foreground">{t.adminSettings.subtitle}</p>
         </div>
         
         <div className="flex flex-col sm:flex-row items-center gap-3">
@@ -352,19 +354,19 @@ export default function AdminSettingsPage() {
             ) : (
               <Database className="mr-2 h-4 w-4" />
             )}
-            Full Bureau Backup (.xlsx)
+            {t.adminSettings.backupBtn}
           </Button>
           {!isEditing ? (
             <Button onClick={() => setIsEditing(true)} className="w-full sm:w-auto h-14 px-10 bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-primary/10 transition-all hover:scale-[1.02] active:scale-95">
-              <Edit3 className="mr-2 h-4 w-4" /> Enter Configuration Mode
+              <Edit3 className="mr-2 h-4 w-4" /> {t.adminSettings.editConfigBtn}
             </Button>
           ) : (
             <div className="flex items-center gap-3 w-full sm:w-auto">
               <Button variant="outline" onClick={() => setIsEditing(false)} className="flex-1 sm:flex-none h-14 px-8 font-black text-[10px] uppercase tracking-widest border-border bg-card rounded-2xl">
-                 Abort
+                 {t.adminSettings.abortBtn}
               </Button>
               <Button onClick={handleSaveSettings} disabled={isSaving} className="flex-1 sm:flex-none h-14 px-12 bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-primary/10 transition-all active:scale-95">
-                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Commit Global Config
+                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} {t.adminSettings.saveConfigBtn}
               </Button>
             </div>
           )}
@@ -380,23 +382,23 @@ export default function AdminSettingsPage() {
               <Card className="border border-border shadow-sm bg-card overflow-hidden rounded-[32px]">
                 <CardHeader className="bg-muted/30 border-b border-border p-8">
                   <CardTitle className="text-sm font-black text-foreground uppercase tracking-widest flex items-center gap-2">
-                    <ImageIcon className="h-4 w-4 text-primary" /> Institutional Assets
+                    <ImageIcon className="h-4 w-4 text-primary" /> {t.adminSettings.assetsCardTitle}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-8 space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Bureau Designation</Label>
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.adminSettings.bureauDesignationLabel}</Label>
                       <Input name="bureauName" value={formData.bureauName} onChange={handleInputChange} className="h-12 rounded-xl bg-background border-border font-bold" />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">System Protocol ID</Label>
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.adminSettings.systemProtocolLabel}</Label>
                       <Input name="systemProtocol" value={formData.systemProtocol} onChange={handleInputChange} className="h-12 rounded-xl bg-background border-border font-black text-primary uppercase text-[10px] tracking-widest" />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Official Logo Source (URL)</Label>
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.adminSettings.logoUrlLabel}</Label>
                     <div className="flex gap-2">
                        <div className="relative flex-1 group">
                          <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
@@ -415,7 +417,7 @@ export default function AdminSettingsPage() {
                        >
                          {isAssetValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : 
                           assetStatus === 'valid' ? <CheckCircle2 className="h-4 w-4" /> :
-                          assetStatus === 'invalid' ? <XCircle className="h-4 w-4" /> : 'Verify'}
+                          assetStatus === 'invalid' ? <XCircle className="h-4 w-4" /> : t.adminSettings.verifyBtn}
                        </Button>
                     </div>
                   </div>
@@ -426,7 +428,7 @@ export default function AdminSettingsPage() {
               <Card className="border border-border shadow-sm bg-card overflow-hidden rounded-[32px]">
                 <CardHeader className="bg-muted/30 border-b border-border p-8">
                   <CardTitle className="text-sm font-black text-foreground uppercase tracking-widest flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-primary" /> Operational Gateways
+                    <Shield className="h-4 w-4 text-primary" /> {t.adminSettings.gatewaysCardTitle}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-8 space-y-8">
@@ -434,10 +436,10 @@ export default function AdminSettingsPage() {
                      <div className="flex items-center justify-between p-6 bg-muted/20 rounded-2xl border border-border group transition-all hover:bg-card">
                         <div className="space-y-1">
                            <div className="flex items-center gap-2">
-                              <p className="text-xs font-black text-foreground uppercase">Maintenance Mode</p>
+                              <p className="text-xs font-black text-foreground uppercase">{t.adminSettings.maintenanceModeTitle}</p>
                               {formData.maintenanceMode ? <Lock className="h-3 w-3 text-rose-500" /> : <Unlock className="h-3 w-3 text-emerald-500" />}
                            </div>
-                           <p className="text-[10px] text-muted-foreground font-medium">Disable field entry and status portals globally.</p>
+                           <p className="text-[10px] text-muted-foreground font-medium">{t.adminSettings.maintenanceModeDesc}</p>
                         </div>
                         <Switch checked={formData.maintenanceMode} onCheckedChange={() => toggleSwitch('maintenanceMode')} />
                      </div>
@@ -445,10 +447,10 @@ export default function AdminSettingsPage() {
                      <div className="flex items-center justify-between p-6 bg-muted/20 rounded-2xl border border-border group transition-all hover:bg-card">
                         <div className="space-y-1">
                            <div className="flex items-center gap-2">
-                              <p className="text-xs font-black text-foreground uppercase">Public RID Gateway</p>
+                              <p className="text-xs font-black text-foreground uppercase">{t.adminSettings.publicLookupTitle}</p>
                               <Globe className="h-3 w-3 text-primary opacity-40" />
                            </div>
-                           <p className="text-[10px] text-muted-foreground font-medium">Allow external status lookups via resident portal.</p>
+                           <p className="text-[10px] text-muted-foreground font-medium">{t.adminSettings.publicLookupDesc}</p>
                         </div>
                         <Switch checked={formData.publicLookupEnabled} onCheckedChange={() => toggleSwitch('publicLookupEnabled')} />
                      </div>
@@ -461,25 +463,26 @@ export default function AdminSettingsPage() {
                  <Card className="border border-border shadow-sm bg-card overflow-hidden rounded-[32px]">
                     <CardHeader className="bg-muted/30 border-b border-border py-4 px-8">
                       <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                        <Languages className="h-3 w-3" /> Localization
+                        <Languages className="h-3 w-3" /> {t.adminSettings.localizationCardTitle}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="p-8 space-y-6">
                       <div className="space-y-2">
-                         <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Primary Language</Label>
+                         <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">{t.adminSettings.primaryLangLabel}</Label>
                          <Select value={formData.primaryLanguage} onValueChange={(v) => setFormData(prev => ({...prev, primaryLanguage: v}))}>
                             <SelectTrigger className="h-11 rounded-xl bg-background border-border font-bold text-xs">
                                <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                               <SelectItem value="English" className="font-bold">English (UK)</SelectItem>
-                               <SelectItem value="Amharic" className="font-bold">Amharic (Official)</SelectItem>
-                               <SelectItem value="Oromo" className="font-bold">Afaan Oromo</SelectItem>
+                               <SelectItem value="English" className="font-bold">English</SelectItem>
+                               <SelectItem value="Amharic" className="font-bold">አማርኛ (Amharic)</SelectItem>
+                               <SelectItem value="Oromo" className="font-bold">Afaan Oromoo</SelectItem>
+                               <SelectItem value="Somali" className="font-bold">Soomaali</SelectItem>
                             </SelectContent>
                          </Select>
                       </div>
                       <div className="space-y-2">
-                         <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">Date Protocol</Label>
+                         <Label className="text-[9px] font-black uppercase text-muted-foreground ml-1">{t.adminSettings.dateProtocolLabel}</Label>
                          <div className="relative group">
                             <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30" />
                             <Input name="dateFormat" value={formData.dateFormat} onChange={handleInputChange} placeholder="MMM dd, yyyy" className="h-11 pl-10 rounded-xl bg-background border-border text-xs font-mono font-bold" />
@@ -491,20 +494,20 @@ export default function AdminSettingsPage() {
                  <Card className="border border-border shadow-sm bg-card overflow-hidden rounded-[32px]">
                     <CardHeader className="bg-muted/30 border-b border-border py-4 px-8">
                       <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                        <Mail className="h-3 w-3" /> Contact Matrix
+                        <Mail className="h-3 w-3" /> {t.adminSettings.contactMatrixTitle}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="p-8 space-y-4">
-                       <Input name="contactEmail" value={formData.contactEmail} onChange={handleInputChange} placeholder="Email Protocol" className="h-11 rounded-xl bg-background border-border text-xs" />
-                       <Input name="contactPhone" value={formData.contactPhone} onChange={handleInputChange} placeholder="Phone Protocol" className="h-11 rounded-xl bg-background border-border text-xs" />
-                       <Input name="officeAddress" value={formData.officeAddress} onChange={handleInputChange} placeholder="Physical Deployment Address" className="h-11 rounded-xl bg-background border-border text-xs" />
+                       <Input name="contactEmail" value={formData.contactEmail} onChange={handleInputChange} placeholder={t.adminSettings.emailPlaceholder} className="h-11 rounded-xl bg-background border-border text-xs" />
+                       <Input name="contactPhone" value={formData.contactPhone} onChange={handleInputChange} placeholder={t.adminSettings.phonePlaceholder} className="h-11 rounded-xl bg-background border-border text-xs" />
+                       <Input name="officeAddress" value={formData.officeAddress} onChange={handleInputChange} placeholder={t.adminSettings.addressPlaceholder} className="h-11 rounded-xl bg-background border-border text-xs" />
                     </CardContent>
                  </Card>
               </div>
 
               <div className="pt-4 flex justify-start">
                 <Button type="button" variant="ghost" onClick={handleReset} className="font-bold text-[9px] uppercase tracking-[0.2em] text-muted-foreground hover:text-primary transition-all">
-                   <RefreshCcw className="mr-2 h-3 w-3" /> Restore Institutional Defaults
+                   <RefreshCcw className="mr-2 h-3 w-3" /> {t.adminSettings.restoreDefaultsBtn}
                 </Button>
               </div>
             </div>
@@ -521,45 +524,45 @@ export default function AdminSettingsPage() {
                               <h2 className="text-3xl md:text-4xl font-black text-foreground tracking-tighter uppercase leading-none">{formData.bureauName}</h2>
                               <div className="px-2.5 py-1 bg-primary text-primary-foreground text-[9px] font-black uppercase rounded-lg tracking-widest">{formData.systemProtocol}</div>
                            </div>
-                           <p className="text-muted-foreground font-medium max-w-lg leading-relaxed">Official institution identity synchronized with all regional terminals and field response units.</p>
+                           <p className="text-muted-foreground font-medium max-w-lg leading-relaxed">{t.adminSettings.institutionIdentityDesc}</p>
                         </div>
                      </div>
                   </CardHeader>
                   <CardContent className="p-10 md:p-12 space-y-12">
                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
-                        <InfoSection label="Contact Matrix" icon={Mail}>
+                        <InfoSection label={t.adminSettings.contactMatrixTitle} icon={Mail}>
                            <div className="space-y-4">
                               <div className="flex items-center gap-3 group">
                                  <div className="p-2 bg-muted rounded-xl transition-colors group-hover:bg-primary/10 group-hover:text-primary"><Mail className="h-4 w-4" /></div>
-                                 <p className="text-sm font-black text-foreground">{formData.contactEmail || 'Not established'}</p>
+                                 <p className="text-sm font-black text-foreground">{formData.contactEmail || t.adminSettings.notEstablished}</p>
                               </div>
                               <div className="flex items-center gap-3 group">
                                  <div className="p-2 bg-muted rounded-xl transition-colors group-hover:bg-primary/10 group-hover:text-primary"><Phone className="h-4 w-4" /></div>
-                                 <p className="text-sm font-black text-foreground">{formData.contactPhone || 'Not established'}</p>
+                                 <p className="text-sm font-black text-foreground">{formData.contactPhone || t.adminSettings.notEstablished}</p>
                               </div>
                            </div>
                         </InfoSection>
 
-                        <InfoSection label="Deployment Gateways" icon={Shield}>
+                        <InfoSection label={t.adminSettings.deploymentGatewaysLabel} icon={Shield}>
                            <div className="space-y-4">
                               <div className="flex items-center justify-between group">
                                  <div className="flex items-center gap-3">
                                     <div className={cn("p-2 rounded-xl", formData.maintenanceMode ? "bg-rose-500/10 text-rose-500" : "bg-muted text-muted-foreground")}><Lock className="h-4 w-4" /></div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest">Maintenance</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest">{t.adminSettings.maintenanceLabel}</p>
                                  </div>
-                                 <span className={cn("text-[9px] font-black uppercase px-2 py-0.5 rounded", formData.maintenanceMode ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground")}>{formData.maintenanceMode ? 'Active' : 'Offline'}</span>
+                                 <span className={cn("text-[9px] font-black uppercase px-2 py-0.5 rounded", formData.maintenanceMode ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground")}>{formData.maintenanceMode ? t.adminSettings.activeBadge : t.adminSettings.offlineBadge}</span>
                               </div>
                               <div className="flex items-center justify-between group">
                                  <div className="flex items-center gap-3">
                                     <div className={cn("p-2 rounded-xl", formData.publicLookupEnabled ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground")}><Globe className="h-4 w-4" /></div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest">Public RID</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest">{t.adminSettings.publicRidLabel}</p>
                                  </div>
-                                 <span className={cn("text-[9px] font-black uppercase px-2 py-0.5 rounded", formData.publicLookupEnabled ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground")}>{formData.publicLookupEnabled ? 'Enabled' : 'Disabled'}</span>
+                                 <span className={cn("text-[9px] font-black uppercase px-2 py-0.5 rounded", formData.publicLookupEnabled ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground")}>{formData.publicLookupEnabled ? t.adminSettings.enabledBadge : t.adminSettings.disabledBadge}</span>
                               </div>
                            </div>
                         </InfoSection>
 
-                        <InfoSection label="Institutional Pulse" icon={Activity}>
+                        <InfoSection label={t.adminSettings.institutionalPulseLabel} icon={Activity}>
                            <div className="space-y-4">
                               <div className="flex items-center gap-3 group">
                                  <div className="p-2 bg-muted rounded-xl"><Languages className="h-4 w-4" /></div>
@@ -579,8 +582,8 @@ export default function AdminSettingsPage() {
                               <ShieldCheck className="h-6 w-6 text-emerald-600" />
                            </div>
                            <div className="space-y-0.5">
-                              <p className="text-xs font-black text-foreground uppercase tracking-widest">Profile Verified</p>
-                              <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">Institutional Authenticity Guaranteed by Audit</p>
+                              <p className="text-xs font-black text-foreground uppercase tracking-widest">{t.adminSettings.profileVerifiedTitle}</p>
+                              <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">{t.adminSettings.profileVerifiedSub}</p>
                            </div>
                         </div>
                         <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-xl border border-border">
@@ -599,7 +602,7 @@ export default function AdminSettingsPage() {
            <Card className="border border-border bg-card overflow-hidden rounded-[32px] shadow-2xl">
               <CardHeader className="bg-muted/30 border-b border-border py-4 px-8 flex flex-row items-center justify-between">
                 <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] flex items-center gap-2">
-                  <Layout className="h-3 w-3" /> Terminal Simulator
+                  <Layout className="h-3 w-3" /> {t.adminSettings.simulatorTitle}
                 </CardTitle>
                 <div className="flex items-center gap-1.5 p-1 bg-background rounded-lg border border-border">
                    <button 
@@ -623,7 +626,7 @@ export default function AdminSettingsPage() {
                  )}>
                    {/* Navbar Preview */}
                    <div className="space-y-3 p-4">
-                      <p className="text-[8px] font-black text-muted-foreground/60 uppercase tracking-widest text-center">Global Header Simulation</p>
+                      <p className="text-[8px] font-black text-muted-foreground/60 uppercase tracking-widest text-center">{t.adminSettings.headerSimLabel}</p>
                       <div className={cn(
                         "h-14 w-full border rounded-xl flex items-center px-4 justify-between shadow-inner transition-all",
                         previewTheme === 'dark' ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200"
@@ -645,7 +648,7 @@ export default function AdminSettingsPage() {
 
                    {/* Footer Preview */}
                    <div className="space-y-3 p-4 pt-0">
-                      <p className="text-[8px] font-black text-muted-foreground/60 uppercase tracking-widest text-center">Global Footer Simulation</p>
+                      <p className="text-[8px] font-black text-muted-foreground/60 uppercase tracking-widest text-center">{t.adminSettings.footerSimLabel}</p>
                       <div className={cn(
                         "p-8 border rounded-xl text-center space-y-4 transition-all",
                         previewTheme === 'dark' ? "bg-slate-900/50 border-slate-800" : "bg-white border-slate-100 shadow-sm"
@@ -657,11 +660,11 @@ export default function AdminSettingsPage() {
                              <span className={cn("text-xs font-black tracking-[0.3em] uppercase", previewTheme === 'dark' ? "text-slate-400" : "text-slate-900")}>{formData.bureauName}</span>
                           </div>
                           <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest leading-relaxed">
-                             {formData.officeAddress || 'Bureau Operational Zone'} <br/>
-                             Contact: {formData.contactEmail || 'support@system.gov'}
+                             {formData.officeAddress || t.adminSettings.defaultZoneText} <br/>
+                             {t.adminSettings.contactPrefix} {formData.contactEmail || 'support@system.gov'}
                           </p>
                           <p className="text-[7px] font-bold text-muted-foreground uppercase opacity-40">
-                             Audit: <span className="text-emerald-500">Active</span> • {formData.systemProtocol}
+                             {t.adminSettings.auditActiveLabel} <span className="text-emerald-500">{t.adminSettings.activeWord}</span> • {formData.systemProtocol}
                           </p>
                       </div>
                    </div>
@@ -669,17 +672,17 @@ export default function AdminSettingsPage() {
 
                  {/* Operational Indicator Simulator */}
                  <div className="space-y-4">
-                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest text-center">Gate Status Simulator</p>
+                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest text-center">{t.adminSettings.gateStatusSimLabel}</p>
                     <div className="grid grid-cols-2 gap-3">
                        <div className={cn("p-4 rounded-2xl border text-center space-y-1 transition-all", formData.maintenanceMode ? "bg-rose-500/10 border-rose-500/20" : "bg-muted/30 border-border")}>
                           <Lock className={cn("h-4 w-4 mx-auto mb-1", formData.maintenanceMode ? "text-rose-500" : "text-muted-foreground/30")} />
-                          <p className="text-[9px] font-black uppercase tracking-tighter">Maintenance</p>
-                          <p className="text-[8px] font-bold uppercase opacity-60">{formData.maintenanceMode ? 'Locked' : 'Open'}</p>
+                          <p className="text-[9px] font-black uppercase tracking-tighter">{t.adminSettings.maintenanceLabel}</p>
+                          <p className="text-[8px] font-bold uppercase opacity-60">{formData.maintenanceMode ? t.adminSettings.lockedWord : t.adminSettings.openWord}</p>
                        </div>
                        <div className={cn("p-4 rounded-2xl border text-center space-y-1 transition-all", formData.publicLookupEnabled ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/5 border-rose-500/10")}>
                           <Globe className={cn("h-4 w-4 mx-auto mb-1", formData.publicLookupEnabled ? "text-emerald-500" : "text-rose-500/40")} />
-                          <p className="text-[9px] font-black uppercase tracking-tighter">Public RID</p>
-                          <p className="text-[8px] font-bold uppercase opacity-60">{formData.publicLookupEnabled ? 'Online' : 'Disabled'}</p>
+                          <p className="text-[9px] font-black uppercase tracking-tighter">{t.adminSettings.publicRidLabel}</p>
+                          <p className="text-[8px] font-bold uppercase opacity-60">{formData.publicLookupEnabled ? t.adminSettings.onlineWord : t.adminSettings.disabledBadge}</p>
                        </div>
                     </div>
                  </div>
@@ -689,7 +692,7 @@ export default function AdminSettingsPage() {
                        <ShieldCheck className="h-24 w-24" />
                     </div>
                     <p className="text-[9px] text-amber-700 font-bold uppercase leading-relaxed tracking-[0.1em] relative z-10">
-                       Warning: Protocol changes committed here propagate instantly to the Landing Page, Login Portal, and all Field Coordination Channels. Changes are subject to forensic audit log sign-off.
+                       {t.adminSettings.warningText}
                     </p>
                  </div>
               </CardContent>
@@ -699,6 +702,7 @@ export default function AdminSettingsPage() {
     </div>
   );
 }
+
 
 function InfoSection({ label, icon: Icon, children, className }: any) {
    return (

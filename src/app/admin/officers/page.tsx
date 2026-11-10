@@ -70,12 +70,14 @@ import {
 } from '@/components/ui/select';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/i18n/language-provider';
 
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export default function OfficerManagementPage() {
+  const { t, formatDate } = useTranslation();
   const { user: currentUser } = useUser();
   const db = useFirestore();
   const { toast } = useToast();
@@ -191,8 +193,8 @@ export default function OfficerManagementPage() {
       );
 
       toast({
-        title: "Access Revoked",
-        description: `Successfully purged ${count} official signatures from the bureau.`,
+        title: t.adminOfficers.toastRevokedTitle,
+        description: t.adminOfficers.toastRevokedDesc.replace('{count}', String(count)),
         variant: "destructive"
       });
       setSelectedIds(new Set());
@@ -200,8 +202,8 @@ export default function OfficerManagementPage() {
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Bulk Operation Failed",
-        description: "Clearance error during mass personnel revocation.",
+        title: t.adminOfficers.toastBulkFailedTitle,
+        description: t.adminOfficers.toastBulkFailedDesc,
       });
     } finally {
       setIsBulkProcessing(false);
@@ -235,7 +237,7 @@ export default function OfficerManagementPage() {
       `Personnel: Generated XLS employee archive for ${filteredOfficers.length} records.`
     );
 
-    toast({ title: "Excel Ledger Generated", description: "Official personnel registry exported." });
+    toast({ title: t.adminOfficers.toastExcelTitle, description: t.adminOfficers.toastExcelDesc });
     setTimeout(() => setIsExporting(false), 800);
   };
 
@@ -244,7 +246,7 @@ export default function OfficerManagementPage() {
     setIsExporting(true);
 
     const doc = new jsPDF('l', 'mm', 'a4');
-    doc.text("Official Bureau Personnel Ledger", 14, 15);
+    doc.text(t.adminOfficers.pdfHeaderTitle, 14, 15);
     const rows = filteredOfficers.map(o => [
       o.fullName || '', o.email || '', o.role || '', o.region || '', o.cluster || '', o.updatedAt ? format(new Date(o.updatedAt), 'MMM dd') : '-'
     ]);
@@ -268,15 +270,15 @@ export default function OfficerManagementPage() {
       `Personnel: Generated PDF employee archive for ${filteredOfficers.length} records.`
     );
 
-    toast({ title: "PDF Record Saved", description: "High-fidelity personnel document generated." });
+    toast({ title: t.adminOfficers.toastPdfTitle, description: t.adminOfficers.toastPdfDesc });
     setTimeout(() => setIsExporting(false), 800);
   };
 
   const initiateDelete = (officer: UserProfile) => {
     if (officer.id === currentUser?.uid) {
       toast({
-        title: "Action Restricted",
-        description: "Protocol prevents deletion of your own administrative signature.",
+        title: t.adminOfficers.toastSelfDeleteTitle,
+        description: t.adminOfficers.toastSelfDeleteDesc,
         variant: "destructive"
       });
       return;
@@ -305,15 +307,15 @@ export default function OfficerManagementPage() {
       );
 
       toast({
-        title: "Officer Purged",
-        description: `${officerToDelete.fullName} has been removed from the bureau framework.`,
+        title: t.adminOfficers.toastPurgedTitle,
+        description: t.adminOfficers.toastPurgedDesc.replace('{name}', officerToDelete.fullName),
         variant: "destructive"
       });
       setIsDeleteDialogOpen(false);
     } catch (error) {
       toast({
-        title: "Deletion Failed",
-        description: "An error occurred while revoking access.",
+        title: t.adminOfficers.toastDeleteFailedTitle,
+        description: t.adminOfficers.toastDeleteFailedDesc,
         variant: "destructive"
       });
     } finally {
@@ -326,10 +328,10 @@ export default function OfficerManagementPage() {
     <div className="space-y-10 animate-in fade-in duration-700 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1.5">
-          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Bureau Administration</p>
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground font-headline">Officer Command</h1>
+          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">{t.adminOfficers.eyebrow}</p>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground font-headline">{t.adminOfficers.title}</h1>
           <p className="text-sm text-muted-foreground max-w-lg">
-            Register official signatures, manage field permissions, and monitor personnel pulse across all regions.
+            {t.adminOfficers.subtitle}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -344,10 +346,10 @@ export default function OfficerManagementPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatSummary label="Total Active" value={stats.total} delta="+100%" subText="bureau roster" isPositive={true} />
-        <StatSummary label="Command Pulse" value={stats.onDuty} delta={`+${stats.total ? Math.round((stats.onDuty / stats.total) * 100) : 0}%`} subText="on active duty" isPositive={true} />
-        <StatSummary label="Field Units" value={stats.reviewers} delta={`${stats.total ? Math.round((stats.reviewers / stats.total) * 100) : 0}%`} subText="sector officers" isPositive={true} />
-        <StatSummary label="Admins" value={stats.admins} delta={`${stats.total ? Math.round((stats.admins / stats.total) * 100) : 0}%`} subText="command clearance" isPositive={true} />
+        <StatSummary label={t.adminOfficers.statTotalLabel} value={stats.total} delta="+100%" subText={t.adminOfficers.statTotalSub} isPositive={true} />
+        <StatSummary label={t.adminOfficers.statDutyLabel} value={stats.onDuty} delta={`+${stats.total ? Math.round((stats.onDuty / stats.total) * 100) : 0}%`} subText={t.adminOfficers.statDutySub} isPositive={true} />
+        <StatSummary label={t.adminOfficers.statFieldLabel} value={stats.reviewers} delta={`${stats.total ? Math.round((stats.reviewers / stats.total) * 100) : 0}%`} subText={t.adminOfficers.statFieldSub} isPositive={true} />
+        <StatSummary label={t.adminOfficers.statAdminLabel} value={stats.admins} delta={`${stats.total ? Math.round((stats.admins / stats.total) * 100) : 0}%`} subText={t.adminOfficers.statAdminSub} isPositive={true} />
       </div>
 
       <Card className="bg-white dark:bg-card rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_8px_30px_rgba(15,23,42,0.04)] overflow-hidden relative">
@@ -355,14 +357,14 @@ export default function OfficerManagementPage() {
         {selectedIds.size > 0 && (
           <div className="bg-slate-900 text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 animate-in slide-in-from-top duration-200">
             <p className="text-xs font-semibold">
-              {selectedIds.size} Personnel Selected
+              {t.adminOfficers.selectedCount.replace('{count}', String(selectedIds.size))}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-slate-300 hover:text-white hover:bg-white/10" onClick={() => setSelectedIds(new Set())}>
-                <X className="mr-1.5 h-3.5 w-3.5" /> Cancel
+                <X className="mr-1.5 h-3.5 w-3.5" /> {t.adminOfficers.cancelBtn}
               </Button>
               <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-rose-400 hover:bg-rose-600 hover:text-white" onClick={() => setIsConfirmBulkPurgeOpen(true)} disabled={isBulkProcessing}>
-                {isBulkProcessing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-1.5 h-3.5 w-3.5" />} Purge Access
+                {isBulkProcessing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-1.5 h-3.5 w-3.5" />} {t.adminOfficers.purgeAccessBtn}
               </Button>
             </div>
           </div>
@@ -374,7 +376,7 @@ export default function OfficerManagementPage() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Search Officer or Email"
+              placeholder={t.adminOfficers.searchPlaceholder}
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               className="w-full pl-9 pr-3 h-9 bg-transparent text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-500 focus:outline-none"
@@ -384,21 +386,21 @@ export default function OfficerManagementPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setCurrentPage(1); }}>
               <SelectTrigger className="h-9 w-[140px] rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-2xs">
-                <SelectValue placeholder="All Ranks" />
+                <SelectValue placeholder={t.adminOfficers.allRanks} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" className="text-xs font-medium">All Ranks</SelectItem>
-                <SelectItem value="admin" className="text-xs font-medium">Bureau Admin</SelectItem>
-                <SelectItem value="reviewer" className="text-xs font-medium">Field Officer</SelectItem>
+                <SelectItem value="all" className="text-xs font-medium">{t.adminOfficers.allRanks}</SelectItem>
+                <SelectItem value="admin" className="text-xs font-medium">{t.adminOfficers.rankAdmin}</SelectItem>
+                <SelectItem value="reviewer" className="text-xs font-medium">{t.adminOfficers.rankOfficer}</SelectItem>
               </SelectContent>
             </Select>
 
             <Select value={regionFilter} onValueChange={(v) => { setRegionFilter(v); setCurrentPage(1); }}>
               <SelectTrigger className="h-9 w-[150px] rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-2xs">
-                <SelectValue placeholder="All Regions" />
+                <SelectValue placeholder={t.adminOfficers.allRegions} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" className="text-xs font-medium">All Regions</SelectItem>
+                <SelectItem value="all" className="text-xs font-medium">{t.adminOfficers.allRegions}</SelectItem>
                 {regions.map(r => (
                   <SelectItem key={r} value={r} className="text-xs font-medium">{r}</SelectItem>
                 ))}
@@ -409,7 +411,7 @@ export default function OfficerManagementPage() {
               variant="outline"
               size="icon"
               onClick={() => { setSearchTerm(''); setRoleFilter('all'); setRegionFilter('all'); setCurrentPage(1); }}
-              title="Reset Filters"
+              title={t.adminOfficers.resetFiltersTooltip}
               className="h-9 w-9 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 shadow-2xs"
             >
               <Filter className="h-3.5 w-3.5" />
@@ -443,23 +445,23 @@ export default function OfficerManagementPage() {
                       <TableHead className="h-11 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">
                         <div className="flex items-center gap-3">
                           <Checkbox checked={allOnPageSelected} onCheckedChange={toggleSelectAll} />
-                          <span>OFFICIAL NAME</span>
+                          <span>{t.adminOfficers.colName}</span>
                         </div>
                       </TableHead>
                       <TableHead className="h-11 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        LAST SYNC
+                        {t.adminOfficers.colLastSync}
                       </TableHead>
                       <TableHead className="h-11 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 hidden lg:table-cell whitespace-nowrap">
-                        ROLE
+                        {t.adminOfficers.colRole}
                       </TableHead>
                       <TableHead className="h-11 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 hidden sm:table-cell whitespace-nowrap">
-                        REGION / SECTOR
+                        {t.adminOfficers.colRegion}
                       </TableHead>
                       <TableHead className="h-11 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        DUTY STATUS
+                        {t.adminOfficers.colDuty}
                       </TableHead>
                       <TableHead className="h-11 px-4 w-28 text-right">
-                        ACTION
+                        {t.adminOfficers.colAction}
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -490,7 +492,7 @@ export default function OfficerManagementPage() {
                               <div>
                                 <p className="text-[13px] font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap flex items-center gap-1.5">
                                   {officer.fullName}
-                                  {isMe && <span className="text-[10px] font-semibold bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">You</span>}
+                                  {isMe && <span className="text-[10px] font-semibold bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{t.adminOfficers.youBadge}</span>}
                                 </p>
                                 <p className="text-[11px] text-slate-400">{officer.email}</p>
                               </div>
@@ -498,12 +500,12 @@ export default function OfficerManagementPage() {
                           </TableCell>
                           <TableCell className="px-4 py-3 whitespace-nowrap">
                             <span className="text-[13px] text-slate-600 dark:text-slate-300">
-                              {officer.updatedAt ? format(new Date(officer.updatedAt), 'MMM do, yyyy; hh:mm a') : 'Not synced'}
+                              {officer.updatedAt ? formatDate(officer.updatedAt, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : t.adminOfficers.notSynced}
                             </span>
                           </TableCell>
                           <TableCell className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">
                             <span className="text-[13px] text-slate-600 dark:text-slate-300 capitalize">
-                              {officer.role === 'admin' ? 'Administrator' : 'Field Reviewer'}
+                              {officer.role === 'admin' ? t.adminOfficers.roleAdminText : t.adminOfficers.roleReviewerText}
                             </span>
                           </TableCell>
                           <TableCell className="px-4 py-3 hidden sm:table-cell whitespace-nowrap">
@@ -518,14 +520,14 @@ export default function OfficerManagementPage() {
                                 ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400"
                                 : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
                             )}>
-                              {officer.isDutyActive ? 'Active Duty' : 'Offline'}
+                              {officer.isDutyActive ? t.adminOfficers.statusActiveDuty : t.adminOfficers.statusOffline}
                             </span>
                           </TableCell>
                           <TableCell className="px-4 py-3 text-right whitespace-nowrap">
                             <div className="inline-flex items-center justify-end gap-1">
                               <Link
                                 href={`/performance?officerId=${officer.id}`}
-                                title="View Officer Dossier"
+                                title={t.adminOfficers.viewDossierTooltip}
                                 className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
                               >
                                 <Eye className="h-4 w-4" />
@@ -536,7 +538,7 @@ export default function OfficerManagementPage() {
                                 trigger={
                                   <button
                                     type="button"
-                                    title="Edit Officer"
+                                    title={t.adminOfficers.editOfficerTooltip}
                                     className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                                   >
                                     <Edit2 className="h-4 w-4" />
@@ -545,7 +547,7 @@ export default function OfficerManagementPage() {
                               />
                               <button
                                 type="button"
-                                title="Revoke Officer"
+                                title={t.adminOfficers.revokeOfficerTooltip}
                                 onClick={() => initiateDelete(officer)}
                                 disabled={isMe}
                                 className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-30 transition-colors"
@@ -566,14 +568,14 @@ export default function OfficerManagementPage() {
                 totalPages={totalPages}
                 totalItems={filteredOfficers.length}
                 shownItems={paginatedOfficers.length}
-                itemLabel="officers"
+                itemLabel={t.adminOfficers.itemLabel}
                 onPageChange={setCurrentPage}
               />
             </>
           ) : (
             <div className="flex flex-col items-center justify-center h-[360px] text-slate-400">
               <Users className="h-10 w-10 opacity-40 mb-3" />
-              <p className="text-xs font-semibold">No matching officers found</p>
+              <p className="text-xs font-semibold">{t.adminOfficers.noMatchingOfficers}</p>
             </div>
           )}
         </CardContent>
@@ -588,12 +590,12 @@ export default function OfficerManagementPage() {
             </div>
             <div className="space-y-2">
               <AlertDialogTitle className="text-2xl font-black text-foreground tracking-tighter uppercase">
-                {isDeleting ? "PURGING SIGNATURE..." : "REVOKE ACCESS?"}
+                {isDeleting ? t.adminOfficers.singleDeleteTitleDeleting : t.adminOfficers.singleDeleteTitle}
               </AlertDialogTitle>
               <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed font-medium">
                 {isDeleting 
-                  ? `Removing ${officerToDelete?.fullName} from bureau protocols. Please wait...`
-                  : `You are about to purge ${officerToDelete?.fullName} from the bureau. This action is final and will revoke all terminal credentials immediately.`
+                  ? t.adminOfficers.singleDeleteDescDeleting.replace('{name}', officerToDelete?.fullName || '')
+                  : t.adminOfficers.singleDeleteDesc.replace('{name}', officerToDelete?.fullName || '')
                 }
               </AlertDialogDescription>
             </div>
@@ -604,11 +606,11 @@ export default function OfficerManagementPage() {
               disabled={isDeleting}
               className="w-full h-14 bg-destructive hover:bg-destructive/90 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-destructive/10 transition-all active:scale-[0.98]"
             >
-              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Confirm Revocation"}
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t.adminOfficers.singleDeleteConfirmBtn}
             </AlertDialogAction>
             {!isDeleting && (
               <AlertDialogCancel className="w-full h-12 rounded-2xl font-bold uppercase text-[10px] tracking-widest border-none bg-transparent hover:bg-card">
-                Abort Operation
+                {t.adminOfficers.singleDeleteCancelBtn}
               </AlertDialogCancel>
             )}
           </AlertDialogFooter>
@@ -624,12 +626,12 @@ export default function OfficerManagementPage() {
             </div>
             <div className="space-y-2">
               <AlertDialogTitle className="text-2xl font-black text-foreground tracking-tighter uppercase leading-none">
-                {isBulkProcessing ? "PURGING PERSONNEL..." : "MASS REVOCATION"}
+                {isBulkProcessing ? t.adminOfficers.bulkDeleteTitleDeleting : t.adminOfficers.bulkDeleteTitle}
               </AlertDialogTitle>
               <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed font-medium">
                 {isBulkProcessing 
-                  ? "Executing mass signature revocation. Synchronizing with audit ledger..."
-                  : `You are about to permanently purge ${selectedIds.size} officials from the bureau database. This operation cannot be reversed.`
+                  ? t.adminOfficers.bulkDeleteDescDeleting
+                  : t.adminOfficers.bulkDeleteDesc.replace('{count}', String(selectedIds.size))
                 }
               </AlertDialogDescription>
             </div>
@@ -640,11 +642,11 @@ export default function OfficerManagementPage() {
               disabled={isBulkProcessing}
               className="w-full h-14 bg-destructive hover:bg-destructive/90 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-destructive/10 active:scale-[0.98] transition-all"
             >
-              {isBulkProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Confirm Destruction"}
+              {isBulkProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t.adminOfficers.bulkDeleteConfirmBtn}
             </AlertDialogAction>
             {!isBulkProcessing && (
               <AlertDialogCancel className="w-full h-12 rounded-2xl font-bold uppercase text-[10px] tracking-widest border-none bg-transparent hover:bg-card">
-                Abort Protocol
+                {t.adminOfficers.bulkDeleteCancelBtn}
               </AlertDialogCancel>
             )}
           </AlertDialogFooter>
@@ -653,6 +655,7 @@ export default function OfficerManagementPage() {
     </div>
   );
 }
+
 
 function StatSummary({ label, value, delta = '+12%', subText = 'last week', isPositive = true }: any) {
   return (

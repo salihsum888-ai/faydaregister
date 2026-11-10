@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { ThemeProvider } from '@/components/theme-provider';
 import { MfaGuard } from '@/components/auth/mfa-guard';
+import { LanguageProvider } from '@/i18n/language-provider';
 
 const INSTITUTIONAL_ICON = "https://services.eaes.et/NID-Logos/Fayda%20For%20Ethiopia%20logo-%20english-2-01.png";
 
@@ -50,7 +51,10 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&family=JetBrains+Mono:wght@400..800&display=swap" rel="stylesheet" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&family=Noto+Sans+Ethiopic:wght@300..900&family=JetBrains+Mono:wght@400..800&display=swap"
+          rel="stylesheet"
+        />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body className="font-sans antialiased bg-background text-foreground min-h-screen flex flex-col overflow-x-hidden transition-colors duration-300 relative">
@@ -67,15 +71,17 @@ export default function RootLayout({
             <div className="absolute -bottom-32 left-1/4 h-[360px] w-[360px] rounded-full bg-emerald-400/12 dark:bg-indigo-500/10 blur-[110px] animate-orb-3" />
           </div>
 
-          <FirebaseClientProvider>
-            <MfaGuard>
-              <Navbar />
-              <main className="flex-1 w-full max-w-7xl mx-auto pt-6 sm:pt-8 pb-32 md:pb-12 px-4 sm:px-6 lg:px-8 min-w-0 relative z-0">
-                {children}
-              </main>
-            </MfaGuard>
-            <Toaster />
-          </FirebaseClientProvider>
+          <LanguageProvider>
+            <FirebaseClientProvider>
+              <MfaGuard>
+                <Navbar />
+                <main className="flex-1 w-full max-w-7xl mx-auto pt-6 sm:pt-8 pb-32 md:pb-12 px-4 sm:px-6 lg:px-8 min-w-0 relative z-0">
+                  {children}
+                </main>
+              </MfaGuard>
+              <Toaster />
+            </FirebaseClientProvider>
+          </LanguageProvider>
         </ThemeProvider>
       </body>
     </html>

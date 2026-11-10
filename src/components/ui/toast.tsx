@@ -16,7 +16,7 @@ const ToastViewport = React.forwardRef<
   <ToastPrimitives.Viewport
     ref={ref}
     className={cn(
-      "fixed top-4 right-4 z-[100] flex max-h-screen w-full flex-col gap-2.5 p-4 sm:bottom-4 sm:right-4 sm:top-auto md:max-w-[400px]",
+      "fixed top-4 right-4 z-[100] flex max-h-screen w-full flex-col gap-3 p-4 sm:bottom-4 sm:right-4 sm:top-auto md:max-w-[390px]",
       className
     )}
     {...props}
@@ -25,20 +25,15 @@ const ToastViewport = React.forwardRef<
 ToastViewport.displayName = ToastPrimitives.Viewport.displayName
 
 const toastVariants = cva(
-  "group pointer-events-auto relative flex w-full items-center justify-between gap-3.5 overflow-hidden rounded-[12px] border px-4 py-3.5 shadow-[0_4px_16px_rgba(15,23,42,0.06)] transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
+  "group pointer-events-auto relative flex w-full flex-col gap-[3px] bg-transparent transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
   {
     variants: {
       variant: {
-        default:
-          "bg-[#EAF6ED] border-[#C9E7D1] text-[#1E293B] dark:bg-emerald-950/90 dark:border-emerald-800/70 dark:text-emerald-50",
-        success:
-          "bg-[#EAF6ED] border-[#C9E7D1] text-[#1E293B] dark:bg-emerald-950/90 dark:border-emerald-800/70 dark:text-emerald-50",
-        info:
-          "bg-[#E6EFFC] border-[#C4D8F8] text-[#1E293B] dark:bg-blue-950/90 dark:border-blue-800/70 dark:text-blue-50",
-        warning:
-          "bg-[#FDF4E3] border-[#F2DFB6] text-[#1E293B] dark:bg-amber-950/90 dark:border-amber-800/70 dark:text-amber-50",
-        destructive:
-          "destructive group bg-[#FCECE9] border-[#F4CCC4] text-[#1E293B] dark:bg-rose-950/90 dark:border-rose-800/70 dark:text-rose-50",
+        default: "",
+        success: "",
+        info: "",
+        warning: "",
+        destructive: "destructive group",
       },
     },
     defaultVariants: {
@@ -49,36 +44,129 @@ const toastVariants = cva(
 
 export type ToastVariant = NonNullable<VariantProps<typeof toastVariants>["variant"]>
 
+export function getOptionAStripeStyle(variant?: ToastVariant | null): React.CSSProperties {
+  const resolved = variant || "default"
+  if (resolved === "destructive") {
+    return {
+      backgroundColor: "#E54D2E",
+      backgroundImage:
+        "repeating-linear-gradient(-45deg, #D93D1E 0px, #D93D1E 4px, #F3684B 4px, #F3684B 8px)",
+    }
+  }
+  if (resolved === "warning") {
+    return {
+      backgroundColor: "#F59E0B",
+      backgroundImage:
+        "repeating-linear-gradient(-45deg, #E58E00 0px, #E58E00 4px, #FBB43B 4px, #FBB43B 8px)",
+    }
+  }
+  if (resolved === "info") {
+    return {
+      backgroundColor: "#0066FF",
+      backgroundImage:
+        "repeating-linear-gradient(-45deg, #0058DB 0px, #0058DB 4px, #2E85FF 4px, #2E85FF 8px)",
+    }
+  }
+  return {
+    backgroundColor: "#2EB85C",
+    backgroundImage:
+      "repeating-linear-gradient(-45deg, #25A24E 0px, #25A24E 4px, #44CC70 4px, #44CC70 8px)",
+  }
+}
+
 export function ToastStatusIcon({ variant = "default" }: { variant?: ToastVariant | null }) {
   const resolved = variant || "default"
 
   if (resolved === "destructive") {
     return (
-      <div className="h-7 w-7 rounded-full bg-[#E54D2E] text-white flex items-center justify-center shrink-0 shadow-2xs">
-        <span className="text-[14px] font-bold leading-none">!</span>
+      <div
+        className="h-7 w-7 rounded-full text-white flex items-center justify-center shrink-0"
+        style={{ backgroundColor: "#E54D2E" }}
+      >
+        <span className="text-[14px] font-bold font-sans leading-none">!</span>
       </div>
     )
   }
 
   if (resolved === "warning") {
     return (
-      <div className="h-7 w-7 rounded-full bg-[#F59E0B] text-white flex items-center justify-center shrink-0 shadow-2xs">
-        <span className="text-[14px] font-bold leading-none">!</span>
+      <div
+        className="h-7 w-7 rounded-full text-white flex items-center justify-center shrink-0"
+        style={{ backgroundColor: "#F59E0B" }}
+      >
+        <span className="text-[14px] font-bold font-sans leading-none">!</span>
       </div>
     )
   }
 
   if (resolved === "info") {
     return (
-      <div className="h-7 w-7 rounded-full bg-[#0066FF] text-white flex items-center justify-center shrink-0 shadow-2xs">
-        <span className="text-[13px] font-bold font-serif italic leading-none">i</span>
+      <div
+        className="h-7 w-7 rounded-full text-white flex items-center justify-center shrink-0"
+        style={{ backgroundColor: "#0066FF" }}
+      >
+        <span className="text-[13px] font-bold font-sans leading-none">i</span>
       </div>
     )
   }
 
   return (
-    <div className="h-7 w-7 rounded-full bg-[#2EB85C] text-white flex items-center justify-center shrink-0 shadow-2xs">
-      <Check className="h-4 w-4 stroke-[2.75]" />
+    <div
+      className="h-7 w-7 rounded-full text-white flex items-center justify-center shrink-0"
+      style={{ backgroundColor: "#2EB85C" }}
+    >
+      <Check className="h-4 w-4 stroke-[2.75] text-white" />
+    </div>
+  )
+}
+
+export function ToastProgressBar({
+  variant = "default",
+  durationMs = 4500,
+  staticPercent,
+}: {
+  variant?: ToastVariant | null
+  durationMs?: number
+  staticPercent?: number
+}) {
+  const resolved = variant || "default"
+  const defaultPct =
+    resolved === "info"
+      ? 42
+      : resolved === "destructive"
+      ? 42
+      : resolved === "warning"
+      ? 36
+      : 30
+
+  const [progressPct, setProgressPct] = React.useState(
+    typeof staticPercent === "number" ? staticPercent : 48
+  )
+
+  React.useEffect(() => {
+    if (typeof staticPercent === "number") {
+      setProgressPct(staticPercent)
+      return
+    }
+    const startTimer = setTimeout(() => {
+      setProgressPct(defaultPct)
+    }, 50)
+    return () => clearTimeout(startTimer)
+  }, [staticPercent, defaultPct])
+
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none h-[5px] w-full rounded-full bg-[#E5E7EB] dark:bg-slate-800 overflow-hidden"
+    >
+      <div
+        className="h-full rounded-full transition-[width] ease-out"
+        style={{
+          ...getOptionAStripeStyle(resolved),
+          width: `${progressPct}%`,
+          transitionDuration: typeof staticPercent === "number" ? "300ms" : `${durationMs}ms`,
+        }}
+      />
     </div>
   )
 }
@@ -105,7 +193,7 @@ const ToastAction = React.forwardRef<
   <ToastPrimitives.Action
     ref={ref}
     className={cn(
-      "inline-flex h-7 shrink-0 items-center justify-center rounded-lg border border-black/10 bg-white/60 px-2.5 text-xs font-semibold text-slate-800 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-ring disabled:pointer-events-none disabled:opacity-50",
+      "inline-flex h-7 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 px-2.5 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 focus:outline-none disabled:pointer-events-none disabled:opacity-50",
       className
     )}
     {...props}
@@ -115,43 +203,18 @@ ToastAction.displayName = ToastPrimitives.Action.displayName
 
 const ToastClose = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Close>,
-  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Close> & { showProgressRing?: boolean }
->(({ className, showProgressRing = true, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Close>
+>(({ className, ...props }, ref) => (
   <ToastPrimitives.Close
     ref={ref}
     className={cn(
-      "relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-600 dark:text-slate-300 opacity-100 transition-colors hover:text-slate-900 dark:hover:text-white focus:outline-none cursor-pointer",
+      "inline-flex h-6 w-6 shrink-0 items-center justify-center text-[#334155] dark:text-slate-400 opacity-100 transition-colors hover:text-slate-950 dark:hover:text-white focus:outline-none cursor-pointer",
       className
     )}
     toast-close=""
     {...props}
   >
-    {showProgressRing && (
-      <svg className="absolute inset-0 h-7 w-7 -rotate-90 pointer-events-none" viewBox="0 0 28 28">
-        <circle
-          cx="14"
-          cy="14"
-          r="11.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.25"
-          className="opacity-15"
-        />
-        <circle
-          cx="14"
-          cy="14"
-          r="11.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.25"
-          strokeDasharray="72.25"
-          strokeDashoffset="18"
-          strokeLinecap="round"
-          className="opacity-65"
-        />
-      </svg>
-    )}
-    <X className="h-3.5 w-3.5 stroke-[2]" />
+    <X className="h-4 w-4 stroke-[1.75]" />
   </ToastPrimitives.Close>
 ))
 ToastClose.displayName = ToastPrimitives.Close.displayName
@@ -162,7 +225,10 @@ const ToastTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ToastPrimitives.Title
     ref={ref}
-    className={cn("text-[13.5px] font-medium text-[#1E293B] dark:text-slate-100 leading-snug", className)}
+    className={cn(
+      "text-[13.5px] font-medium text-[#1E293B] dark:text-slate-100 leading-snug",
+      className
+    )}
     {...props}
   />
 ))
@@ -174,7 +240,10 @@ const ToastDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ToastPrimitives.Description
     ref={ref}
-    className={cn("text-[12px] text-slate-600 dark:text-slate-300 leading-snug mt-0.5", className)}
+    className={cn(
+      "text-[12px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5",
+      className
+    )}
     {...props}
   />
 ))

@@ -67,6 +67,7 @@ import {
 } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 import { logAuditAction } from '@/lib/audit';
+import { useTranslation } from '@/i18n/language-provider';
 
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -76,6 +77,7 @@ export default function ReportsPage() {
   const { user } = useUser();
   const db = useFirestore();
   const { toast } = useToast();
+  const { t, formatDate } = useTranslation();
 
   const [startDate, setStartDate] = useState('2020-01-01');
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -208,37 +210,37 @@ export default function ReportsPage() {
   const chartData = useMemo(() => {
     return [
       {
-        name: 'Processed',
+        name: t.reportsPage.statProcessedTitle,
         value: stats.processed,
         rate: stats.processedRate,
         color: '#10b981',
       },
       {
-        name: 'Processing',
+        name: t.reportsPage.statProcessingTitle,
         value: stats.processing,
         rate: stats.processingRate,
         color: '#3b82f6',
       },
       {
-        name: 'Pending Review',
+        name: t.reportsPage.statPendingTitle,
         value: stats.pending,
         rate: stats.pendingRate,
         color: '#f59e0b',
       },
       {
-        name: 'Rejected',
+        name: t.reportsPage.statRejectedTitle,
         value: stats.rejected,
         rate: stats.rejectedRate,
         color: '#ef4444',
       },
       {
-        name: 'Failed',
+        name: t.reportsPage.statFailedTitle,
         value: stats.failed,
         rate: stats.failedRate,
         color: '#64748b',
       },
     ];
-  }, [stats]);
+  }, [stats, t.reportsPage]);
 
   const paginatedData = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -429,10 +431,10 @@ export default function ReportsPage() {
             </div>
             <div>
               <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground font-headline">
-                Operational Intelligence
+                {t.reportsPage.titleMain} {t.reportsPage.titleHighlight}
               </h1>
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mt-1">
-                Exact 2-Decimal Rate Analytics & Multi-Channel Ledger
+                {t.reportsPage.subtitle}
               </p>
             </div>
           </div>
@@ -444,11 +446,11 @@ export default function ReportsPage() {
             <Select value={selectedOfficerScope} onValueChange={setSelectedOfficerScope}>
               <SelectTrigger className="h-9 w-[200px] rounded-xl text-xs font-bold">
                 <Users className="h-3.5 w-3.5 mr-1.5 text-primary shrink-0" />
-                <SelectValue placeholder="All Bureau Personnel" />
+                <SelectValue placeholder={t.reportsPage.allOfficersItem} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="GLOBAL" className="text-xs font-bold">
-                  All Bureau Personnel (Global)
+                  {t.reportsPage.allOfficersItem}
                 </SelectItem>
                 {(allUsers || []).map((u) => (
                   <SelectItem key={u.id} value={u.id} className="text-xs font-medium">
@@ -467,7 +469,7 @@ export default function ReportsPage() {
               onClick={() => applyDatePreset('7D')}
               className="h-7 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-lg"
             >
-              7 Days
+              7D
             </Button>
             <Button
               type="button"
@@ -476,7 +478,7 @@ export default function ReportsPage() {
               onClick={() => applyDatePreset('30D')}
               className="h-7 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-lg"
             >
-              30 Days
+              30D
             </Button>
             <Button
               type="button"
@@ -485,7 +487,7 @@ export default function ReportsPage() {
               onClick={() => applyDatePreset('MONTH')}
               className="h-7 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-lg"
             >
-              This Month
+              1M
             </Button>
             <Button
               type="button"
@@ -494,7 +496,7 @@ export default function ReportsPage() {
               onClick={() => applyDatePreset('ALL')}
               className="h-7 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-lg"
             >
-              All Time
+              {t.common.all}
             </Button>
           </div>
         </div>
@@ -505,18 +507,18 @@ export default function ReportsPage() {
           <Card className="overflow-hidden rounded-2xl">
             <CardHeader className="bg-white/30 dark:bg-white/[0.02] border-b border-white/60 dark:border-white/10 py-4">
               <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] flex items-center gap-2">
-                <Filter className="h-3 w-3 text-primary" /> Triage Filters
+                <Filter className="h-3 w-3 text-primary" /> {t.reportsPage.filtersTitle}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-6 space-y-5">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">
-                  Search Terminal
+                  {t.reportsPage.searchLabel}
                 </label>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40" />
                   <Input
-                    placeholder="ID, Name, Institution..."
+                    placeholder={t.reportsPage.searchPlaceholder}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="glass-auth-input pl-10 h-11 rounded-xl"
@@ -526,22 +528,22 @@ export default function ReportsPage() {
 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">
-                  Origin Channel
+                  {t.reportsPage.institutionLabel}
                 </label>
                 <Select value={originFilter} onValueChange={setOriginFilter}>
                   <SelectTrigger className="glass-auth-input h-11 rounded-xl text-xs font-bold">
                     <Building2 className="h-3.5 w-3.5 mr-1.5 text-primary shrink-0" />
-                    <SelectValue placeholder="All Origins" />
+                    <SelectValue placeholder={t.reportsPage.allInstitutionsItem} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL" className="text-xs font-bold">
-                      All Origins
+                      {t.reportsPage.allInstitutionsItem}
                     </SelectItem>
                     <SelectItem value="INSTITUTION" className="text-xs font-bold">
-                      Institutions Only
+                      {t.reportsPage.institutionLabel}
                     </SelectItem>
                     <SelectItem value="INDIVIDUAL" className="text-xs font-bold">
-                      Individuals Only
+                      {t.reportsPage.individualOnlyItem}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -549,7 +551,7 @@ export default function ReportsPage() {
 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">
-                  Operational Period
+                  {t.reportsPage.startDateLabel} / {t.reportsPage.endDateLabel}
                 </label>
                 <div className="grid grid-cols-1 gap-2">
                   <Input
@@ -569,39 +571,36 @@ export default function ReportsPage() {
 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">
-                  Current Status
+                  {t.reportsPage.colStatus}
                 </label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="glass-auth-input h-11 rounded-xl text-xs font-bold">
-                    <SelectValue placeholder="All Categories" />
+                    <SelectValue placeholder={t.common.all} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all" className="text-xs font-bold">
-                      All Categories
+                      {t.common.all}
                     </SelectItem>
                     <SelectItem value="Processed" className="text-xs font-bold">
-                      Processed ({stats.processedRate.toFixed(2)}%)
+                      {t.reportsPage.statProcessedTitle} ({stats.processedRate.toFixed(2)}%)
                     </SelectItem>
                     <SelectItem value="Processing" className="text-xs font-bold">
-                      Processing ({stats.processingRate.toFixed(2)}%)
+                      {t.reportsPage.statProcessingTitle} ({stats.processingRate.toFixed(2)}%)
                     </SelectItem>
                     <SelectItem value="Rejected" className="text-xs font-bold">
-                      Rejected ({stats.rejectedRate.toFixed(2)}%)
+                      {t.reportsPage.statRejectedTitle} ({stats.rejectedRate.toFixed(2)}%)
                     </SelectItem>
                     <SelectItem value="Failed" className="text-xs font-bold">
-                      Failed ({stats.failedRate.toFixed(2)}%)
+                      {t.reportsPage.statFailedTitle} ({stats.failedRate.toFixed(2)}%)
                     </SelectItem>
                     <SelectItem value="Pending Review" className="text-xs font-bold">
-                      Pending Review ({stats.pendingRate.toFixed(2)}%)
+                      {t.reportsPage.statPendingTitle} ({stats.pendingRate.toFixed(2)}%)
                     </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="pt-3 space-y-3">
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1 mb-2">
-                  Export Intelligence
-                </p>
                 <div className="grid grid-cols-2 gap-2">
                   <Button
                     onClick={handleExportExcel}
@@ -625,7 +624,7 @@ export default function ReportsPage() {
                   className="w-full h-10 rounded-xl font-black text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
                   onClick={resetFilters}
                 >
-                  Reset Matrix
+                  {t.reportsPage.resetBtn}
                 </Button>
               </div>
             </CardContent>
@@ -635,7 +634,7 @@ export default function ReportsPage() {
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-primary" />
               <span className="text-[10px] font-black text-primary uppercase tracking-widest">
-                Exact Success Ratio
+                {t.reportsPage.statProcessedTitle}
               </span>
             </div>
             <div className="space-y-1">
@@ -643,7 +642,7 @@ export default function ReportsPage() {
                 {stats.processedRate.toFixed(2)}%
               </p>
               <p className="text-[10px] font-bold text-muted-foreground uppercase">
-                {stats.processed} Processed of {stats.total} in scope
+                {stats.processed} / {stats.total} {t.reportsPage.recordsCountSuffix}
               </p>
             </div>
           </div>
@@ -653,7 +652,7 @@ export default function ReportsPage() {
           {/* Interactive Click-to-Filter Stat Cards with Exact 2-Decimal Rates */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
             <StatCard
-              label="Total Intake"
+              label={t.reportsPage.statTotalTitle}
               value={stats.total}
               rate="100.00%"
               active={statusFilter === 'all'}
@@ -662,7 +661,7 @@ export default function ReportsPage() {
               icon={TrendingUp}
             />
             <StatCard
-              label="Success Rate"
+              label={t.reportsPage.statProcessedTitle}
               value={stats.processed}
               rate={`${stats.processedRate.toFixed(2)}%`}
               active={statusFilter === 'Processed'}
@@ -673,7 +672,7 @@ export default function ReportsPage() {
               icon={CheckCircle2}
             />
             <StatCard
-              label="Processing"
+              label={t.reportsPage.statProcessingTitle}
               value={stats.processing}
               rate={`${stats.processingRate.toFixed(2)}%`}
               active={statusFilter === 'Processing'}
@@ -684,7 +683,7 @@ export default function ReportsPage() {
               icon={Clock}
             />
             <StatCard
-              label="Rejection Rate"
+              label={t.reportsPage.statRejectedTitle}
               value={stats.rejected}
               rate={`${stats.rejectedRate.toFixed(2)}%`}
               active={statusFilter === 'Rejected'}
@@ -693,7 +692,7 @@ export default function ReportsPage() {
               icon={XCircle}
             />
             <StatCard
-              label="Failed Rate"
+              label={t.reportsPage.statFailedTitle}
               value={stats.failed}
               rate={`${stats.failedRate.toFixed(2)}%`}
               active={statusFilter === 'Failed'}
@@ -702,7 +701,7 @@ export default function ReportsPage() {
               icon={AlertCircle}
             />
             <StatCard
-              label="Pending Rate"
+              label={t.reportsPage.statPendingTitle}
               value={stats.pending}
               rate={`${stats.pendingRate.toFixed(2)}%`}
               active={statusFilter === 'Pending Review'}
@@ -722,10 +721,10 @@ export default function ReportsPage() {
             <CardHeader className="bg-white/30 dark:bg-white/[0.02] border-b border-white/60 dark:border-white/10 py-5 px-6 sm:px-8 flex flex-row items-center justify-between relative z-10">
               <div>
                 <CardTitle className="text-sm font-black text-foreground uppercase tracking-[0.2em]">
-                  Status & Rate Distribution
+                  {t.reportsPage.titleMain} {t.reportsPage.titleHighlight}
                 </CardTitle>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">
-                  Exact 2-decimal status allocation across {stats.total} records
+                  {t.reportsPage.matchingRecordsBadge.replace('{count}', String(stats.total))}
                 </p>
               </div>
               <BarChart3 className="h-4 w-4 text-primary opacity-60" />
@@ -812,7 +811,7 @@ export default function ReportsPage() {
             {selectedIds.size > 0 && (
               <div className="bg-primary text-primary-foreground flex flex-col sm:flex-row items-center justify-between px-5 py-2.5 gap-3">
                 <span className="text-xs font-black uppercase tracking-wider">
-                  {selectedIds.size} Records Selected
+                  {t.reportsPage.selectedCountText.replace('{count}', String(selectedIds.size))}
                 </span>
                 <div className="flex items-center gap-2">
                   <Button
@@ -822,7 +821,7 @@ export default function ReportsPage() {
                     onClick={() => handleBulkStatusUpdate('Processed')}
                     className="h-8 px-3 text-[10px] font-black uppercase tracking-wider rounded-lg"
                   >
-                    Mark Processed
+                    {t.reportsPage.approveBtn}
                   </Button>
                   <Button
                     size="sm"
@@ -831,7 +830,7 @@ export default function ReportsPage() {
                     onClick={() => handleBulkStatusUpdate('Processing')}
                     className="h-8 px-3 text-[10px] font-black uppercase tracking-wider rounded-lg"
                   >
-                    Mark Processing
+                    {t.reportsPage.processingBtn}
                   </Button>
                   <Button
                     size="sm"
@@ -850,7 +849,7 @@ export default function ReportsPage() {
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Search ID, applicant name, institution, phone..."
+                  placeholder={t.reportsPage.searchPlaceholder}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="h-9 pl-9 border-0 bg-transparent shadow-none focus-visible:ring-0 text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400"
@@ -869,7 +868,7 @@ export default function ReportsPage() {
                   variant="outline"
                   className="glass-subpanel h-9 px-3 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200"
                 >
-                  <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> Export XLS
+                  <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> XLS
                 </Button>
                 <Button
                   type="button"
@@ -877,7 +876,7 @@ export default function ReportsPage() {
                   size="icon"
                   onClick={resetFilters}
                   className="glass-subpanel h-9 w-9 rounded-lg text-slate-500 hover:text-slate-800"
-                  title="Reset filters"
+                  title={t.reportsPage.resetBtn}
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                 </Button>
@@ -893,37 +892,37 @@ export default function ReportsPage() {
                     </TableHead>
                     <TableHead>
                       <div className="flex items-center justify-between gap-2">
-                        <span>Registry ID</span>
+                        <span>{t.reportsPage.colRid}</span>
                         <ArrowUpDown className="h-3 w-3 text-slate-400" />
                       </div>
                     </TableHead>
                     <TableHead>
                       <div className="flex items-center justify-between gap-2">
-                        <span>Applicant & Channel</span>
+                        <span>{t.reportsPage.colApplicant}</span>
                         <ArrowUpDown className="h-3 w-3 text-slate-400" />
                       </div>
                     </TableHead>
                     <TableHead>
                       <div className="flex items-center justify-between gap-2">
-                        <span>Submission Date</span>
+                        <span>{t.reportsPage.colDate}</span>
                         <ArrowUpDown className="h-3 w-3 text-slate-400" />
                       </div>
                     </TableHead>
                     <TableHead>
                       <div className="flex items-center justify-between gap-2">
-                        <span>Status</span>
+                        <span>{t.reportsPage.colStatus}</span>
                         <ArrowUpDown className="h-3 w-3 text-slate-400" />
                       </div>
                     </TableHead>
                     <TableHead>
                       <div className="flex items-center justify-between gap-2">
-                        <span>Region</span>
+                        <span>{t.common.sector}</span>
                         <ArrowUpDown className="h-3 w-3 text-slate-400" />
                       </div>
                     </TableHead>
                     <TableHead className="border-r-0 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <span>Action</span>
+                        <span>{t.reportsPage.colActions}</span>
                       </div>
                     </TableHead>
                   </TableRow>
@@ -949,7 +948,6 @@ export default function ReportsPage() {
                           <button
                             type="button"
                             onClick={() => handleCopyRid(reg.id)}
-                            title="Click to copy full RID"
                             className="inline-flex items-center gap-1.5 text-[12px] font-mono text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer group/rid"
                           >
                             <FileDigit className="h-3.5 w-3.5 text-slate-400 group-hover/rid:text-blue-600 dark:group-hover/rid:text-blue-400 shrink-0 transition-colors" />
@@ -971,13 +969,15 @@ export default function ReportsPage() {
                                 <Building2 className="h-2.5 w-2.5" /> {instName}
                               </span>
                             ) : (
-                              <span className="text-[10px] text-muted-foreground">Individual</span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {t.reportsPage.individualOnlyItem}
+                              </span>
                             )}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="text-[13px] text-slate-600 dark:text-slate-300">
-                            {format(new Date(reg.submissionDate), 'dd MMM yyyy')}
+                            {formatDate(reg.submissionDate)}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -992,7 +992,6 @@ export default function ReportsPage() {
                           <div className="inline-flex items-center justify-end gap-1">
                             <Link
                               href={`/status-check?id=${reg.id}`}
-                              title="View Record"
                               className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
                             >
                               <Eye className="h-4 w-4" />
@@ -1003,7 +1002,6 @@ export default function ReportsPage() {
                               trigger={
                                 <button
                                   type="button"
-                                  title="Edit Record"
                                   className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                                 >
                                   <SquarePen className="h-4 w-4" />
@@ -1012,13 +1010,12 @@ export default function ReportsPage() {
                             />
                             <button
                               type="button"
-                              title="Delete Record"
                               onClick={() => {
                                 if (!db) return;
                                 deleteDocumentNonBlocking(doc(db, 'registrations', reg.id));
                                 toast({
-                                  title: 'Record Purged',
-                                  description: `Removed ${reg.applicantName} from the registry.`,
+                                  title: t.common.delete,
+                                  description: reg.applicantName,
                                   variant: 'destructive',
                                 });
                               }}
@@ -1036,7 +1033,10 @@ export default function ReportsPage() {
                       <TableCell colSpan={7} className="h-48 text-center">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Filter className="h-8 w-8 text-slate-300" />
-                          <p className="text-xs font-semibold text-slate-400">Zero Matches</p>
+                          <p className="text-xs font-semibold text-slate-400">
+                            {t.reportsPage.emptyTitle}
+                          </p>
+                          <p className="text-[11px] text-slate-400">{t.reportsPage.emptySub}</p>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1051,7 +1051,7 @@ export default function ReportsPage() {
               onPageChange={setCurrentPage}
               showingCount={paginatedData.length}
               totalCount={filteredData.length}
-              itemLabel="records"
+              itemLabel={t.reportsPage.recordsCountSuffix}
             />
           </div>
         </div>

@@ -11,6 +11,7 @@ import {
   Loader2,
   RotateCcw,
 } from 'lucide-react';
+import { useTranslation } from '@/i18n/language-provider';
 
 export type VerificationVariant = 'credentials' | 'mfa' | 'provisioned' | 'session';
 export type VerificationOutcome = 'verifying' | 'success' | 'wrong';
@@ -42,6 +43,7 @@ export function VerificationAnimation({
   compact = false,
   onRetry,
 }: VerificationAnimationProps) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<'verifying' | 'success' | 'wrong'>(
     outcome === 'verifying' ? 'verifying' : 'verifying'
   );
@@ -81,48 +83,19 @@ export function VerificationAnimation({
     }
   > = {
     credentials: {
-      verifyingHeading: 'Verifying Credentials...',
-      verifyingSub: 'Checking official email and encrypted access key against bureau directory...',
-      verifyingTag: 'STAGE 01 · VERIFYING',
-      successHeading: 'Credentials Verified',
-      successSub: 'Primary authentication confirmed. Initializing 6-digit MFA challenge...',
-      successTag: 'STAGE 01 · AUTHENTICATED',
-      wrongHeading: 'Authentication Failed',
-      wrongSub: errorMessage || 'Invalid terminal email or access key. Please verify your credentials.',
-      wrongTag: 'STAGE 01 · ACCESS DENIED',
+      ...t.mfa.credentials,
+      wrongSub: errorMessage || t.mfa.credentials.wrongSub,
     },
     mfa: {
-      verifyingHeading: 'Verifying MFA Code...',
-      verifyingSub: 'Validating 6-digit Google Authenticator signature...',
-      verifyingTag: 'STAGE 02 · VERIFYING TOKEN',
-      successHeading: 'Identity Verified',
-      successSub: 'Cryptographic MFA token validated. Authorizing encrypted bureau terminal...',
-      successTag: 'STAGE 02 · ACCESS GRANTED',
-      wrongHeading: 'Wrong MFA Code',
-      wrongSub: errorMessage || 'The 6-digit authenticator code did not match. Please try again.',
-      wrongTag: 'STAGE 02 · TOKEN REJECTED',
+      ...t.mfa.token,
+      wrongSub: errorMessage || t.mfa.token.wrongSub,
     },
     provisioned: {
-      verifyingHeading: 'Provisioning Officer...',
-      verifyingSub: 'Encrypting officer clearance and committing identity records...',
-      verifyingTag: 'BUREAU REGISTRY · SYNCING',
-      successHeading: 'Credentials Provisioned',
-      successSub: 'Officer security profile and clearance records have been cryptographically committed.',
-      successTag: 'BUREAU REGISTRY · VERIFIED',
-      wrongHeading: 'Provisioning Failed',
-      wrongSub: errorMessage || 'Could not commit officer credentials to the bureau registry.',
-      wrongTag: 'BUREAU REGISTRY · ERROR',
+      ...t.mfa.provisioned,
+      wrongSub: errorMessage || t.mfa.provisioned.wrongSub,
     },
     session: {
-      verifyingHeading: 'Verifying Session...',
-      verifyingSub: 'Validating active terminal clearance and multi-factor handshake...',
-      verifyingTag: 'SECURITY GATEWAY · CHECKING',
-      successHeading: 'Session Verified',
-      successSub: 'Active terminal clearance validated.',
-      successTag: 'SECURITY GATEWAY · ACTIVE',
-      wrongHeading: 'Session Expired',
-      wrongSub: 'Security session could not be verified. Redirecting to terminal login...',
-      wrongTag: 'SECURITY GATEWAY · LOCKED',
+      ...t.mfa.session,
     },
   };
 
@@ -262,7 +235,7 @@ export function VerificationAnimation({
           )}
           <span className="mx-2 opacity-40">·</span>
           <span className={step === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-primary'}>
-            {step === 'success' ? 'VERIFIED' : 'CHECKING'}
+            {step === 'success' ? t.mfa.verifiedStatus : t.mfa.checkingStatus}
           </span>
         </div>
       )}
@@ -283,10 +256,10 @@ export function VerificationAnimation({
         </div>
         <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
           {step === 'success'
-            ? 'Handshake Complete'
+            ? t.mfa.handshakeComplete
             : step === 'wrong'
-            ? 'Verification Rejected'
-            : 'Verifying Signature...'}
+            ? t.mfa.verificationRejected
+            : t.mfa.verifyingSignature}
         </p>
 
         {step === 'wrong' && onRetry && (
@@ -296,7 +269,7 @@ export function VerificationAnimation({
             className="mt-2 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 backdrop-blur-md text-rose-600 dark:text-rose-300 text-[10px] font-black uppercase tracking-widest transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            Try Again
+            {t.mfa.tryAgainBtn}
           </button>
         )}
       </div>

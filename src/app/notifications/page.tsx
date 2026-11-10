@@ -47,6 +47,7 @@ import {
 import { format } from 'date-fns';
 import Link from 'next/link';
 import { logAuditAction } from '@/lib/audit';
+import { useTranslation } from '@/i18n/language-provider';
 
 type CategoryFilter = 'all' | 'announcement' | 'message' | 'personal';
 
@@ -61,6 +62,7 @@ export default function NotificationsPage() {
   const [broadcastContent, setBroadcastContent] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
   const { toast } = useToast();
+  const { t, formatDate } = useTranslation();
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -216,8 +218,8 @@ export default function NotificationsPage() {
       });
     }
     toast({
-      title: 'Alert Acknowledged',
-      description: 'Marked item as read.',
+      title: t.notificationsPage.toastReadTitle,
+      description: t.notificationsPage.toastReadDesc,
     });
   };
 
@@ -226,14 +228,14 @@ export default function NotificationsPage() {
     if (item.category === 'personal') {
       deleteDocumentNonBlocking(doc(db, 'users', user.uid, 'notifications', item.id));
       toast({
-        title: 'Notification Removed',
-        description: 'Personal alert removed from history.',
+        title: t.notificationsPage.toastRemovedTitle,
+        description: t.notificationsPage.toastRemovedDesc,
       });
     } else if (item.category === 'announcement' && isAdmin) {
       deleteDocumentNonBlocking(doc(db, 'announcements', item.id));
       toast({
-        title: 'Broadcast Removed',
-        description: 'Official broadcast deleted.',
+        title: t.notificationsPage.toastBroadcastRemovedTitle,
+        description: t.notificationsPage.toastBroadcastRemovedDesc,
       });
     }
   };
@@ -261,8 +263,8 @@ export default function NotificationsPage() {
       );
 
       toast({
-        title: 'Official Broadcast Published',
-        description: 'Your announcement has been transmitted to all active personnel.',
+        title: t.notificationsPage.toastPublishedTitle,
+        description: t.notificationsPage.toastPublishedDesc,
       });
       setBroadcastTitle('');
       setBroadcastContent('');
@@ -302,8 +304,8 @@ export default function NotificationsPage() {
     });
 
     toast({
-      title: 'Terminal Synchronized',
-      description: 'All operational alerts and broadcasts acknowledged.',
+      title: t.notificationsPage.toastAllReadTitle,
+      description: t.notificationsPage.toastAllReadDesc,
     });
   };
 
@@ -333,26 +335,139 @@ export default function NotificationsPage() {
     );
 
     toast({
-      title: 'Archive Purged',
-      description: 'Intelligence feed history has been cleared and signed into the ledger.',
+      title: t.notificationsPage.toastClearedTitle,
+      description: t.notificationsPage.toastClearedDesc,
     });
   };
 
-  const getTypeIcon = (item: any) => {
-    if (item.category === 'announcement') return <Megaphone className="h-5 w-5 text-primary" />;
-    if (item.category === 'message') return <MessageSquare className="h-5 w-5 text-amber-500" />;
-
-    switch (item.type) {
-      case 'success':
-        return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-      case 'error':
-        return <XCircle className="h-5 w-5 text-red-500" />;
-      case 'warning':
-        return <AlertTriangle className="h-5 w-5 text-amber-500" />;
-      default:
-        return <Info className="h-5 w-5 text-blue-500" />;
+  const getOptionAVariant = (item: any): 'success' | 'info' | 'warning' | 'destructive' => {
+    if (item.category === 'announcement') return 'info';
+    if (item.category === 'message') return 'warning';
+    const rawType = String(item.type || '').toLowerCase();
+    const lowerTitle = String(item.title || '').toLowerCase();
+    if (
+      rawType === 'error' ||
+      rawType === 'destructive' ||
+      lowerTitle.includes('error') ||
+      lowerTitle.includes('fail') ||
+      lowerTitle.includes('purge') ||
+      lowerTitle.includes('removed')
+    ) {
+      return 'destructive';
     }
+    if (
+      rawType === 'warning' ||
+      lowerTitle.includes('warn') ||
+      lowerTitle.includes('duplicate') ||
+      lowerTitle.includes('pending')
+    ) {
+      return 'warning';
+    }
+    if (rawType === 'success' || lowerTitle.includes('success') || lowerTitle.includes('verified')) {
+      return 'success';
+    }
+    return 'info';
   };
+
+  const renderOptionABadge = (variant: 'success' | 'info' | 'warning' | 'destructive') => {
+    if (variant === 'destructive') {
+      return (
+        <div
+          className="h-7 w-7 rounded-full text-white flex items-center justify-center shrink-0"
+          style={{ backgroundColor: '#E54D2E' }}
+        >
+          <span className="text-[14px] font-bold font-sans leading-none">!</span>
+        </div>
+      );
+    }
+    if (variant === 'warning') {
+      return (
+        <div
+          className="h-7 w-7 rounded-full text-white flex items-center justify-center shrink-0"
+          style={{ backgroundColor: '#F59E0B' }}
+        >
+          <span className="text-[14px] font-bold font-sans leading-none">!</span>
+        </div>
+      );
+    }
+    if (variant === 'info') {
+      return (
+        <div
+          className="h-7 w-7 rounded-full text-white flex items-center justify-center shrink-0"
+          style={{ backgroundColor: '#0066FF' }}
+        >
+          <span className="text-[13px] font-bold font-sans leading-none">i</span>
+        </div>
+      );
+    }
+    return (
+      <div
+        className="h-7 w-7 rounded-full text-white flex items-center justify-center shrink-0"
+        style={{ backgroundColor: '#2EB85C' }}
+      >
+        <Check className="h-4 w-4 stroke-[2.75] text-white" />
+      </div>
+    );
+  };
+
+  const getOptionABarStyle = (
+    variant: 'success' | 'info' | 'warning' | 'destructive',
+    pct?: number
+  ): React.CSSProperties => {
+    const defaultPct =
+      typeof pct === 'number'
+        ? pct
+        : variant === 'info'
+        ? 42
+        : variant === 'destructive'
+        ? 42
+        : variant === 'warning'
+        ? 36
+        : 30;
+
+    if (variant === 'destructive') {
+      return {
+        width: `${defaultPct}%`,
+        backgroundColor: '#E54D2E',
+        backgroundImage:
+          'repeating-linear-gradient(-45deg, #D93D1E 0px, #D93D1E 4px, #F3684B 4px, #F3684B 8px)',
+      };
+    }
+    if (variant === 'warning') {
+      return {
+        width: `${defaultPct}%`,
+        backgroundColor: '#F59E0B',
+        backgroundImage:
+          'repeating-linear-gradient(-45deg, #E58E00 0px, #E58E00 4px, #FBB43B 4px, #FBB43B 8px)',
+      };
+    }
+    if (variant === 'info') {
+      return {
+        width: `${defaultPct}%`,
+        backgroundColor: '#0066FF',
+        backgroundImage:
+          'repeating-linear-gradient(-45deg, #0058DB 0px, #0058DB 4px, #2E85FF 4px, #2E85FF 8px)',
+      };
+    }
+    return {
+      width: `${defaultPct}%`,
+      backgroundColor: '#2EB85C',
+      backgroundImage:
+        'repeating-linear-gradient(-45deg, #25A24E 0px, #25A24E 4px, #44CC70 4px, #44CC70 8px)',
+    };
+  };
+
+  const optionASamples: Array<{
+    id: string;
+    label: string;
+    variant: 'success' | 'info' | 'warning' | 'destructive';
+    pct: number;
+  }> = [
+    { id: 'success', label: t.notificationsPage.sampleSuccess, variant: 'success', pct: 30 },
+    { id: 'info', label: t.notificationsPage.sampleInfo, variant: 'info', pct: 42 },
+    { id: 'warning', label: t.notificationsPage.sampleWarning, variant: 'warning', pct: 36 },
+    { id: 'destructive', label: t.notificationsPage.sampleError, variant: 'destructive', pct: 42 },
+  ];
 
   if (isUserLoading || isNotisLoading || isAnnLoading || isConvsLoading) {
     return (
@@ -371,13 +486,13 @@ export default function NotificationsPage() {
           </div>
           <div className="space-y-1">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
-              Bureau Operational Log
+              {t.notificationsPage.eyebrow}
             </p>
             <h1 className="text-3xl font-black tracking-tight text-foreground font-headline">
-              Intelligence Feed
+              {t.notificationsPage.title}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Synchronized personal alerts, transmissions, and bureau-wide announcements.
+              {t.notificationsPage.subtitle}
             </p>
           </div>
         </div>
@@ -387,9 +502,57 @@ export default function NotificationsPage() {
             onClick={() => setIsBroadcastModalOpen(true)}
             className="h-10 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm"
           >
-            <Plus className="h-4 w-4 mr-1.5" /> Broadcast Announcement
+            <Plus className="h-4 w-4 mr-1.5" /> {t.notificationsPage.broadcastBtn}
           </Button>
         )}
+      </div>
+
+      {/* Exact Option A Alert Cards Showcase & Quick Trigger */}
+      <div className="rounded-[24px] bg-[#F8FAFC] dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+              {t.notificationsPage.optionAHeader}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t.notificationsPage.optionASubtitle}
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {optionASamples.map((sample) => (
+            <div
+              key={sample.id}
+              onClick={() =>
+                toast({
+                  variant: sample.variant,
+                  title: sample.label,
+                })
+              }
+              className="flex flex-col gap-[3px] cursor-pointer group select-none"
+            >
+              {/* Top White Card */}
+              <div className="flex w-full items-center justify-between gap-3.5 rounded-[8px] border border-slate-100 bg-white px-4 py-3.5 text-[#1E293B] shadow-[0_2px_10px_rgba(15,23,42,0.05)] group-hover:shadow-[0_4px_14px_rgba(15,23,42,0.09)] transition-all dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  {renderOptionABadge(sample.variant)}
+                  <span className="text-[13.5px] font-medium text-[#1E293B] dark:text-slate-100 truncate">
+                    {sample.label}
+                  </span>
+                </div>
+                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-[#334155] dark:text-slate-400">
+                  <span className="text-lg leading-none font-normal">×</span>
+                </span>
+              </div>
+              {/* Bottom Striped Progress Track */}
+              <div className="h-[5px] w-full rounded-full bg-[#E5E7EB] dark:bg-slate-800 overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={getOptionABarStyle(sample.variant, sample.pct)}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="bg-card p-4 rounded-2xl border border-border shadow-sm space-y-4">
@@ -404,13 +567,13 @@ export default function NotificationsPage() {
                 value="all"
                 className="font-bold text-[10px] uppercase tracking-widest"
               >
-                All Items ({combinedItems.length})
+                {t.notificationsPage.tabAllItems.replace('{count}', String(combinedItems.length))}
               </TabsTrigger>
               <TabsTrigger
                 value="unread"
                 className="font-bold text-[10px] uppercase tracking-widest"
               >
-                Unread ({unreadCount})
+                {t.notificationsPage.tabUnread.replace('{count}', String(unreadCount))}
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -423,7 +586,7 @@ export default function NotificationsPage() {
               onClick={markAllRead}
               disabled={unreadCount === 0}
             >
-              <CheckCheck className="mr-2 h-3.5 w-3.5" /> Mark All Read
+              <CheckCheck className="mr-2 h-3.5 w-3.5" /> {t.notificationsPage.markAllReadBtn}
             </Button>
             <Button
               variant="outline"
@@ -432,7 +595,7 @@ export default function NotificationsPage() {
               onClick={clearAll}
               disabled={!notifications?.length}
             >
-              <Trash2 className="mr-2 h-3.5 w-3.5" /> Clear History
+              <Trash2 className="mr-2 h-3.5 w-3.5" /> {t.notificationsPage.clearHistoryBtn}
             </Button>
           </div>
         </div>
@@ -442,10 +605,10 @@ export default function NotificationsPage() {
           <div className="flex flex-wrap items-center gap-1.5">
             {(
               [
-                { id: 'all', label: 'All Channels' },
-                { id: 'announcement', label: 'Official Broadcasts' },
-                { id: 'message', label: 'Secure Messages' },
-                { id: 'personal', label: 'Personal Alerts' },
+                { id: 'all', label: t.notificationsPage.catAll },
+                { id: 'announcement', label: t.notificationsPage.catAnnouncements },
+                { id: 'message', label: t.notificationsPage.catMessages },
+                { id: 'personal', label: t.notificationsPage.catPersonal },
               ] as const
             ).map((cat) => (
               <button
@@ -455,7 +618,7 @@ export default function NotificationsPage() {
                 className={cn(
                   'px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer',
                   categoryFilter === cat.id
-                    ? 'bg-primary text-primary-foreground shadow-2xs'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'bg-muted/60 text-muted-foreground hover:text-foreground'
                 )}
               >
@@ -467,7 +630,7 @@ export default function NotificationsPage() {
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
-              placeholder="Search feed..."
+              placeholder={t.notificationsPage.searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-8 h-9 rounded-xl text-xs"
@@ -476,108 +639,108 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3.5">
         {paginatedItems.length > 0 ? (
-          paginatedItems.map((item) => (
-            <Card
-              key={item.id}
-              className={cn(
-                'border-none shadow-sm transition-all hover:shadow-md bg-card overflow-hidden group',
-                !item.isRead && 'ring-1 ring-primary/20',
-                item.category === 'announcement' && 'bg-primary/[0.02]',
-                item.category === 'message' && 'bg-amber-500/[0.02]'
-              )}
-            >
-              <CardContent className="p-6 flex items-start gap-5">
-                <div className="mt-1 p-2.5 rounded-xl bg-muted/50 border border-border">
-                  {getTypeIcon(item)}
-                </div>
-                <div className="flex-1 space-y-1.5 min-w-0">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <h3 className="font-bold text-foreground text-sm tracking-tight">
-                        {item.title}
-                      </h3>
-                      {item.category === 'announcement' && (
-                        <span className="text-[9px] font-black uppercase bg-primary text-primary-foreground px-2 py-0.5 rounded-full tracking-tighter">
-                          Official Broadcast
+          paginatedItems.map((item) => {
+            const variant = getOptionAVariant(item);
+            const canDelete =
+              item.category === 'personal' || (item.category === 'announcement' && isAdmin);
+
+            return (
+              <div key={item.id} className="flex flex-col gap-[3px] w-full group">
+                {/* Top White Card (Exact Option A) */}
+                <div
+                  className={cn(
+                    'flex w-full items-center justify-between gap-3.5 rounded-[8px] border border-slate-100 bg-white px-4 py-3.5 text-[#1E293B] shadow-[0_2px_10px_rgba(15,23,42,0.05)] transition-all hover:shadow-[0_4px_14px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100',
+                    !item.isRead && 'ring-1 ring-slate-200 dark:ring-slate-700'
+                  )}
+                >
+                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                    {renderOptionABadge(variant)}
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-[13.5px] font-medium text-[#1E293B] dark:text-slate-100 leading-snug">
+                          {item.title}
+                        </h3>
+                        {item.category === 'announcement' && (
+                          <span className="text-[9px] font-bold uppercase bg-blue-50 text-[#0066FF] dark:bg-blue-950/60 dark:text-blue-300 px-2 py-0.5 rounded-full">
+                            {t.notificationsPage.broadcastTag}
+                          </span>
+                        )}
+                        {item.category === 'message' && (
+                          <span className="text-[9px] font-bold uppercase bg-amber-50 text-[#F59E0B] dark:bg-amber-950/60 dark:text-amber-300 px-2 py-0.5 rounded-full">
+                            {t.notificationsPage.messageTag}
+                          </span>
+                        )}
+                        {!item.isRead && (
+                          <span className="text-[9px] font-bold uppercase text-[#0066FF]">
+                            {t.notificationsPage.unreadTag}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-slate-400 ml-auto">
+                          {formatDate(item.createdAt, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                         </span>
+                      </div>
+                      {item.message && (
+                        <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">
+                          {item.message}
+                        </p>
                       )}
-                      {item.category === 'message' && (
-                        <span className="text-[9px] font-black uppercase bg-amber-500 text-white px-2 py-0.5 rounded-full tracking-tighter">
-                          Secure Channel
-                        </span>
-                      )}
-                      {!item.isRead && (
-                        <span className="text-[8px] font-black uppercase text-primary animate-pulse">
-                          New
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-tighter">
-                        {format(new Date(item.createdAt), 'MMM dd • HH:mm')}
-                      </span>
-                      {!item.isRead && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => markSingleItemRead(item)}
-                          className="h-7 px-2 text-[9px] font-black uppercase tracking-wider text-primary"
-                          title="Mark as read"
-                        >
-                          <Check className="h-3 w-3 mr-1" /> Read
-                        </Button>
-                      )}
-                      {(item.category === 'personal' ||
-                        (item.category === 'announcement' && isAdmin)) && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => deleteSingleItem(item)}
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                          title="Delete item"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                      {item.actionHref && (
+                        <div className="pt-2">
+                          <Link
+                            href={item.actionHref}
+                            className="inline-flex items-center text-[11px] font-semibold text-[#0066FF] hover:underline"
+                          >
+                            {t.notificationsPage.openTerminalLink} <ArrowRight className="ml-1 h-3 w-3" />
+                          </Link>
+                        </div>
                       )}
                     </div>
                   </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed font-medium">
-                    {item.message}
-                  </p>
-                  {item.actionHref && (
-                    <div className="pt-3">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-[10px] font-black uppercase tracking-widest rounded-lg"
-                        asChild
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {!item.isRead && (
+                      <button
+                        type="button"
+                        onClick={() => markSingleItemRead(item)}
+                        className="inline-flex h-6 px-2 items-center justify-center rounded text-[10px] font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white cursor-pointer"
+                        title={t.notificationsPage.markReadTooltip}
                       >
-                        <Link href={item.actionHref}>
-                          Open Terminal <ArrowRight className="ml-2 h-3 w-3" />
-                        </Link>
-                      </Button>
-                    </div>
-                  )}
+                        {t.notificationsPage.readBtn}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        canDelete ? deleteSingleItem(item) : markSingleItemRead(item)
+                      }
+                      className="inline-flex h-6 w-6 items-center justify-center text-[#334155] hover:text-slate-950 dark:text-slate-400 dark:hover:text-white transition-colors cursor-pointer"
+                      title={canDelete ? t.notificationsPage.dismissTooltip : t.notificationsPage.acknowledgeTooltip}
+                    >
+                      <span className="text-lg leading-none font-normal">×</span>
+                    </button>
+                  </div>
                 </div>
-                {!item.isRead && (
-                  <div className="h-2 w-2 rounded-full bg-primary mt-2 shadow-[0_0_8px_rgba(var(--primary),0.5)] shrink-0" />
-                )}
-              </CardContent>
-            </Card>
-          ))
-        ) : (
-          <div className="flex flex-col items-center justify-center py-32 bg-card rounded-[32px] border border-dashed border-border shadow-inner">
-            <div className="relative mb-8">
-              <div className="absolute inset-0 bg-primary/5 rounded-full blur-3xl opacity-50" />
-              <div className="p-8 bg-muted rounded-full relative z-10 border border-border shadow-sm">
-                <Bell className="h-16 w-16 text-muted-foreground/20" />
+
+                {/* Bottom Striped Progress Track (Exact Option A) */}
+                <div className="h-[5px] w-full rounded-full bg-[#E5E7EB] dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={getOptionABarStyle(variant, item.isRead ? 100 : undefined)}
+                  />
+                </div>
               </div>
+            );
+          })
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 bg-card rounded-[24px] border border-dashed border-border shadow-inner">
+            <div className="p-5 bg-muted rounded-full border border-border shadow-sm mb-4">
+              <Bell className="h-10 w-10 text-muted-foreground/30" />
             </div>
-            <h3 className="text-xl font-bold text-foreground mb-2">Operational Calm</h3>
-            <p className="text-sm text-muted-foreground font-medium italic">
-              No pending alerts or notifications for your unit.
+            <h3 className="text-lg font-bold text-foreground mb-1">{t.notificationsPage.emptyTitle}</h3>
+            <p className="text-xs text-muted-foreground font-medium">
+              {t.notificationsPage.emptyDesc}
             </p>
           </div>
         )}
@@ -589,7 +752,9 @@ export default function NotificationsPage() {
                 <Activity className="h-4 w-4 text-primary" />
               </div>
               <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-                Visualizing {paginatedItems.length} of {filteredItems.length} Intelligence Items
+                {t.notificationsPage.showingPagination
+                  .replace('{showing}', String(paginatedItems.length))
+                  .replace('{total}', String(filteredItems.length))}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -603,7 +768,9 @@ export default function NotificationsPage() {
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <div className="flex items-center justify-center min-w-[120px] h-11 text-[10px] font-black text-foreground bg-muted/50 border border-border rounded-xl uppercase tracking-widest px-4">
-                Page {currentPage} of {totalPages}
+                {t.notificationsPage.pageOfTotal
+                  .replace('{current}', String(currentPage))
+                  .replace('{total}', String(totalPages))}
               </div>
               <Button
                 variant="outline"
@@ -622,9 +789,7 @@ export default function NotificationsPage() {
       <div className="p-6 bg-primary/[0.03] border border-primary/10 rounded-[32px] flex items-center gap-4">
         <ShieldCheck className="h-6 w-6 text-primary shrink-0 opacity-40" />
         <p className="text-[10px] text-foreground font-bold uppercase leading-relaxed tracking-widest">
-          Intelligence Protocol: The feed above integrates real-time signals from bureau response
-          channels, personal system alerts, and central command broadcasts. Bulk clearing actions
-          are signed into the forensic audit ledger to maintain operational accountability.
+          {t.notificationsPage.footerNote}
         </p>
       </div>
 
@@ -634,19 +799,19 @@ export default function NotificationsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-black uppercase tracking-tight">
               <Megaphone className="h-5 w-5 text-primary" />
-              Transmit Bureau Broadcast
+              {t.notificationsPage.modalTitle}
             </DialogTitle>
             <DialogDescription>
-              Publish an official announcement to all field units and personnel feeds.
+              {t.notificationsPage.modalDesc}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Broadcast Title
+                {t.notificationsPage.broadcastTitleLabel}
               </label>
               <Input
-                placeholder="e.g., Monthly SLA Verification Target Update"
+                placeholder={t.notificationsPage.broadcastTitlePlaceholder}
                 value={broadcastTitle}
                 onChange={(e) => setBroadcastTitle(e.target.value)}
                 className="rounded-xl"
@@ -654,10 +819,10 @@ export default function NotificationsPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Message Content
+                {t.notificationsPage.broadcastContentLabel}
               </label>
               <Textarea
-                placeholder="Enter official directive or announcement details..."
+                placeholder={t.notificationsPage.broadcastContentPlaceholder}
                 value={broadcastContent}
                 onChange={(e) => setBroadcastContent(e.target.value)}
                 rows={4}
@@ -671,7 +836,7 @@ export default function NotificationsPage() {
               onClick={() => setIsBroadcastModalOpen(false)}
               className="rounded-xl text-xs font-bold"
             >
-              Cancel
+              {t.common.cancel}
             </Button>
             <Button
               onClick={handlePublishBroadcast}
@@ -679,7 +844,7 @@ export default function NotificationsPage() {
               className="rounded-xl text-xs font-bold"
             >
               {isPublishing ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-              Publish Broadcast
+              {t.notificationsPage.publishBroadcastBtn}
             </Button>
           </DialogFooter>
         </DialogContent>

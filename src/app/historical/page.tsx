@@ -73,6 +73,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { TablePagination } from '@/components/ui/table-pagination';
 import { logAuditAction } from '@/lib/audit';
 import { format } from 'date-fns';
+import { useTranslation } from '@/i18n/language-provider';
 
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -89,6 +90,7 @@ export default function HistoricalDataPage() {
   const { user } = useUser();
   const db = useFirestore();
   const { toast } = useToast();
+  const { t, formatNumber } = useTranslation();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -206,8 +208,8 @@ export default function HistoricalDataPage() {
       );
 
       toast({
-        title: "Archives Purged",
-        description: `Successfully removed ${count} summaries from the bureau ledger.`,
+        title: t.historicalPage.toastBulkPurgedTitle,
+        description: t.historicalPage.toastBulkPurgedDesc.replace('{count}', String(count)),
         variant: "destructive"
       });
       setSelectedIds(new Set());
@@ -215,8 +217,8 @@ export default function HistoricalDataPage() {
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Bulk Purge Failed",
-        description: "Clearance error during mass archival deletion.",
+        title: t.historicalPage.toastBulkFailedTitle,
+        description: t.historicalPage.toastBulkFailedDesc,
       });
     } finally {
       setIsBulkProcessing(false);
@@ -262,8 +264,8 @@ export default function HistoricalDataPage() {
     resetForm();
 
     toast({
-      title: editingId ? "Summary Updated" : "Monthly Summary Saved",
-      description: `Summary for ${month} ${year} has been synchronized successfully.`,
+      title: editingId ? t.historicalPage.toastSummaryUpdatedTitle : t.historicalPage.toastSummarySavedTitle,
+      description: t.historicalPage.toastSummarySavedDesc.replace('{period}', `${month} ${year}`),
     });
   };
 
@@ -303,15 +305,15 @@ export default function HistoricalDataPage() {
       );
 
       toast({
-        title: "Archive Entry Purged",
-        description: `Historical data for ${summaryToDelete.label} has been removed.`,
+        title: t.historicalPage.toastEntryPurgedTitle,
+        description: t.historicalPage.toastEntryPurgedDesc.replace('{label}', summaryToDelete.label),
         variant: "destructive",
       });
       setIsDeleteDialogOpen(false);
     } catch (error) {
       toast({
-        title: "Operation Failed",
-        description: "Protocol error during ledger purge.",
+        title: t.historicalPage.toastOpFailedTitle,
+        description: t.historicalPage.toastOpFailedDesc,
         variant: "destructive"
       });
     } finally {
@@ -355,7 +357,7 @@ export default function HistoricalDataPage() {
 
     logAuditAction(db, user!, profile.fullName, 'PERFORMANCE_REVIEW', 'historical_ledger', `Exported XLSX historical ledger archive for ${history.length} months.`);
     
-    toast({ title: "Excel Archive Generated", description: "Official historical ledger downloaded." });
+    toast({ title: t.historicalPage.toastExcelTitle, description: t.historicalPage.toastExcelDesc });
     setTimeout(() => setIsExporting(false), 800);
   };
 
@@ -364,9 +366,9 @@ export default function HistoricalDataPage() {
     setIsExporting(true);
 
     const doc = new jsPDF('l', 'mm', 'a4');
-    doc.text("Official Bureau Historical Data Ledger", 14, 15);
+    doc.text(t.historicalPage.pageTitle, 14, 15);
     doc.setFontSize(10);
-    doc.text(`Official: ${profile.fullName} | Records: ${history.length} Months | Generated: ${format(new Date(), 'yyyy-MM-dd HH:mm')}`, 14, 22);
+    doc.text(`${profile.fullName} | ${history.length} | ${format(new Date(), 'yyyy-MM-dd HH:mm')}`, 14, 22);
 
     const rows = history.map(h => [
       `${h.month} ${h.year}`,
@@ -380,7 +382,7 @@ export default function HistoricalDataPage() {
 
     autoTable(doc, {
       startY: 30,
-      head: [['Period', 'Ethio', 'Safaricom', 'Grand Total', 'Processed', 'Rejected', 'Failed']],
+      head: [[t.historicalPage.colPeriod, t.historicalPage.colEthio, t.historicalPage.colSafaricom, t.historicalPage.colGrandTotal, t.historicalPage.colProcessed, t.historicalPage.colRejected, t.common.statusFailed]],
       body: rows,
       theme: 'striped',
       headStyles: { fillColor: [15, 23, 42] }
@@ -390,20 +392,20 @@ export default function HistoricalDataPage() {
     
     logAuditAction(db, user!, profile.fullName, 'PERFORMANCE_REVIEW', 'historical_ledger', `Exported PDF historical ledger archive for ${history.length} months.`);
     
-    toast({ title: "PDF Archive Generated", description: "High-fidelity historical document saved." });
+    toast({ title: t.historicalPage.toastPdfTitle, description: t.historicalPage.toastPdfDesc });
     setTimeout(() => setIsExporting(false), 800);
   };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-20">
       <Link href="/registrations" className="flex items-center text-[10px] font-black text-muted-foreground hover:text-primary transition-colors uppercase tracking-widest gap-1.5">
-        <ArrowLeft className="h-3 w-3" /> Return to Registry
+        <ArrowLeft className="h-3 w-3" /> {t.historicalPage.returnToRegistry}
       </Link>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1">
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground font-headline uppercase leading-none">Historical Data Ledger</h1>
-          <p className="text-sm text-muted-foreground">Manage and review monthly registration archives from previous operational periods.</p>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground font-headline uppercase leading-none">{t.historicalPage.pageTitle}</h1>
+          <p className="text-sm text-muted-foreground">{t.historicalPage.pageSub}</p>
         </div>
         
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
@@ -418,22 +420,22 @@ export default function HistoricalDataPage() {
           <Dialog open={isModalOpen} onOpenChange={(o) => { if(!o) resetForm(); setIsModalOpen(o); }}>
             <DialogTrigger asChild>
               <Button className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black text-[10px] uppercase tracking-widest h-11 px-8 rounded-xl shadow-xl shadow-primary/10">
-                <Plus className="mr-2 h-4 w-4" /> Archive Data
+                <Plus className="mr-2 h-4 w-4" /> {t.historicalPage.archiveDataBtn}
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-2xl p-0 overflow-hidden rounded-[32px] border-none shadow-2xl bg-popover max-h-[90vh] overflow-y-auto">
               <DialogHeader className="p-8 border-b border-border bg-muted/30">
                 <DialogTitle className="text-xl font-black text-foreground uppercase tracking-tighter">
-                  {editingId ? 'Modify Archive Entry' : 'Monthly Summary Entry'}
+                  {editingId ? t.historicalPage.modifyEntryTitle : t.historicalPage.newEntryTitle}
                 </DialogTitle>
               </DialogHeader>
               <form onSubmit={handleAddData} className="p-8 space-y-8 bg-card">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Reporting Month</Label>
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.historicalPage.reportingMonthLabel}</Label>
                     <Select value={month} onValueChange={setMonth}>
                       <SelectTrigger className="h-12 bg-background border-border rounded-xl font-bold text-xs">
-                        <SelectValue placeholder="Select Month" />
+                        <SelectValue placeholder={t.historicalPage.selectMonthPlaceholder} />
                       </SelectTrigger>
                       <SelectContent>
                         {MONTHS.map(m => <SelectItem key={m} value={m} className="font-bold text-xs">{m}</SelectItem>)}
@@ -441,10 +443,10 @@ export default function HistoricalDataPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Reporting Year</Label>
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.historicalPage.reportingYearLabel}</Label>
                     <Select value={year} onValueChange={setYear}>
                       <SelectTrigger className="h-12 bg-background border-border rounded-xl font-bold text-xs">
-                        <SelectValue placeholder="Select Year" />
+                        <SelectValue placeholder={t.historicalPage.selectYearPlaceholder} />
                       </SelectTrigger>
                       <SelectContent>
                         {YEARS.map(y => <SelectItem key={y} value={y} className="font-bold text-xs">{y}</SelectItem>)}
@@ -455,7 +457,7 @@ export default function HistoricalDataPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Ethio Intake</Label>
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.historicalPage.ethioIntakeLabel}</Label>
                     <Input 
                       type="number" 
                       value={ethio} 
@@ -464,7 +466,7 @@ export default function HistoricalDataPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Safaricom Intake</Label>
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.historicalPage.safaricomIntakeLabel}</Label>
                     <Input 
                       type="number" 
                       value={safaricom} 
@@ -476,21 +478,21 @@ export default function HistoricalDataPage() {
 
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">Operational Breakdown</h3>
-                    <span className="text-[9px] font-bold text-muted-foreground/40 uppercase hidden sm:inline">Detailed Performance Data</span>
+                    <h3 className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">{t.historicalPage.operationalBreakdownTitle}</h3>
+                    <span className="text-[9px] font-bold text-muted-foreground/40 uppercase hidden sm:inline">{t.historicalPage.detailedDataLabel}</span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    <StatusField label="Processed" value={processed} onChange={setProcessed} color="emerald" />
-                    <StatusField label="Processing" value={processing} onChange={setProcessing} color="blue" />
-                    <StatusField label="Pending" value={pendingReview} onChange={setPendingReview} color="amber" />
-                    <StatusField label="Rejected" value={rejected} onChange={setRejected} color="rose" />
-                    <StatusField label="Failed" value={failed} onChange={setFailed} color="slate" />
+                    <StatusField label={t.common.statusProcessed} value={processed} onChange={setProcessed} color="emerald" />
+                    <StatusField label={t.common.statusProcessing} value={processing} onChange={setProcessing} color="blue" />
+                    <StatusField label={t.common.statusPendingReview} value={pendingReview} onChange={setPendingReview} color="amber" />
+                    <StatusField label={t.common.statusRejected} value={rejected} onChange={setRejected} color="rose" />
+                    <StatusField label={t.common.statusFailed} value={failed} onChange={setFailed} color="slate" />
                   </div>
                 </div>
 
                 <div className="pt-6 border-t border-border flex flex-col gap-3">
                   <Button type="submit" className="w-full h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-primary/10 transition-all active:scale-[0.98]">
-                    <Save className="mr-2 h-4 w-4" /> {editingId ? 'Commit Changes' : 'Synchronize with Archive'}
+                    <Save className="mr-2 h-4 w-4" /> {editingId ? t.historicalPage.commitChangesBtn : t.historicalPage.syncArchiveBtn}
                   </Button>
                   <Button 
                     type="button" 
@@ -498,7 +500,7 @@ export default function HistoricalDataPage() {
                     onClick={() => { resetForm(); setIsModalOpen(false); }}
                     className="h-12 font-bold uppercase text-[10px] tracking-widest text-muted-foreground"
                   >
-                    Abort Operation
+                    {t.historicalPage.abortBtn}
                   </Button>
                 </div>
               </form>
@@ -512,11 +514,11 @@ export default function HistoricalDataPage() {
         {selectedIds.size > 0 && (
           <div className="bg-blue-600 text-white flex flex-col sm:flex-row items-center justify-between px-5 py-2.5 gap-3">
             <p className="text-xs font-semibold">
-              {selectedIds.size} Archives Selected
+              {t.historicalPage.archivesSelected.replace('{count}', String(selectedIds.size))}
             </p>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" className="h-8 px-3 text-xs font-semibold text-white hover:bg-white/15" onClick={() => setSelectedIds(new Set())}>
-                <X className="mr-1.5 h-3.5 w-3.5" /> Clear
+                <X className="mr-1.5 h-3.5 w-3.5" /> {t.historicalPage.clearSelectionBtn}
               </Button>
               <Button 
                 variant="ghost" 
@@ -526,7 +528,7 @@ export default function HistoricalDataPage() {
                 disabled={isBulkProcessing}
               >
                 {isBulkProcessing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-1.5 h-3.5 w-3.5" />}
-                Purge Selected
+                {t.historicalPage.purgeSelectedBtn}
               </Button>
             </div>
           </div>
@@ -537,7 +539,7 @@ export default function HistoricalDataPage() {
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-              placeholder="Search month or year..."
+              placeholder={t.historicalPage.searchPlaceholder}
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               className="h-9 pl-9 border-0 bg-transparent shadow-none focus-visible:ring-0 text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400"
@@ -545,17 +547,17 @@ export default function HistoricalDataPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-2xs">
-              <span>Show {itemsPerPage} Row</span>
+              <span>{t.historicalPage.showRows.replace('{count}', String(itemsPerPage))}</span>
             </div>
             <Select value={yearFilter} onValueChange={(v) => { setYearFilter(v); setCurrentPage(1); }}>
               <SelectTrigger className="w-auto min-w-[120px] h-9 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-2xs">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-slate-400">Year</span>
-                  <SelectValue placeholder="All" />
+                  <span className="text-slate-400">{t.historicalPage.yearFilterLabel}</span>
+                  <SelectValue placeholder={t.common.all} />
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" className="text-xs font-medium">All Years</SelectItem>
+                <SelectItem value="all" className="text-xs font-medium">{t.historicalPage.allYears}</SelectItem>
                 {YEARS.map(y => (
                   <SelectItem key={y} value={y} className="text-xs font-medium">{y}</SelectItem>
                 ))}
@@ -567,7 +569,7 @@ export default function HistoricalDataPage() {
               size="icon"
               onClick={() => { setSearchTerm(''); setYearFilter('all'); setCurrentPage(1); }}
               className="h-9 w-9 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 hover:text-slate-800 shadow-2xs"
-              title="Reset filters"
+              title={t.historicalPage.resetFiltersTitle}
             >
               <RotateCcw className="h-3.5 w-3.5" />
             </Button>
@@ -583,43 +585,43 @@ export default function HistoricalDataPage() {
                 </TableHead>
                 <TableHead>
                   <div className="flex items-center justify-between gap-2">
-                    <span>Reporting Period</span>
+                    <span>{t.historicalPage.colPeriod}</span>
                     <ArrowUpDown className="h-3 w-3 text-slate-400" />
                   </div>
                 </TableHead>
                 <TableHead>
                   <div className="flex items-center justify-between gap-2">
-                    <span>Ethio Intake</span>
+                    <span>{t.historicalPage.colEthio}</span>
                     <ArrowUpDown className="h-3 w-3 text-slate-400" />
                   </div>
                 </TableHead>
                 <TableHead>
                   <div className="flex items-center justify-between gap-2">
-                    <span>Safaricom Intake</span>
+                    <span>{t.historicalPage.colSafaricom}</span>
                     <ArrowUpDown className="h-3 w-3 text-slate-400" />
                   </div>
                 </TableHead>
                 <TableHead>
                   <div className="flex items-center justify-between gap-2">
-                    <span>Grand Total</span>
+                    <span>{t.historicalPage.colGrandTotal}</span>
                     <ArrowUpDown className="h-3 w-3 text-slate-400" />
                   </div>
                 </TableHead>
                 <TableHead>
                   <div className="flex items-center justify-between gap-2">
-                    <span>Processed</span>
+                    <span>{t.historicalPage.colProcessed}</span>
                     <ArrowUpDown className="h-3 w-3 text-slate-400" />
                   </div>
                 </TableHead>
                 <TableHead>
                   <div className="flex items-center justify-between gap-2">
-                    <span>Rejected</span>
+                    <span>{t.historicalPage.colRejected}</span>
                     <ArrowUpDown className="h-3 w-3 text-slate-400" />
                   </div>
                 </TableHead>
                 <TableHead className="border-r-0 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <span>Action</span>
+                    <span>{t.historicalPage.colAction}</span>
                     <ArrowUpDown className="h-3 w-3 text-slate-400" />
                   </div>
                 </TableHead>
@@ -652,24 +654,24 @@ export default function HistoricalDataPage() {
                       </div>
                     </TableCell>
                     <TableCell className="font-medium text-slate-700 dark:text-slate-200 tabular-nums">
-                      {entry.ethio.toLocaleString()}
+                      {formatNumber(entry.ethio)}
                     </TableCell>
                     <TableCell className="font-medium text-slate-700 dark:text-slate-200 tabular-nums">
-                      {entry.safaricom.toLocaleString()}
+                      {formatNumber(entry.safaricom)}
                     </TableCell>
                     <TableCell>
                       <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/50 text-[12px] font-semibold text-blue-600 dark:text-blue-400 tabular-nums">
-                        {entry.total.toLocaleString()}
+                        {formatNumber(entry.total)}
                       </span>
                     </TableCell>
                     <TableCell>
                       <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#ECFDF5] text-[#10B981] dark:bg-emerald-950/50 dark:text-emerald-400 text-[11px] font-semibold tabular-nums">
-                        {(entry.processed || 0).toLocaleString()}
+                        {formatNumber(entry.processed || 0)}
                       </span>
                     </TableCell>
                     <TableCell>
                       <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#FEF2F2] text-[#EF4444] dark:bg-rose-950/50 dark:text-rose-400 text-[11px] font-semibold tabular-nums">
-                        {(entry.rejected || 0).toLocaleString()}
+                        {formatNumber(entry.rejected || 0)}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
@@ -679,7 +681,7 @@ export default function HistoricalDataPage() {
                           size="icon" 
                           className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                           asChild
-                          title="View Comparative Analysis"
+                          title={t.historicalPage.viewComparisonTitle}
                         >
                           <Link href={`/previous?month=${entry.month}&year=${entry.year}`}>
                             <Eye className="h-4 w-4" />
@@ -690,7 +692,7 @@ export default function HistoricalDataPage() {
                           size="icon" 
                           className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                           onClick={() => handleEdit(entry)}
-                          title="Edit Archive"
+                          title={t.historicalPage.editArchiveTitle}
                         >
                           <SquarePen className="h-4 w-4" />
                         </Button>
@@ -699,7 +701,7 @@ export default function HistoricalDataPage() {
                           size="icon" 
                           className="h-8 w-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
                           onClick={() => initiateDelete(entry.id, label)}
-                          title="Delete Archive"
+                          title={t.historicalPage.deleteArchiveTitle}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -712,7 +714,7 @@ export default function HistoricalDataPage() {
                   <TableCell colSpan={9} className="h-48 text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Database className="h-8 w-8 text-slate-300" />
-                      <p className="text-xs font-semibold text-slate-400">Archive Vault Empty</p>
+                      <p className="text-xs font-semibold text-slate-400">{t.historicalPage.emptyVault}</p>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -727,7 +729,7 @@ export default function HistoricalDataPage() {
           totalPages={totalPages}
           totalItems={history.length}
           shownItems={paginatedHistory.length}
-          itemLabel="Archives"
+          itemLabel={t.historicalPage.archivesItemLabel}
           onPageChange={setCurrentPage}
         />
       </div>
@@ -735,7 +737,7 @@ export default function HistoricalDataPage() {
       <div className="flex items-center gap-3 p-5 bg-amber-500/5 border border-amber-500/10 rounded-2xl">
         <ShieldAlert className="h-5 w-5 text-amber-500 shrink-0" />
         <p className="text-[10px] text-amber-600 font-bold uppercase leading-relaxed tracking-widest max-w-4xl">
-          Protocol Reminder: Archived throughput data is strictly isolated to your official signature. These records are subject to forensic auditing. Modifications to finalized historical summaries are logged in the bureau's audit ledger.
+          {t.historicalPage.protocolReminder}
         </p>
       </div>
 
@@ -748,12 +750,12 @@ export default function HistoricalDataPage() {
             </div>
             <div className="space-y-2">
               <AlertDialogTitle className="text-2xl font-black text-foreground tracking-tighter uppercase leading-none">
-                {isDeleting ? "PURGING ARCHIVE..." : "PERMANENT DELETION"}
+                {isDeleting ? t.historicalPage.purgingArchiveTitle : t.historicalPage.permanentDeletionTitle}
               </AlertDialogTitle>
               <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed font-medium">
                 {isDeleting 
-                  ? `Removing historical data for ${summaryToDelete?.label}. Please stand by...`
-                  : `You are about to purge the archive entry for ${summaryToDelete?.label}. This action will permanently remove the record from the bureau's centralized historical ledger.`
+                  ? t.historicalPage.purgingArchiveDesc.replace('{label}', summaryToDelete?.label || '')
+                  : t.historicalPage.permanentDeletionDesc.replace('{label}', summaryToDelete?.label || '')
                 }
               </AlertDialogDescription>
             </div>
@@ -764,11 +766,11 @@ export default function HistoricalDataPage() {
               disabled={isDeleting}
               className="w-full h-14 bg-destructive hover:bg-destructive/90 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-destructive/10 active:scale-[0.98] transition-all"
             >
-              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Confirm Purge"}
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t.historicalPage.confirmPurgeBtn}
             </AlertDialogAction>
             {!isDeleting && (
               <AlertDialogCancel className="w-full h-12 rounded-2xl font-bold uppercase text-[10px] tracking-widest border-none bg-transparent hover:bg-card">
-                Abort Protocol
+                {t.historicalPage.abortProtocolBtn}
               </AlertDialogCancel>
             )}
           </AlertDialogFooter>
@@ -784,12 +786,12 @@ export default function HistoricalDataPage() {
             </div>
             <div className="space-y-2">
               <AlertDialogTitle className="text-2xl font-black text-foreground tracking-tighter uppercase leading-none">
-                {isBulkProcessing ? "PURGING ARCHIVES..." : "MASS ARCHIVAL PURGE"}
+                {isBulkProcessing ? t.historicalPage.purgingArchivesBulkTitle : t.historicalPage.massPurgeTitle}
               </AlertDialogTitle>
               <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed font-medium">
                 {isBulkProcessing 
-                  ? "Executing bulk archival destruction. Synchronizing with audit ledger..."
-                  : `You are about to permanently purge ${selectedIds.size} monthly summaries from the bureau history. This operation cannot be reversed.`
+                  ? t.historicalPage.purgingArchivesBulkDesc
+                  : t.historicalPage.massPurgeDesc.replace('{count}', String(selectedIds.size))
                 }
               </AlertDialogDescription>
             </div>
@@ -800,11 +802,11 @@ export default function HistoricalDataPage() {
               disabled={isBulkProcessing}
               className="w-full h-14 bg-destructive hover:bg-destructive/90 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-destructive/10 active:scale-[0.98] transition-all"
             >
-              {isBulkProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Confirm Destruction"}
+              {isBulkProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t.historicalPage.confirmDestructionBtn}
             </AlertDialogAction>
             {!isBulkProcessing && (
               <AlertDialogCancel className="w-full h-12 rounded-2xl font-bold uppercase text-[10px] tracking-widest border-none bg-transparent hover:bg-card">
-                Abort Protocol
+                {t.historicalPage.abortProtocolBtn}
               </AlertDialogCancel>
             )}
           </AlertDialogFooter>

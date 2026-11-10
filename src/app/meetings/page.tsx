@@ -90,6 +90,7 @@ import {
   CallParticipantState,
 } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from '@/i18n/language-provider';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -164,6 +165,7 @@ export default function MeetingsAndExamsPage() {
   const db = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
+  const { t, formatDate } = useTranslation();
 
   // Create Meeting & Exam Modal state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -1251,14 +1253,14 @@ export default function MeetingsAndExamsPage() {
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
-              Live Briefings • Screen Share • Post-Meeting Assessments
+              {t.meetingsPage.badge}
             </p>
           </div>
           <h1 className="text-3xl md:text-4xl font-black tracking-tight text-foreground font-headline uppercase flex items-center gap-3">
-            Meetings & Post-Meeting Exams
+            {t.meetingsPage.titleMain} {t.meetingsPage.titleHighlight}
           </h1>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Host live group video & screen-sharing briefings, collaborate on protocol notes, and certify personnel comprehension with post-meeting exams graded to exact 2-decimal accuracy.
+            {t.meetingsPage.subtitle}
           </p>
         </div>
 
@@ -1269,14 +1271,14 @@ export default function MeetingsAndExamsPage() {
             onClick={() => router.push('/communication')}
             className="h-11 px-4 rounded-xl text-xs font-bold"
           >
-            <MessageSquare className="mr-2 h-4 w-4 text-primary" /> Back to Chat
+            <MessageSquare className="mr-2 h-4 w-4 text-primary" /> {t.meetingsPage.backToChatBtn}
           </Button>
           <Button
             type="button"
             onClick={() => setIsCreateOpen(true)}
             className="h-11 px-5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-black text-xs uppercase tracking-wider shadow-lg shadow-primary/20"
           >
-            <Plus className="mr-2 h-4 w-4" /> Host Live Meeting & Exam
+            <Plus className="mr-2 h-4 w-4" /> {t.meetingsPage.hostMeetingBtn}
           </Button>
         </div>
       </div>
@@ -1286,7 +1288,7 @@ export default function MeetingsAndExamsPage() {
         <Card className="rounded-[24px] p-6 border border-border/60 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Briefing Sessions
+              {t.meetingsPage.kpiSessionsTitle}
             </p>
             <div className="h-10 w-10 rounded-2xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <Video className="h-5 w-5" />
@@ -1297,15 +1299,15 @@ export default function MeetingsAndExamsPage() {
           </p>
           <p className="text-xs text-muted-foreground mt-1 font-semibold">
             {kpiMetrics.liveMeetings > 0
-              ? `${kpiMetrics.liveMeetings} Currently Live`
-              : 'All sessions archived'}
+              ? t.meetingsPage.kpiLiveCount.replace('{count}', String(kpiMetrics.liveMeetings))
+              : t.meetingsPage.kpiAllArchived}
           </p>
         </Card>
 
         <Card className="rounded-[24px] p-6 border border-border/60 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Active Participants
+              {t.meetingsPage.kpiParticipantsTitle}
             </p>
             <div className="h-10 w-10 rounded-2xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center">
               <Users className="h-5 w-5" />
@@ -1315,14 +1317,14 @@ export default function MeetingsAndExamsPage() {
             {kpiMetrics.uniqueAttendeesCount}
           </p>
           <p className="text-xs text-muted-foreground mt-1 font-semibold">
-            Unique officials attended briefings
+            {t.meetingsPage.kpiParticipantsSub}
           </p>
         </Card>
 
         <Card className="rounded-[24px] p-6 border border-border/60 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Exact Exam Pass Rate
+              {t.meetingsPage.kpiPassRateTitle}
             </p>
             <div className="h-10 w-10 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
               <Award className="h-5 w-5" />
@@ -1332,14 +1334,16 @@ export default function MeetingsAndExamsPage() {
             {kpiMetrics.exactPassRate}%
           </p>
           <p className="text-xs text-muted-foreground mt-1 font-semibold tabular-nums">
-            {kpiMetrics.passedCount} / {kpiMetrics.totalSubmissions} exams passed
+            {t.meetingsPage.kpiPassRateSub
+              .replace('{passed}', String(kpiMetrics.passedCount))
+              .replace('{total}', String(kpiMetrics.totalSubmissions))}
           </p>
         </Card>
 
         <Card className="rounded-[24px] p-6 border border-border/60 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Exact Average Score
+              {t.meetingsPage.kpiAvgScoreTitle}
             </p>
             <div className="h-10 w-10 rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center">
               <GraduationCap className="h-5 w-5" />
@@ -1349,7 +1353,7 @@ export default function MeetingsAndExamsPage() {
             {kpiMetrics.exactAvgScore}%
           </p>
           <p className="text-xs text-muted-foreground mt-1 font-semibold tabular-nums">
-            Across {kpiMetrics.totalSubmissions} official submissions
+            {t.meetingsPage.kpiAvgScoreSub.replace('{total}', String(kpiMetrics.totalSubmissions))}
           </p>
         </Card>
       </section>
@@ -1362,7 +1366,7 @@ export default function MeetingsAndExamsPage() {
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase tracking-widest">
                   <Radio className="h-3 w-3 animate-pulse" />
-                  Live Group Video Briefing • {Math.floor(meetingElapsedSec / 60)}:
+                  {t.meetingsPage.liveBriefingBadge} • {Math.floor(meetingElapsedSec / 60)}:
                   {String(meetingElapsedSec % 60).padStart(2, '0')}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-slate-300 text-[10px] font-bold uppercase">
@@ -1373,8 +1377,8 @@ export default function MeetingsAndExamsPage() {
                 {activeMeeting.title}
               </CardTitle>
               <p className="text-xs text-slate-400">
-                Hosted by {activeMeeting.hostName} •{' '}
-                {Object.keys(activeMeeting.participants || {}).length || 1} Participant(s) in Room
+                {t.meetingsPage.hostedByPrefix} {activeMeeting.hostName} •{' '}
+                {Object.keys(activeMeeting.participants || {}).length || 1} {t.meetingsPage.participantsInRoomSuffix}
               </p>
             </div>
 
@@ -1386,7 +1390,7 @@ export default function MeetingsAndExamsPage() {
                   onClick={() => openExamPortal(activeMeeting)}
                   className="h-9 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] uppercase tracking-wider"
                 >
-                  <GraduationCap className="h-3.5 w-3.5 mr-1.5" /> Take Post-Meeting Exam
+                  <GraduationCap className="h-3.5 w-3.5 mr-1.5" /> {t.meetingsPage.takeExamBtn}
                 </Button>
               )}
               {(activeMeeting.hostId === user?.uid || isAdmin) && (
@@ -1396,7 +1400,7 @@ export default function MeetingsAndExamsPage() {
                   onClick={() => handleEndMeetingAndUnlockExam(activeMeetingConv)}
                   className="h-9 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-[10px] uppercase tracking-wider"
                 >
-                  <PhoneOff className="h-3.5 w-3.5 mr-1.5" /> End Meeting & Launch Exam
+                  <PhoneOff className="h-3.5 w-3.5 mr-1.5" /> {t.meetingsPage.endMeetingLaunchExamBtn}
                 </Button>
               )}
             </div>
@@ -1412,8 +1416,8 @@ export default function MeetingsAndExamsPage() {
                       <span className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-wider text-indigo-300">
                         <MonitorUp className="h-4 w-4 text-indigo-400 animate-pulse" />
                         {isScreenSharing
-                          ? 'You are presenting your screen'
-                          : `${activeMeeting.screenSharerName || 'Host'} is presenting`}
+                          ? t.meetingsPage.presentingYourScreen
+                          : `${activeMeeting.screenSharerName || t.meetingsPage.hostLabel} ${t.meetingsPage.isPresentingSuffix}`}
                       </span>
                     </div>
                     <div className="h-[260px] rounded-xl bg-slate-950 flex items-center justify-center overflow-hidden border border-white/10">
@@ -1429,10 +1433,10 @@ export default function MeetingsAndExamsPage() {
                         <div className="text-center space-y-2 p-6">
                           <MonitorUp className="h-10 w-10 text-indigo-400 mx-auto" />
                           <p className="text-sm font-bold text-white">
-                            Live Protocol Presentation Stream Active
+                            {t.meetingsPage.liveStreamActiveTitle}
                           </p>
                           <p className="text-xs text-slate-400">
-                            Broadcasting Fayda Bureau operational metrics & training slides to room participants.
+                            {t.meetingsPage.liveStreamActiveSub}
                           </p>
                         </div>
                       )}
@@ -1487,24 +1491,24 @@ export default function MeetingsAndExamsPage() {
                               </AvatarFallback>
                             </Avatar>
                             <span className="text-[10px] font-bold text-emerald-400">
-                              {showCam ? 'HD Video Stream Active' : 'Real Voice Audio Mode'}
+                              {showCam ? t.meetingsPage.hdVideoActive : t.meetingsPage.voiceAudioMode}
                             </span>
                           </div>
                         )}
 
                         {hand && (
                           <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black uppercase flex items-center gap-1 shadow-lg">
-                            <Hand className="h-3 w-3" /> Hand Raised
+                            <Hand className="h-3 w-3" /> {t.meetingsPage.handRaisedBadge}
                           </div>
                         )}
 
                         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-950/80 backdrop-blur-md border border-white/10">
                           <span className="text-xs font-bold truncate">
-                            {p.name} {isMe ? '(You)' : ''}
+                            {p.name} {isMe ? t.meetingsPage.youSuffix : ''}
                           </span>
                           <div className="flex items-center gap-2">
                             {isMe && !muted && hasLocalAudioTrack && (
-                              <div className="flex items-end gap-0.5 h-3.5" title="Live Mic Voice Level">
+                              <div className="flex items-end gap-0.5 h-3.5">
                                 {[15, 35, 60, 80].map((thresh, idx) => (
                                   <span
                                     key={idx}
@@ -1539,7 +1543,7 @@ export default function MeetingsAndExamsPage() {
                       onClick={() => startMeetingCamera(isCameraOn, isMuted, cameraFacingMode)}
                       className="h-6 px-2 text-[9px] font-black uppercase tracking-wider rounded-lg"
                     >
-                      <RefreshCw className="h-3 w-3 mr-1" /> Retry Cam/Mic
+                      <RefreshCw className="h-3 w-3 mr-1" /> {t.meetingsPage.retryCamMicBtn}
                     </Button>
                   </div>
                 )}
@@ -1561,7 +1565,7 @@ export default function MeetingsAndExamsPage() {
                     ) : (
                       <Mic className="h-4 w-4 mr-1.5 shrink-0" />
                     )}
-                    {isMuted ? 'Unmute' : 'Mute'}
+                    {isMuted ? t.meetingsPage.unmuteBtn : t.meetingsPage.muteBtn}
                   </Button>
 
                   <Button
@@ -1579,7 +1583,7 @@ export default function MeetingsAndExamsPage() {
                     ) : (
                       <VideoOff className="h-4 w-4 mr-1.5 shrink-0" />
                     )}
-                    {isCameraOn ? 'Camera On' : 'Camera Off'}
+                    {isCameraOn ? t.meetingsPage.cameraOnBtn : t.meetingsPage.cameraOffBtn}
                   </Button>
 
                   {isCameraOn && hasLocalVideoTrack && (
@@ -1587,10 +1591,9 @@ export default function MeetingsAndExamsPage() {
                       type="button"
                       onClick={handleFlipMeetingCamera}
                       className="h-11 px-3 sm:px-4 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider bg-white/10 hover:bg-white/20 text-white"
-                      title="Flip Front / Rear Camera"
                     >
                       <SwitchCamera className="h-4 w-4 mr-1.5 shrink-0" />
-                      Flip Cam
+                      {t.meetingsPage.flipCamBtn}
                     </Button>
                   )}
 
@@ -1609,7 +1612,7 @@ export default function MeetingsAndExamsPage() {
                     ) : (
                       <MonitorUp className="h-4 w-4 mr-1.5 shrink-0" />
                     )}
-                    {isScreenSharing ? 'Stop Share' : 'Share Screen'}
+                    {isScreenSharing ? t.meetingsPage.stopShareBtn : t.meetingsPage.shareScreenBtn}
                   </Button>
 
                   <Button
@@ -1623,7 +1626,7 @@ export default function MeetingsAndExamsPage() {
                     )}
                   >
                     <Hand className="h-4 w-4 mr-1.5 shrink-0" />
-                    {isHandRaised ? 'Lower Hand' : 'Raise Hand'}
+                    {isHandRaised ? t.meetingsPage.lowerHandBtn : t.meetingsPage.raiseHandBtn}
                   </Button>
 
                   <Button
@@ -1632,7 +1635,7 @@ export default function MeetingsAndExamsPage() {
                     onClick={handleLeaveMeetingRoom}
                     className="col-span-2 sm:col-span-1 h-11 px-5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider"
                   >
-                    <PhoneOff className="h-4 w-4 mr-1.5 shrink-0" /> Leave Room
+                    <PhoneOff className="h-4 w-4 mr-1.5 shrink-0" /> {t.meetingsPage.leaveRoomBtn}
                   </Button>
                 </div>
               </div>
@@ -1642,25 +1645,25 @@ export default function MeetingsAndExamsPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
-                      <BookOpen className="h-4 w-4" /> Shared Meeting Notes & Exam Guide
+                      <BookOpen className="h-4 w-4" /> {t.meetingsPage.sharedNotesTitle}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    Key takeaways recorded here are visible to all participants before taking the post-meeting exam.
+                    {t.meetingsPage.sharedNotesSub}
                   </p>
                   <textarea
                     value={liveNotesInput}
                     onChange={(e) => setLiveNotesInput(e.target.value)}
                     rows={5}
                     className="w-full rounded-xl bg-slate-950 border border-white/10 p-3 text-xs text-slate-200 font-medium focus:outline-none focus:border-primary"
-                    placeholder="Document meeting decisions, protocol reminders, and exam topics..."
+                    placeholder={t.meetingsPage.notesPlaceholder}
                   />
                   <Button
                     type="button"
                     onClick={handleSaveMeetingNotes}
                     className="w-full h-9 rounded-xl bg-primary hover:bg-primary/90 text-white font-black text-xs uppercase tracking-wider"
                   >
-                    Save & Sync Notes to Room
+                    {t.meetingsPage.saveNotesBtn}
                   </Button>
                 </div>
 
@@ -1668,7 +1671,7 @@ export default function MeetingsAndExamsPage() {
                 <div className="pt-3 border-t border-white/10 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                      <BarChart3 className="h-4 w-4" /> Live Room Poll
+                      <BarChart3 className="h-4 w-4" /> {t.meetingsPage.livePollTitle}
                     </span>
                     {activeMeeting.activePoll?.isOpen &&
                       (activeMeeting.hostId === user?.uid || isAdmin) && (
@@ -1677,7 +1680,7 @@ export default function MeetingsAndExamsPage() {
                           onClick={handleCloseLivePoll}
                           className="text-[10px] font-bold text-slate-400 hover:text-white cursor-pointer"
                         >
-                          Close Poll
+                          {t.meetingsPage.closePollBtn}
                         </button>
                       )}
                   </div>
@@ -1723,20 +1726,20 @@ export default function MeetingsAndExamsPage() {
                         <Input
                           value={pollQuestionInput}
                           onChange={(e) => setPollQuestionInput(e.target.value)}
-                          placeholder="Poll question..."
+                          placeholder={t.meetingsPage.pollQuestionPlaceholder}
                           className="h-8 bg-slate-950 border-white/10 text-xs text-white"
                         />
                         <div className="grid grid-cols-2 gap-1.5">
                           <Input
                             value={pollOpt1}
                             onChange={(e) => setPollOpt1(e.target.value)}
-                            placeholder="Option 1"
+                            placeholder={t.meetingsPage.option1Placeholder}
                             className="h-7 bg-slate-950 border-white/10 text-[11px] text-white"
                           />
                           <Input
                             value={pollOpt2}
                             onChange={(e) => setPollOpt2(e.target.value)}
-                            placeholder="Option 2"
+                            placeholder={t.meetingsPage.option2Placeholder}
                             className="h-7 bg-slate-950 border-white/10 text-[11px] text-white"
                           />
                         </div>
@@ -1746,7 +1749,7 @@ export default function MeetingsAndExamsPage() {
                           onClick={handleLaunchLivePoll}
                           className="w-full h-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider"
                         >
-                          Broadcast Live Poll
+                          {t.meetingsPage.broadcastPollBtn}
                         </Button>
                       </div>
                     )
@@ -1763,10 +1766,10 @@ export default function MeetingsAndExamsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-black uppercase tracking-tight text-foreground flex items-center gap-2">
-              <Video className="h-5 w-5 text-primary" /> Bureau Meetings & Attached Exams
+              <Video className="h-5 w-5 text-primary" /> {t.meetingsPage.directoryTitle}
             </h2>
             <p className="text-xs text-muted-foreground">
-              Join a live video meeting room or take the post-meeting comprehension exam
+              {t.meetingsPage.directorySub}
             </p>
           </div>
         </div>
@@ -1778,10 +1781,10 @@ export default function MeetingsAndExamsPage() {
             </div>
             <div className="space-y-1 max-w-md mx-auto">
               <h3 className="text-base font-black uppercase">
-                No Meetings or Post-Meeting Exams Yet
+                {t.meetingsPage.emptyMeetingsTitle}
               </h3>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Click below to launch your first Live Video Briefing with an attached Post-Meeting Protocol Exam.
+                {t.meetingsPage.emptyMeetingsSub}
               </p>
             </div>
             <Button
@@ -1789,7 +1792,7 @@ export default function MeetingsAndExamsPage() {
               onClick={() => setIsCreateOpen(true)}
               className="rounded-xl bg-primary hover:bg-primary/90 text-white font-black text-xs uppercase tracking-wider px-6 h-11"
             >
-              <Plus className="mr-2 h-4 w-4" /> Host First Meeting & Exam
+              <Plus className="mr-2 h-4 w-4" /> {t.meetingsPage.hostFirstMeetingBtn}
             </Button>
           </Card>
         ) : (
@@ -1832,10 +1835,10 @@ export default function MeetingsAndExamsPage() {
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                           )}
                           {m.status === 'live'
-                            ? 'Live Video Room'
+                            ? t.meetingsPage.liveVideoRoomBadge
                             : m.status === 'scheduled'
-                            ? 'Scheduled'
-                            : 'Meeting Concluded'}
+                            ? t.meetingsPage.scheduledBadge
+                            : t.meetingsPage.concludedBadge}
                         </span>
                         <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase">
                           {m.category}
@@ -1846,16 +1849,15 @@ export default function MeetingsAndExamsPage() {
                         <button
                           type="button"
                           onClick={() => handleToggleExamUnlock(conv)}
-                          title={m.examUnlocked ? 'Lock Exam' : 'Unlock Exam for Attendees'}
                           className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                         >
                           {m.examUnlocked ? (
                             <>
-                              <Unlock className="h-3 w-3 text-emerald-500" /> Exam Open
+                              <Unlock className="h-3 w-3 text-emerald-500" /> {t.meetingsPage.examOpenBtn}
                             </>
                           ) : (
                             <>
-                              <Lock className="h-3 w-3 text-amber-500" /> Unlock Exam
+                              <Lock className="h-3 w-3 text-amber-500" /> {t.meetingsPage.unlockExamBtn}
                             </>
                           )}
                         </button>
@@ -1874,26 +1876,26 @@ export default function MeetingsAndExamsPage() {
                     <div className="grid grid-cols-3 gap-2 pt-2 text-xs">
                       <div className="p-2.5 rounded-xl bg-muted/40">
                         <span className="text-[9px] font-black uppercase text-muted-foreground block">
-                          Host
+                          {t.meetingsPage.hostLabel}
                         </span>
                         <span className="font-bold truncate block">{m.hostName}</span>
                       </div>
                       <div className="p-2.5 rounded-xl bg-muted/40">
                         <span className="text-[9px] font-black uppercase text-muted-foreground block">
-                          Exam Standard
+                          {t.meetingsPage.examStandardLabel}
                         </span>
                         <span className="font-bold tabular-nums">
-                          {m.hasExam ? `${m.questions.length} Qs • ${m.passingScorePct}% Pass` : 'No Exam'}
+                          {m.hasExam ? `${m.questions.length} Qs • ${m.passingScorePct}%` : t.meetingsPage.noExamText}
                         </span>
                       </div>
                       <div className="p-2.5 rounded-xl bg-muted/40">
                         <span className="text-[9px] font-black uppercase text-muted-foreground block">
-                          Pass Rate
+                          {t.meetingsPage.passRateLabel}
                         </span>
                         <span className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
                           {allMeetingSubs.length > 0
                             ? `${meetingExactPassRate.toFixed(2)}% (${meetingPassCount}/${allMeetingSubs.length})`
-                            : 'No attempts'}
+                            : t.meetingsPage.noAttemptsText}
                         </span>
                       </div>
                     </div>
@@ -1913,7 +1915,7 @@ export default function MeetingsAndExamsPage() {
                           ) : (
                             <XCircle className="h-4 w-4 text-rose-500" />
                           )}
-                          Your Best Score: {myBestSub.exactScorePct.toFixed(2)}% ({myBestSub.correctCount}/
+                          {t.meetingsPage.yourBestScorePrefix} {myBestSub.exactScorePct.toFixed(2)}% ({myBestSub.correctCount}/
                           {myBestSub.totalQuestions})
                         </span>
                         {myBestSub.passed ? (
@@ -1922,11 +1924,11 @@ export default function MeetingsAndExamsPage() {
                             onClick={() => setCertificateSub(myBestSub)}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider hover:bg-emerald-700 cursor-pointer"
                           >
-                            <Award className="h-3 w-3" /> Certificate
+                            <Award className="h-3 w-3" /> {t.meetingsPage.certificateBtn}
                           </button>
                         ) : (
                           <span className="uppercase text-[10px] font-black">
-                            RETAKE AVAILABLE
+                            {t.meetingsPage.retakeAvailableBadge}
                           </span>
                         )}
                       </div>
@@ -1941,7 +1943,7 @@ export default function MeetingsAndExamsPage() {
                       className="flex-1 h-10 rounded-xl font-black text-[11px] uppercase tracking-wider"
                     >
                       <Video className="mr-1.5 h-4 w-4" />
-                      {m.status === 'live' ? 'Join Live Video Call' : 'Reopen Video Room'}
+                      {m.status === 'live' ? t.meetingsPage.joinLiveCallBtn : t.meetingsPage.reopenRoomBtn}
                     </Button>
 
                     {m.hasExam && m.questions.length > 0 && (
@@ -1951,7 +1953,7 @@ export default function MeetingsAndExamsPage() {
                         className="flex-1 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[11px] uppercase tracking-wider"
                       >
                         <GraduationCap className="mr-1.5 h-4 w-4" />
-                        {myBestSub ? 'Retake / Review Exam' : 'Take Post-Meeting Exam'}
+                        {myBestSub ? t.meetingsPage.retakeReviewExamBtn : t.meetingsPage.takeExamBtn}
                       </Button>
                     )}
 
@@ -1962,7 +1964,6 @@ export default function MeetingsAndExamsPage() {
                         size="icon"
                         onClick={() => deleteDocumentNonBlocking(doc(db!, 'conversations', conv.id))}
                         className="h-10 w-10 rounded-xl text-muted-foreground hover:text-rose-600"
-                        title="Delete Meeting"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -1980,10 +1981,10 @@ export default function MeetingsAndExamsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-black uppercase tracking-tight text-foreground flex items-center gap-2">
-              <Award className="h-5 w-5 text-emerald-500" /> Post-Meeting Exam Results Ledger
+              <Award className="h-5 w-5 text-emerald-500" /> {t.meetingsPage.resultsLedgerTitle}
             </h2>
             <p className="text-xs text-muted-foreground">
-              Exact 2-decimal assessment scores and pass/fail verification across all personnel
+              {t.meetingsPage.resultsLedgerSub}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -1994,7 +1995,7 @@ export default function MeetingsAndExamsPage() {
               onClick={handleExportExamExcel}
               className="h-9 rounded-xl text-xs font-bold"
             >
-              <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5 text-emerald-600" /> Export Excel
+              <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5 text-emerald-600" /> {t.meetingsPage.exportExcelBtn}
             </Button>
             <Button
               type="button"
@@ -2003,7 +2004,7 @@ export default function MeetingsAndExamsPage() {
               onClick={handleExportExamPDF}
               className="h-9 rounded-xl text-xs font-bold"
             >
-              <FileText className="h-3.5 w-3.5 mr-1.5 text-rose-600" /> Export PDF
+              <FileText className="h-3.5 w-3.5 mr-1.5 text-rose-600" /> {t.meetingsPage.exportPdfBtn}
             </Button>
           </div>
         </div>
@@ -2014,22 +2015,22 @@ export default function MeetingsAndExamsPage() {
               <TableHeader className="bg-muted/40">
                 <TableRow>
                   <TableHead className="pl-6 text-[10px] font-black uppercase tracking-widest">
-                    Official
+                    {t.meetingsPage.colOfficial}
                   </TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">
-                    Meeting / Briefing
+                    {t.meetingsPage.colMeeting}
                   </TableHead>
                   <TableHead className="text-center text-[10px] font-black uppercase tracking-widest">
-                    Correct / Total
+                    {t.meetingsPage.colCorrectTotal}
                   </TableHead>
                   <TableHead className="text-center text-[10px] font-black uppercase tracking-widest">
-                    Exact Score Rate
+                    {t.meetingsPage.colScoreRate}
                   </TableHead>
                   <TableHead className="text-center text-[10px] font-black uppercase tracking-widest">
-                    Certification
+                    {t.meetingsPage.colCertification}
                   </TableHead>
                   <TableHead className="pr-6 text-right text-[10px] font-black uppercase tracking-widest">
-                    Submitted / Credential
+                    {t.meetingsPage.colSubmittedCredential}
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -2061,13 +2062,13 @@ export default function MeetingsAndExamsPage() {
                           ) : (
                             <XCircle className="h-3 w-3" />
                           )}
-                          {sub.passed ? 'PASSED' : 'FAILED'}
+                          {sub.passed ? t.meetingsPage.passedBadge : t.meetingsPage.failedBadge}
                         </span>
                       </TableCell>
                       <TableCell className="pr-6 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <span className="text-[11px] text-muted-foreground tabular-nums">
-                            {format(new Date(sub.submittedAt), 'MMM dd, HH:mm')}
+                            {formatDate(sub.submittedAt)}
                           </span>
                           {sub.passed && (
                             <Button
@@ -2077,7 +2078,7 @@ export default function MeetingsAndExamsPage() {
                               onClick={() => setCertificateSub(sub)}
                               className="h-7 px-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
                             >
-                              <Award className="h-3 w-3 mr-1" /> Certificate
+                              <Award className="h-3 w-3 mr-1" /> {t.meetingsPage.certificateBtn}
                             </Button>
                           )}
                         </div>
@@ -2087,7 +2088,7 @@ export default function MeetingsAndExamsPage() {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={6} className="h-32 text-center text-xs text-muted-foreground">
-                      No exam submissions recorded yet. Complete a post-meeting exam above to populate this ledger.
+                      {t.meetingsPage.emptySubmissionsText}
                     </TableCell>
                   </TableRow>
                 )}
@@ -2103,10 +2104,10 @@ export default function MeetingsAndExamsPage() {
           <DialogHeader>
             <DialogTitle className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
               <Video className="h-5 w-5 text-primary" />
-              Host Live Meeting & Post-Meeting Exam
+              {t.meetingsPage.createModalTitle}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Configure the live group video & screen-sharing briefing and customize the post-meeting comprehension exam.
+              {t.meetingsPage.createModalDesc}
             </DialogDescription>
           </DialogHeader>
 
@@ -2114,10 +2115,10 @@ export default function MeetingsAndExamsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Meeting Title
+                  {t.meetingsPage.meetingTitleLabel}
                 </Label>
                 <Input
-                  placeholder="e.g. Weekly Fayda RID Quality & Institution Sync"
+                  placeholder={t.meetingsPage.meetingTitlePlaceholder}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   className="h-10 rounded-xl text-xs font-bold"
@@ -2126,7 +2127,7 @@ export default function MeetingsAndExamsPage() {
 
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Briefing Category
+                  {t.meetingsPage.categoryLabel}
                 </Label>
                 <Select
                   value={category}
@@ -2147,10 +2148,10 @@ export default function MeetingsAndExamsPage() {
 
             <div className="space-y-1.5">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Meeting Agenda & Topics Covered
+                {t.meetingsPage.agendaLabel}
               </Label>
               <Input
-                placeholder="Summarize the key points that will be discussed and tested after the meeting..."
+                placeholder={t.meetingsPage.agendaPlaceholder}
                 value={agenda}
                 onChange={(e) => setAgenda(e.target.value)}
                 className="h-10 rounded-xl text-xs"
@@ -2163,10 +2164,10 @@ export default function MeetingsAndExamsPage() {
                 <div>
                   <p className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
                     <GraduationCap className="h-4 w-4 text-primary" />
-                    Attach Post-Meeting Assessment Exam
+                    {t.meetingsPage.attachExamTitle}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
-                    Participants take this exam after the meeting to verify comprehension
+                    {t.meetingsPage.attachExamSub}
                   </p>
                 </div>
                 <Button
@@ -2176,7 +2177,7 @@ export default function MeetingsAndExamsPage() {
                   onClick={() => setHasExam((prev) => !prev)}
                   className="h-8 rounded-xl text-[10px] font-black uppercase"
                 >
-                  {hasExam ? 'Exam Enabled' : 'No Exam'}
+                  {hasExam ? t.meetingsPage.examEnabledBtn : t.meetingsPage.noExamText}
                 </Button>
               </div>
 
@@ -2185,7 +2186,7 @@ export default function MeetingsAndExamsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <Label className="text-[10px] font-black uppercase text-muted-foreground">
-                        Passing Score Threshold (%)
+                        {t.meetingsPage.passingScoreLabel}
                       </Label>
                       <Input
                         type="number"
@@ -2198,7 +2199,7 @@ export default function MeetingsAndExamsPage() {
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] font-black uppercase text-muted-foreground">
-                        Exam Time Limit (Minutes)
+                        {t.meetingsPage.timeLimitLabel}
                       </Label>
                       <Input
                         type="number"
@@ -2213,7 +2214,7 @@ export default function MeetingsAndExamsPage() {
 
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                      Exam Questions ({questions.length})
+                      {t.meetingsPage.examQuestionsLabel.replace('{count}', String(questions.length))}
                     </span>
                     <div className="flex items-center gap-2">
                       <Button
@@ -2223,7 +2224,7 @@ export default function MeetingsAndExamsPage() {
                         onClick={() => setQuestions(DEFAULT_PROTOCOL_QUESTIONS)}
                         className="h-8 rounded-lg text-[10px] font-bold"
                       >
-                        <Sparkles className="h-3 w-3 mr-1 text-primary" /> Reset Protocol Template
+                        <Sparkles className="h-3 w-3 mr-1 text-primary" /> {t.meetingsPage.resetTemplateBtn}
                       </Button>
                       <Button
                         type="button"
@@ -2231,7 +2232,7 @@ export default function MeetingsAndExamsPage() {
                         onClick={handleAddQuestion}
                         className="h-8 rounded-lg text-[10px] font-bold"
                       >
-                        <Plus className="h-3 w-3 mr-1" /> Add Question
+                        <Plus className="h-3 w-3 mr-1" /> {t.meetingsPage.addQuestionBtn}
                       </Button>
                     </div>
                   </div>
@@ -2244,7 +2245,7 @@ export default function MeetingsAndExamsPage() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[10px] font-black uppercase text-primary">
-                            Question #{qIdx + 1} ({q.points} pts)
+                            #{qIdx + 1} ({q.points} pts)
                           </span>
                           {questions.length > 1 && (
                             <button
@@ -2261,7 +2262,7 @@ export default function MeetingsAndExamsPage() {
                           onChange={(e) =>
                             handleUpdateQuestion(qIdx, { question: e.target.value })
                           }
-                          placeholder="Enter exam question about the meeting..."
+                          placeholder={t.meetingsPage.questionPlaceholder}
                           className="h-9 text-xs font-bold"
                         />
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2274,7 +2275,6 @@ export default function MeetingsAndExamsPage() {
                                 onChange={() =>
                                   handleUpdateQuestion(qIdx, { correctOptionIndex: optIdx })
                                 }
-                                title="Mark as correct option"
                               />
                               <Input
                                 value={opt}
@@ -2301,7 +2301,7 @@ export default function MeetingsAndExamsPage() {
               onClick={() => setIsCreateOpen(false)}
               className="rounded-xl text-xs font-bold"
             >
-              Cancel
+              {t.meetingsPage.cancelBtn}
             </Button>
             <Button
               type="button"
@@ -2314,7 +2314,7 @@ export default function MeetingsAndExamsPage() {
               ) : (
                 <Play className="h-4 w-4 mr-1.5" />
               )}
-              Launch Live Meeting & Exam
+              {t.meetingsPage.launchMeetingBtn}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2329,7 +2329,7 @@ export default function MeetingsAndExamsPage() {
                 <div className="flex items-center justify-between gap-3">
                   <DialogTitle className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
                     <GraduationCap className="h-5 w-5 text-primary" />
-                    Post-Meeting Assessment: {examMeeting.title}
+                    {t.meetingsPage.assessmentPrefix} {examMeeting.title}
                   </DialogTitle>
                   {!latestSubmissionResult && (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-mono font-black">
@@ -2340,8 +2340,8 @@ export default function MeetingsAndExamsPage() {
                   )}
                 </div>
                 <DialogDescription className="text-xs">
-                  Passing Requirement: {examMeeting.passingScorePct}% •{' '}
-                  {examMeeting.questions.length} Protocol Questions
+                  {t.meetingsPage.passingReqPrefix} {examMeeting.passingScorePct}% •{' '}
+                  {examMeeting.questions.length} {t.meetingsPage.questionsSuffix}
                 </DialogDescription>
               </DialogHeader>
 
@@ -2364,14 +2364,14 @@ export default function MeetingsAndExamsPage() {
                       )}
                     </div>
                     <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                      Official Post-Meeting Exam Result
+                      {t.meetingsPage.examResultHeader}
                     </p>
                     <h3 className="text-4xl font-black tabular-nums">
                       {latestSubmissionResult.exactScorePct.toFixed(2)}%
                     </h3>
                     <p className="text-xs font-bold">
                       {latestSubmissionResult.correctCount} /{' '}
-                      {latestSubmissionResult.totalQuestions} Correct Answers (
+                      {latestSubmissionResult.totalQuestions} {t.meetingsPage.correctAnswersSuffix} (
                       {latestSubmissionResult.earnedPoints} / {latestSubmissionResult.totalPoints}{' '}
                       pts)
                     </p>
@@ -2384,15 +2384,15 @@ export default function MeetingsAndExamsPage() {
                       )}
                     >
                       {latestSubmissionResult.passed
-                        ? 'CERTIFIED PASS'
-                        : `BELOW ${examMeeting.passingScorePct}% THRESHOLD`}
+                        ? t.meetingsPage.certifiedPassBadge
+                        : `${t.meetingsPage.belowThresholdPrefix} ${examMeeting.passingScorePct}%`}
                     </span>
                   </div>
 
                   {/* Question-by-Question Review */}
                   <div className="space-y-3">
                     <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                      Answer Verification & Protocol Explanations
+                      {t.meetingsPage.answerReviewTitle}
                     </p>
                     {examMeeting.questions.map((q, idx) => {
                       const chosen = latestSubmissionResult.answers[idx];
@@ -2423,19 +2423,19 @@ export default function MeetingsAndExamsPage() {
                             </span>
                           </div>
                           <p className="text-muted-foreground">
-                            Your Answer:{' '}
+                            {t.meetingsPage.yourAnswerPrefix}{' '}
                             <strong className={isCorrect ? 'text-emerald-600' : 'text-rose-600'}>
-                              {chosen >= 0 ? q.options[chosen] : 'No answer selected'}
+                              {chosen >= 0 ? q.options[chosen] : t.meetingsPage.noAnswerSelected}
                             </strong>
                           </p>
                           {!isCorrect && (
                             <p className="text-emerald-600 font-bold">
-                              Correct Answer: {q.options[q.correctOptionIndex]}
+                              {t.meetingsPage.correctAnswerPrefix} {q.options[q.correctOptionIndex]}
                             </p>
                           )}
                           {q.explanation && (
                             <p className="text-[11px] text-muted-foreground italic">
-                              Protocol Note: {q.explanation}
+                              {t.meetingsPage.notePrefix} {q.explanation}
                             </p>
                           )}
                         </div>
@@ -2453,7 +2453,7 @@ export default function MeetingsAndExamsPage() {
                       }}
                       className="rounded-xl text-xs font-bold"
                     >
-                      <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Retake Exam
+                      <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> {t.meetingsPage.retakeExamBtn}
                     </Button>
                     {latestSubmissionResult.passed && (
                       <Button
@@ -2466,7 +2466,7 @@ export default function MeetingsAndExamsPage() {
                         }}
                         className="rounded-xl text-xs font-black uppercase border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
                       >
-                        <Award className="h-3.5 w-3.5 mr-1.5" /> View Certificate
+                        <Award className="h-3.5 w-3.5 mr-1.5" /> {t.meetingsPage.viewCertificateBtn}
                       </Button>
                     )}
                     <Button
@@ -2474,7 +2474,7 @@ export default function MeetingsAndExamsPage() {
                       onClick={() => setExamMeeting(null)}
                       className="rounded-xl text-xs font-black uppercase"
                     >
-                      Done
+                      {t.meetingsPage.doneBtn}
                     </Button>
                   </DialogFooter>
                 </div>
@@ -2484,7 +2484,7 @@ export default function MeetingsAndExamsPage() {
                   {examMeeting.meetingNotes && (
                     <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 space-y-1">
                       <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                        Meeting Briefing Summary
+                        {t.meetingsPage.briefingSummaryLabel}
                       </p>
                       <p className="text-xs text-muted-foreground whitespace-pre-line">
                         {examMeeting.meetingNotes}
@@ -2500,10 +2500,10 @@ export default function MeetingsAndExamsPage() {
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] font-black uppercase tracking-wider text-primary">
-                            Question {qIdx + 1} of {examMeeting.questions.length}
+                            #{qIdx + 1} / {examMeeting.questions.length}
                           </span>
                           <span className="text-[10px] font-bold text-muted-foreground">
-                            {q.points} Points
+                            {q.points} pts
                           </span>
                         </div>
                         <p className="text-sm font-black text-foreground">{q.question}</p>
@@ -2550,7 +2550,7 @@ export default function MeetingsAndExamsPage() {
                       onClick={() => setExamMeeting(null)}
                       className="rounded-xl text-xs font-bold"
                     >
-                      Cancel
+                      {t.meetingsPage.cancelBtn}
                     </Button>
                     <Button
                       type="button"
@@ -2563,8 +2563,8 @@ export default function MeetingsAndExamsPage() {
                       ) : (
                         <CheckCircle2 className="h-4 w-4 mr-1.5" />
                       )}
-                      Submit Assessment ({Object.keys(selectedAnswers).length}/
-                      {examMeeting.questions.length} Answered)
+                      {t.meetingsPage.submitAssessmentBtn} ({Object.keys(selectedAnswers).length}/
+                      {examMeeting.questions.length})
                     </Button>
                   </DialogFooter>
                 </div>
@@ -2585,25 +2585,25 @@ export default function MeetingsAndExamsPage() {
               <DialogHeader className="p-6 pb-3 border-b bg-muted/20">
                 <DialogTitle className="text-base font-black uppercase tracking-tight flex items-center gap-2">
                   <Award className="h-5 w-5 text-emerald-500" />
-                  Official Protocol Competency Certificate
+                  {t.meetingsPage.certModalTitle}
                 </DialogTitle>
                 <DialogDescription className="text-xs">
-                  Verified Bureau Credential • Exact 2-Decimal Assessment Score
+                  {t.meetingsPage.certModalDesc}
                 </DialogDescription>
               </DialogHeader>
 
               <div className="p-6">
                 <div className="p-6 sm:p-8 rounded-3xl border-2 border-primary/30 bg-gradient-to-br from-primary/[0.04] via-background to-emerald-500/[0.05] text-center space-y-4 relative overflow-hidden">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest">
-                    <ShieldCheck className="h-3.5 w-3.5" /> National Fayda Registration Bureau
+                    <ShieldCheck className="h-3.5 w-3.5" /> {t.meetingsPage.certBureauHeader}
                   </div>
 
                   <div className="space-y-1">
                     <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-foreground">
-                      Certificate of Protocol Competency
+                      {t.meetingsPage.certMainTitle}
                     </h2>
                     <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-                      This official credential certifies that
+                      {t.meetingsPage.certCertifiesThat}
                     </p>
                   </div>
 
@@ -2619,7 +2619,7 @@ export default function MeetingsAndExamsPage() {
                   </div>
 
                   <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                    has successfully completed the briefing and passed the Post-Meeting Protocol Assessment for:
+                    {t.meetingsPage.certCompletedText}
                   </p>
 
                   <p className="text-base font-black text-foreground">
@@ -2628,23 +2628,23 @@ export default function MeetingsAndExamsPage() {
 
                   <div className="inline-flex flex-wrap items-center justify-center gap-3 px-4 py-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
                     <span className="text-xs font-black uppercase text-emerald-700 dark:text-emerald-300">
-                      Exact Score: {certificateSub.exactScorePct.toFixed(2)}%
+                      {t.meetingsPage.certExactScorePrefix} {certificateSub.exactScorePct.toFixed(2)}%
                     </span>
                     <span className="text-xs font-mono font-bold text-emerald-600">
-                      ({certificateSub.correctCount} / {certificateSub.totalQuestions} Correct •{' '}
+                      ({certificateSub.correctCount} / {certificateSub.totalQuestions} •{' '}
                       {certificateSub.earnedPoints}/{certificateSub.totalPoints} pts)
                     </span>
                   </div>
 
                   <div className="pt-4 border-t border-border/60 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-muted-foreground">
                     <span>
-                      SERIAL: CERT-
+                      CERT-
                       {certificateSub.id.replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase()}
                     </span>
                     <span>
-                      ISSUED: {format(new Date(certificateSub.submittedAt), 'MMM dd, yyyy HH:mm')}
+                      {formatDate(certificateSub.submittedAt)}
                     </span>
-                    <span className="font-black text-emerald-600 uppercase">VERIFIED PASS</span>
+                    <span className="font-black text-emerald-600 uppercase">{t.meetingsPage.certVerifiedPass}</span>
                   </div>
                 </div>
               </div>
@@ -2656,14 +2656,14 @@ export default function MeetingsAndExamsPage() {
                   onClick={() => window.print()}
                   className="rounded-xl text-xs font-bold"
                 >
-                  <Printer className="h-3.5 w-3.5 mr-1.5" /> Print Certificate
+                  <Printer className="h-3.5 w-3.5 mr-1.5" /> {t.meetingsPage.printCertBtn}
                 </Button>
                 <Button
                   type="button"
                   onClick={() => handleDownloadCertificatePDF(certificateSub)}
                   className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider"
                 >
-                  <Download className="h-3.5 w-3.5 mr-1.5" /> Download PDF Certificate
+                  <Download className="h-3.5 w-3.5 mr-1.5" /> {t.meetingsPage.downloadPdfCertBtn}
                 </Button>
               </DialogFooter>
             </>

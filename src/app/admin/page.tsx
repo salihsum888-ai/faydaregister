@@ -43,11 +43,13 @@ import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useTranslation } from '@/i18n/language-provider';
 
 export default function AdminDashboard() {
   const { user } = useUser();
   const db = useFirestore();
   const { toast } = useToast();
+  const { t, formatDate, formatNumber } = useTranslation();
   const [activeCardFilter, setActiveCardFilter] = useState<string | null>(null);
   const [isTogglingDuty, setIsTogglingDuty] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
@@ -264,14 +266,14 @@ export default function AdminDashboard() {
       );
 
       toast({
-        title: newDutyStatus ? 'Active Duty Initialized' : 'Off-Duty Signal Sent',
-        description: `Bureau status updated in the coordination matrix.`,
+        title: newDutyStatus ? t.dashboard.toastDutyActiveTitle : t.dashboard.toastDutyOfflineTitle,
+        description: t.dashboard.toastDutyDesc,
       });
     } catch {
       toast({
         variant: 'destructive',
-        title: 'Protocol Failure',
-        description: 'Could not synchronize duty status with backend.',
+        title: t.dashboard.toastDutyErrorTitle,
+        description: t.dashboard.toastDutyErrorDesc,
       });
     } finally {
       setIsTogglingDuty(false);
@@ -291,9 +293,9 @@ export default function AdminDashboard() {
     const exportData = filteredRegistrations.map((r) => ({
       ID: r.id,
       Applicant: r.applicantName,
-      'Institution Name': r.institutionName || r.schoolName || 'Individual',
+      'Institution Name': r.institutionName || r.schoolName || t.registrationTable.individualCitizen,
       Date: format(new Date(r.submissionDate), 'yyyy-MM-dd'),
-      Status: r.status,
+      Status: t.common.status[r.status] || r.status,
       Location: r.location,
     }));
 
@@ -312,8 +314,8 @@ export default function AdminDashboard() {
     );
 
     toast({
-      title: 'Excel Intelligence Exported',
-      description: 'Global registry snapshot downloaded.',
+      title: t.dashboard.toastExcelTitle,
+      description: t.dashboard.toastExcelDesc,
     });
     setTimeout(() => setIsExporting(false), 800);
   };
@@ -328,9 +330,9 @@ export default function AdminDashboard() {
     const rows = filteredRegistrations.map((r) => [
       r.id.substring(0, 15) + '...',
       r.applicantName,
-      r.institutionName || r.schoolName || 'Individual',
+      r.institutionName || r.schoolName || t.registrationTable.individualCitizen,
       format(new Date(r.submissionDate), 'MMM dd'),
-      r.status,
+      t.common.status[r.status] || r.status,
     ]);
     autoTable(pdfDoc, {
       startY: 25,
@@ -351,8 +353,8 @@ export default function AdminDashboard() {
     );
 
     toast({
-      title: 'PDF Document Generated',
-      description: 'Official bureau documentation saved.',
+      title: t.dashboard.toastPdfTitle,
+      description: t.dashboard.toastPdfDesc,
     });
     setTimeout(() => setIsExporting(false), 800);
   };
@@ -363,7 +365,7 @@ export default function AdminDashboard() {
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
           <p className="text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground animate-pulse">
-            Initializing Command Home
+            {t.admin.initializingCommand}
           </p>
         </div>
       </div>
@@ -383,14 +385,14 @@ export default function AdminDashboard() {
               )}
             />
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">
-              Bureau Administration Hub
+              {t.admin.eyebrow}
             </p>
           </div>
           <h1 className="text-4xl font-black tracking-tight text-foreground font-headline uppercase leading-none">
-            Admin Overview
+            {t.admin.title}
           </h1>
           <p className="text-sm text-muted-foreground max-w-lg">
-            Unified Command Center for bureau-wide operations, institutions, and personnel oversight.
+            {t.admin.subtitle}
           </p>
         </div>
 
@@ -408,7 +410,7 @@ export default function AdminDashboard() {
             </div>
             <div className="flex flex-col">
               <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                Admin Status
+                {t.admin.adminStatusLabel}
               </span>
               <button
                 onClick={handleToggleDuty}
@@ -425,7 +427,7 @@ export default function AdminDashboard() {
                 ) : (
                   <Power className="h-3 w-3" />
                 )}
-                {profile?.isDutyActive ? 'Active Duty' : 'Signal Offline'}
+                {profile?.isDutyActive ? t.dashboard.activeDuty : t.dashboard.signalOffline}
               </button>
             </div>
           </div>
@@ -439,7 +441,7 @@ export default function AdminDashboard() {
             </div>
             <div className="flex flex-col">
               <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                Last Sync
+                {t.dashboard.lastSyncLabel}
               </span>
               <span className="text-sm font-black text-foreground uppercase tracking-tighter">
                 {lastSynced ? format(lastSynced, 'HH:mm:ss') : '--:--:--'}
@@ -453,10 +455,10 @@ export default function AdminDashboard() {
             </div>
             <div className="flex flex-col">
               <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                System
+                {t.admin.systemLabel}
               </span>
               <span className="text-sm font-black text-green-600 dark:text-emerald-400 uppercase tracking-tighter">
-                Optimal
+                {t.admin.optimalStatus}
               </span>
             </div>
           </div>
@@ -472,39 +474,43 @@ export default function AdminDashboard() {
           />
           <CardContent className="p-5 sm:p-6 relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">
-                  Bureau Today&apos;s Intake • {format(new Date(), 'MMM dd, yyyy')}
+                  {t.admin.bureauTodayIntake.replace('{date}', formatDate(new Date()))}
                 </span>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase">
-                  <CheckCircle2 className="h-3 w-3" /> {todaySummary.reportsLoggedCount} Daily Reports
+                  <CheckCircle2 className="h-3 w-3" />{' '}
+                  {t.admin.dailyReportsBadge.replace('{count}', formatNumber(todaySummary.reportsLoggedCount))}
                 </span>
               </div>
 
               <div className="flex items-baseline gap-3">
                 <span className="text-3xl sm:text-4xl font-black text-foreground tabular-nums">
-                  {todaySummary.total.toLocaleString()}
+                  {formatNumber(todaySummary.total)}
                 </span>
                 <span className="text-xs font-semibold text-muted-foreground">
-                  People Registered Today
+                  {t.dashboard.peopleRegisteredToday}
                 </span>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[11px] font-bold tabular-nums">
-                  <Building2 className="h-3 w-3" /> {todaySummary.institutionCount} Institution
+                  <Building2 className="h-3 w-3" />{' '}
+                  {t.dashboard.institutionCountBadge.replace('{count}', formatNumber(todaySummary.institutionCount))}
                 </span>
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg glass-subpanel text-slate-700 dark:text-slate-200 text-[11px] font-bold tabular-nums">
                   <UserCheck className="h-3 w-3 text-emerald-500" />{' '}
-                  {todaySummary.nonInstitutionCount} Non-Institution
+                  {t.dashboard.nonInstitutionCountBadge.replace('{count}', formatNumber(todaySummary.nonInstitutionCount))}
                 </span>
                 {todaySummary.reportsLoggedCount > 0 && (
                   <>
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold tabular-nums">
-                      <Phone className="h-2.5 w-2.5" /> {todaySummary.ethio} Ethio
+                      <Phone className="h-2.5 w-2.5" />{' '}
+                      {t.dashboard.ethioCountBadge.replace('{count}', formatNumber(todaySummary.ethio))}
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-orange-500/10 text-orange-600 dark:text-orange-400 text-[10px] font-bold tabular-nums">
-                      <Smartphone className="h-2.5 w-2.5" /> {todaySummary.safaricom} Safaricom
+                      <Smartphone className="h-2.5 w-2.5" />{' '}
+                      {t.dashboard.safaricomCountBadge.replace('{count}', formatNumber(todaySummary.safaricom))}
                     </span>
                   </>
                 )}
@@ -517,7 +523,7 @@ export default function AdminDashboard() {
                 size="sm"
                 className="rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-xs h-9 px-4 shadow-md shadow-primary/20"
               >
-                <Link href="/admin/reports-entry">Proxy Report Entry</Link>
+                <Link href="/admin/reports-entry">{t.admin.proxyReportEntryBtn}</Link>
               </Button>
             </div>
           </CardContent>
@@ -532,11 +538,11 @@ export default function AdminDashboard() {
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5" /> Processing Verification Queue
+                  <ShieldCheck className="h-3.5 w-3.5" /> {t.admin.processingQueueEyebrow}
                 </span>
                 <p className="text-2xl sm:text-3xl font-black text-foreground tabular-nums">
-                  {stats.processing.toLocaleString()}{' '}
-                  <span className="text-sm font-bold text-muted-foreground">In Processing</span>
+                  {formatNumber(stats.processing)}{' '}
+                  <span className="text-sm font-bold text-muted-foreground">{t.dashboard.inProcessingLabel}</span>
                 </p>
               </div>
               <Button
@@ -546,14 +552,14 @@ export default function AdminDashboard() {
                 className="glass-subpanel rounded-xl h-9 px-3.5 text-xs font-bold text-primary hover:bg-primary hover:text-white transition-all shrink-0"
               >
                 <Link href="/status-check">
-                  Verify Queue <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                  {t.admin.verifyQueueBtn} <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                 </Link>
               </Button>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
               {stats.processing > 0
-                ? `${stats.processing} bureau-wide record(s) currently in Processing status ready for verification.`
-                : 'Zero records waiting in Processing queue. Open the Verification Terminal anytime.'}
+                ? t.admin.adminQueuePendingDesc.replace('{count}', formatNumber(stats.processing))
+                : t.admin.adminQueueClearDesc}
             </p>
           </CardContent>
         </Card>
@@ -579,17 +585,17 @@ export default function AdminDashboard() {
                     type="button"
                     className="glass-subpanel px-3.5 py-1.5 rounded-[10px] text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-primary/50 hover:text-primary transition-all cursor-pointer"
                   >
-                    Launch
+                    {t.dashboard.launchBtn}
                   </button>
                 }
               />
             </div>
             <div className="space-y-1.5">
               <h3 className="text-[14px] font-semibold text-slate-900 dark:text-white">
-                New Registration
+                {t.dashboard.cardNewRegTitle}
               </h3>
               <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                Enroll new citizen or institution RIDs directly into the global registry.
+                {t.admin.cardNewRegDesc}
               </p>
             </div>
           </CardContent>
@@ -615,7 +621,7 @@ export default function AdminDashboard() {
                       type="button"
                       className="glass-subpanel px-2.5 py-1.5 rounded-[10px] text-[11px] font-semibold text-primary hover:bg-primary/10 transition-all cursor-pointer"
                     >
-                      + Add
+                      {t.dashboard.addShortBtn}
                     </button>
                   }
                 />
@@ -623,21 +629,21 @@ export default function AdminDashboard() {
                   href="/schools-students"
                   className="glass-subpanel px-3 py-1.5 rounded-[10px] text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-primary/50 hover:text-primary transition-all"
                 >
-                  Open
+                  {t.dashboard.openBtn}
                 </Link>
               </div>
             </div>
             <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <h3 className="text-[14px] font-semibold text-slate-900 dark:text-white">
-                  Institutions
+                  {t.dashboard.cardInstTitle}
                 </h3>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-600 dark:text-violet-400 tabular-nums">
-                  {stats.institutionsCount || 0} Active
+                  {t.dashboard.activeCountBadge.replace('{count}', formatNumber(stats.institutionsCount || 0))}
                 </span>
               </div>
               <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                {stats.institutionRecordsCount || 0} records registered across institutions.
+                {t.admin.cardInstDesc.replace('{count}', formatNumber(stats.institutionRecordsCount || 0))}
               </p>
             </div>
           </CardContent>
@@ -657,15 +663,15 @@ export default function AdminDashboard() {
                 href="/status-check"
                 className="glass-subpanel px-3.5 py-1.5 rounded-[10px] text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-primary/50 hover:text-primary transition-all"
               >
-                Verify
+                {t.admin.verifyShortBtn}
               </Link>
             </div>
             <div className="space-y-1.5">
               <h3 className="text-[14px] font-semibold text-slate-900 dark:text-white">
-                Verification Terminal
+                {t.admin.cardTerminalTitle}
               </h3>
               <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                Verify Processing RIDs against the official portal with auto-advance.
+                {t.admin.cardTerminalDesc}
               </p>
             </div>
           </CardContent>
@@ -685,15 +691,15 @@ export default function AdminDashboard() {
                 href="/admin/announcements"
                 className="glass-subpanel px-3.5 py-1.5 rounded-[10px] text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-primary/50 hover:text-primary transition-all"
               >
-                Broadcast
+                {t.admin.broadcastShortBtn}
               </Link>
             </div>
             <div className="space-y-1.5">
               <h3 className="text-[14px] font-semibold text-slate-900 dark:text-white">
-                Bureau Broadcasts
+                {t.admin.cardBroadcastsTitle}
               </h3>
               <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                Publish operational directives and alerts to all field officers.
+                {t.admin.cardBroadcastsDesc}
               </p>
             </div>
           </CardContent>
@@ -704,7 +710,7 @@ export default function AdminDashboard() {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-            <Activity className="h-3 w-3 text-primary" /> Reported Totals (Click Any Card to Filter Ledger)
+            <Activity className="h-3 w-3 text-primary" /> {t.admin.reportedTotalsTitle}
           </h2>
           {activeCardFilter && (
             <button
@@ -712,7 +718,13 @@ export default function AdminDashboard() {
               onClick={() => setActiveCardFilter(null)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full glass-subpanel text-[10px] font-bold text-primary cursor-pointer"
             >
-              <RotateCcw className="h-3 w-3" /> Clear Filter ({activeCardFilter})
+              <RotateCcw className="h-3 w-3" />{' '}
+              {t.dashboard.clearFilterBtn.replace(
+                '{filter}',
+                activeCardFilter === 'INSTITUTIONS'
+                  ? t.dashboard.cardInstTitle
+                  : t.common.status[activeCardFilter] || activeCardFilter
+              )}
             </button>
           )}
         </div>
@@ -729,18 +741,23 @@ export default function AdminDashboard() {
         <section className="xl:col-span-8 min-w-0 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-                  Bureau Detail Ledger
+                  {t.admin.detailLedgerTitle}
                 </h2>
                 {activeCardFilter && (
                   <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-bold">
-                    Filtered: {activeCardFilter === 'INSTITUTIONS' ? 'Institutions' : activeCardFilter}
+                    {t.dashboard.filteredBadge.replace(
+                      '{filter}',
+                      activeCardFilter === 'INSTITUTIONS'
+                        ? t.dashboard.cardInstTitle
+                        : t.common.status[activeCardFilter] || activeCardFilter
+                    )}
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Consolidated applicant records across all sectors
+                {t.admin.detailLedgerDesc}
               </p>
             </div>
             <div className="flex items-center gap-2.5">
@@ -756,7 +773,7 @@ export default function AdminDashboard() {
                 ) : (
                   <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
                 )}
-                Export XLS
+                {t.dashboard.exportXlsBtn}
               </Button>
               <Button
                 onClick={handleExportPDF}
@@ -770,7 +787,7 @@ export default function AdminDashboard() {
                 ) : (
                   <FileTextIcon className="mr-1.5 h-3.5 w-3.5 text-rose-600" />
                 )}
-                Export PDF
+                {t.dashboard.exportPdfBtn}
               </Button>
             </div>
           </div>
@@ -785,7 +802,7 @@ export default function AdminDashboard() {
           {/* Critical Priority Monitor */}
           <section className="space-y-4">
             <h2 className="text-xs font-black uppercase tracking-[0.2em] text-rose-500 flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4" /> Critical Priority Monitor
+              <ShieldAlert className="h-4 w-4" /> {t.admin.criticalMonitorTitle}
             </h2>
             <div className="space-y-3">
               {criticalPriorities.length > 0 ? (
@@ -804,11 +821,11 @@ export default function AdminDashboard() {
                             {item.applicantName}
                           </p>
                           <span className="text-[8px] font-black px-1.5 py-0.5 bg-rose-500 text-white rounded uppercase tracking-tighter">
-                            Urgent
+                            {t.admin.urgentBadge}
                           </span>
                         </div>
                         <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-                          {item.status}: {item.rejectionReason || 'Protocol Error'}
+                          {t.common.status[item.status] || item.status}: {item.rejectionReason || t.admin.protocolErrorFallback}
                         </p>
                         <p className="text-[9px] font-mono font-bold text-rose-500/70 pt-1">
                           RID: {item.id.substring(0, 15)}...
@@ -821,10 +838,10 @@ export default function AdminDashboard() {
                 <div className="glass-card-surface p-12 text-center border-dashed rounded-[32px] !border-emerald-500/25 !bg-emerald-500/[0.05]">
                   <ShieldCheck className="h-10 w-10 text-emerald-500/30 mx-auto mb-3" />
                   <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
-                    Operational Calm
+                    {t.admin.operationalCalmTitle}
                   </p>
                   <p className="text-[9px] text-muted-foreground/60 uppercase font-bold mt-1">
-                    Zero high-risk discrepancies detected
+                    {t.admin.operationalCalmDesc}
                   </p>
                 </div>
               )}
@@ -834,7 +851,7 @@ export default function AdminDashboard() {
           {/* Recent Forensic Snapshot */}
           <section className="space-y-4">
             <h2 className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-              <History className="h-4 w-4 text-primary" /> Forensic Snapshot
+              <History className="h-4 w-4 text-primary" /> {t.admin.forensicSnapshotTitle}
             </h2>
             <Card className="rounded-[32px] overflow-hidden">
               <CardContent className="p-0">
@@ -856,7 +873,7 @@ export default function AdminDashboard() {
                             <span className="text-[8px] font-mono font-bold text-muted-foreground/50 whitespace-nowrap">
                               {log.timestamp?.toDate
                                 ? format(log.timestamp.toDate(), 'HH:mm:ss')
-                                : 'Just now'}
+                                : t.admin.justNow}
                             </span>
                           </div>
                           <p className="text-[9px] text-muted-foreground font-medium leading-relaxed italic truncate">
@@ -874,7 +891,7 @@ export default function AdminDashboard() {
                   {!recentAudit?.length && (
                     <div className="p-12 text-center opacity-20">
                       <Clock className="h-8 w-8 mx-auto mb-2" />
-                      <p className="text-[10px] font-black uppercase">Ledger Empty</p>
+                      <p className="text-[10px] font-black uppercase">{t.admin.ledgerEmpty}</p>
                     </div>
                   )}
                 </div>
@@ -888,7 +905,7 @@ export default function AdminDashboard() {
                     asChild
                   >
                     <Link href="/admin/audit-ledger">
-                      View Full Forensic Vault <ArrowRight className="ml-2 h-3 w-3" />
+                      {t.admin.viewFullVaultBtn} <ArrowRight className="ml-2 h-3 w-3" />
                     </Link>
                   </Button>
                 </div>
@@ -901,7 +918,7 @@ export default function AdminDashboard() {
       <div className="glass-subpanel p-6 rounded-[32px] flex items-center gap-4">
         <ShieldCheck className="h-6 w-6 text-primary shrink-0 opacity-60" />
         <p className="text-[10px] text-foreground font-bold uppercase leading-relaxed tracking-widest max-w-5xl">
-          Administrative Command Protocol: You are viewing the global bureau ledger. Every action triggered from this terminal—including mass triage and personnel revocation—is signed into the Forensic Ledger under your official administrative signature. Precision and accountability are mandatory.
+          {t.admin.commandProtocolBanner}
         </p>
       </div>
     </div>

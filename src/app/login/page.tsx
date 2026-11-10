@@ -33,6 +33,8 @@ import * as OTPAuth from "otpauth";
 import { QRCodeSVG } from 'qrcode.react';
 import { VerificationAnimation, VerificationOutcome } from '@/components/auth/verification-animation';
 import { SixBoxOtp, OtpVerificationStatus } from '@/components/auth/six-box-otp';
+import { useTranslation } from '@/i18n/language-provider';
+import { LanguageSwitcher } from '@/components/layout/language-switcher';
 
 const DEFAULT_LOGO = "https://services.eaes.et/NID-Logos/Fayda%20For%20Ethiopia%20logo-%20english-2-01.png";
 
@@ -43,10 +45,7 @@ function GlassyAuthBackdrop({
 }) {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {/* Atmospheric gradient mesh base */}
       <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-blue-50/70 to-indigo-100/80 dark:from-slate-950 dark:via-slate-900 dark:to-blue-950/70 transition-colors duration-700" />
-
-      {/* Animated Floating Ambient Light Orb 1 (Top Left) */}
       <div
         className={cn(
           'absolute -top-28 -left-24 h-96 w-96 rounded-full blur-3xl animate-orb-1 transition-colors duration-700',
@@ -57,8 +56,6 @@ function GlassyAuthBackdrop({
             : 'bg-blue-500/25 dark:bg-blue-500/20'
         )}
       />
-
-      {/* Animated Floating Ambient Light Orb 2 (Bottom Right) */}
       <div
         className={cn(
           'absolute -bottom-32 -right-24 h-[28rem] w-[28rem] rounded-full blur-3xl animate-orb-2 transition-colors duration-700',
@@ -69,8 +66,6 @@ function GlassyAuthBackdrop({
             : 'bg-indigo-500/25 dark:bg-indigo-500/20'
         )}
       />
-
-      {/* Animated Floating Ambient Light Orb 3 (Center Halo) */}
       <div
         className={cn(
           'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-80 w-80 rounded-full blur-3xl animate-orb-3 transition-colors duration-700',
@@ -81,8 +76,6 @@ function GlassyAuthBackdrop({
             : 'bg-sky-400/20 dark:bg-sky-500/15'
         )}
       />
-
-      {/* Subtle architectural grid overlay */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#64748b14_1px,transparent_1px),linear-gradient(to_bottom,#64748b14_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_70%_70%_at_50%_50%,#000_55%,transparent_100%)]" />
     </div>
   );
@@ -109,6 +102,7 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const brandingRef = useMemoFirebase(() => {
     if (!db) return null;
@@ -143,7 +137,6 @@ export default function LoginPage() {
     }
   }, [adminDocs, adminsExist, mode]);
 
-  // Check for existing session verification bound to active user UID
   useEffect(() => {
     if (typeof window !== 'undefined' && user?.uid) {
       const verified = sessionStorage.getItem('fayda_mfa_verified') === 'true';
@@ -156,13 +149,11 @@ export default function LoginPage() {
     }
   }, [user?.uid]);
 
-  // MANDATORY SECURITY GATE EFFECT
   useEffect(() => {
     if (isUserLoading || isProfileLoading || !user || !profile) return;
-    if (verificationPhase !== 'none') return; // Wait for credential verification animation to complete
-    if (otpStatus === 'verifying' || otpStatus === 'success') return; // Wait for 6-box MFA animation to complete
+    if (verificationPhase !== 'none') return;
+    if (otpStatus === 'verifying' || otpStatus === 'success') return;
 
-    // MANDATORY MFA FOR ALL USERS
     const isMfaRequired = true; 
 
     if (isMfaRequired && !isOtpVerified) {
@@ -183,10 +174,9 @@ export default function LoginPage() {
           setGeneratedSecret(secret);
         }
       }
-      return; // HALT REDIRECTION
+      return;
     }
 
-    // Access granted - redirect based on role
     if (profile.role === 'admin') {
       router.push('/admin');
     } else {
@@ -227,8 +217,8 @@ export default function LoginPage() {
             sessionStorage.setItem('fayda_mfa_verified_uid', user.uid);
           }
           toast({
-            title: "Identity Verified",
-            description: "6-digit MFA token confirmed. Accessing terminal...",
+            title: t('auth.toastIdentityVerifiedTitle'),
+            description: t('auth.toastIdentityVerifiedDesc'),
           });
           setTimeout(() => {
             setIsOtpVerified(true);
@@ -238,22 +228,22 @@ export default function LoginPage() {
           setOtpStatus('wrong');
           setIsSubmitting(false);
           toast({
-            title: "Verification Failed",
-            description: "Wrong 6-digit MFA code. Please check your authenticator and try again.",
+            title: t('auth.toastVerificationFailedTitle'),
+            description: t('auth.toastVerificationFailedDesc'),
             variant: "destructive",
           });
         }
-      } catch (err) {
+      } catch {
         setOtpStatus('wrong');
         setIsSubmitting(false);
         toast({
-          title: "System Error",
-          description: "Could not verify MFA code.",
+          title: t('auth.toastSystemErrorTitle'),
+          description: t('auth.toastSystemErrorDesc'),
           variant: "destructive",
         });
       }
     }, 680);
-  }, [profile?.twoFactorSecret, otpStatus, user?.uid, toast]);
+  }, [profile?.twoFactorSecret, otpStatus, user?.uid, toast, t]);
 
   const handleOtpVerify = (e: React.FormEvent) => {
     e.preventDefault();
@@ -290,8 +280,8 @@ export default function LoginPage() {
           sessionStorage.setItem('fayda_mfa_verified', 'true');
           sessionStorage.setItem('fayda_mfa_verified_uid', user.uid);
           toast({
-            title: "MFA Active & Verified",
-            description: "6-digit MFA handshake established. Your account is now secured.",
+            title: t('auth.toastMfaActiveTitle'),
+            description: t('auth.toastMfaActiveDesc'),
           });
           setTimeout(() => {
             setIsOtpVerified(true);
@@ -301,22 +291,22 @@ export default function LoginPage() {
           setOtpStatus('wrong');
           setIsSubmitting(false);
           toast({
-            title: "Setup Verification Failed",
-            description: "Wrong 6-digit code. Ensure your device clock is synced.",
+            title: t('auth.toastSetupFailedTitle'),
+            description: t('auth.toastSetupFailedDesc'),
             variant: "destructive",
           });
         }
-      } catch (err) {
+      } catch {
         setOtpStatus('wrong');
         setIsSubmitting(false);
         toast({
-          title: "Setup Error",
-          description: "Verification protocol failed.",
+          title: t('auth.toastSystemErrorTitle'),
+          description: t('auth.toastSystemErrorDesc'),
           variant: "destructive",
         });
       }
     }, 680);
-  }, [user, db, generatedSecret, otpStatus, toast]);
+  }, [user, db, generatedSecret, otpStatus, toast, t]);
 
   const handleOtpSetupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -365,8 +355,8 @@ export default function LoginPage() {
 
         setCredentialOutcome('success');
         toast({
-          title: "Admin Created",
-          description: "Credential accepted. Proceeding to 6-digit MFA setup.",
+          title: t('auth.toastAdminCreatedTitle'),
+          description: t('auth.toastAdminCreatedDesc'),
         });
         setTimeout(() => {
           setVerificationPhase('none');
@@ -374,9 +364,9 @@ export default function LoginPage() {
         }, 1200);
       }
     } catch (error: any) {
-      let errMsg = "Invalid email or access key. Please verify your credentials.";
+      let errMsg = t('auth.errInvalidCredentials');
       if (error?.code === 'auth/user-not-found') {
-        errMsg = "No official account found with this email address.";
+        errMsg = t('auth.errUserNotFound');
       } else if (error?.message && mode === 'register') {
         errMsg = error.message;
       }
@@ -394,17 +384,20 @@ export default function LoginPage() {
   const logoUrl = branding?.logoUrl || DEFAULT_LOGO;
   const resolvedRoleLabel =
     profile?.role === 'admin'
-      ? 'Bureau Administrator'
+      ? t('common.adminRole')
       : profile?.role === 'reviewer'
-      ? 'Field Officer'
+      ? t('common.officerRole')
       : mode === 'register'
-      ? 'Bureau Administrator'
-      : 'Authorized Personnel';
+      ? t('common.adminRole')
+      : t('common.authorizedPersonnel');
 
   if (verificationPhase === 'credentials') {
     return (
       <div className="relative flex min-h-screen items-center justify-center bg-background px-4 overflow-hidden">
         <GlassyAuthBackdrop tone={credentialOutcome} />
+        <div className="fixed top-4 right-4 z-50">
+          <LanguageSwitcher />
+        </div>
         <div className="relative z-10 w-full max-w-[420px] animate-glass-enter">
           <Card
             className={cn(
@@ -438,12 +431,15 @@ export default function LoginPage() {
     return (
       <div className="relative flex h-screen items-center justify-center bg-background px-4 overflow-hidden">
         <GlassyAuthBackdrop tone="default" />
+        <div className="fixed top-4 right-4 z-50">
+          <LanguageSwitcher />
+        </div>
         <div className="relative z-10 flex flex-col items-center gap-5 px-10 py-9 rounded-[32px] glass-auth-card animate-glass-enter">
           <div className="relative flex items-center justify-center h-16 w-16 rounded-2xl bg-white/70 dark:bg-white/10 backdrop-blur-xl border border-white/80 dark:border-white/15 shadow-lg">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-          <p className="text-[10px] font-black uppercase tracking-[0.45em] text-muted-foreground">
-            Gateway Handshake...
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground text-center">
+            {t('auth.gatewayHandshake')}
           </p>
         </div>
       </div>
@@ -471,6 +467,9 @@ export default function LoginPage() {
               : 'default'
           }
         />
+        <div className="fixed top-4 right-4 z-50">
+          <LanguageSwitcher />
+        </div>
         <div className="relative z-10 w-full max-w-[440px] animate-glass-enter">
           <Card
             className={cn(
@@ -487,9 +486,11 @@ export default function LoginPage() {
               <div className="mx-auto bg-white/75 dark:bg-white/10 backdrop-blur-xl border border-white/80 dark:border-white/15 p-3.5 rounded-2xl w-fit mb-3 shadow-md shadow-primary/10">
                 <Smartphone className="h-7 w-7 text-primary" />
               </div>
-              <CardTitle className="text-2xl font-black uppercase tracking-tight">Security Protocol</CardTitle>
+              <CardTitle className="text-xl sm:text-2xl font-black uppercase tracking-tight">
+                {t('auth.securityProtocolTitle')}
+              </CardTitle>
               <CardDescription className="text-xs font-medium">
-                Scan QR with Google Authenticator and enter the 6-digit code below.
+                {t('auth.securityProtocolDesc')}
               </CardDescription>
             </CardHeader>
             <CardContent className="px-6 sm:px-8 pb-9 space-y-6">
@@ -499,7 +500,7 @@ export default function LoginPage() {
 
               <div className="p-3.5 glass-subpanel rounded-2xl space-y-1.5">
                 <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest text-center">
-                  Manual Entry Key
+                  {t('auth.manualEntryKey')}
                 </p>
                 <div className="flex items-center justify-center gap-2">
                   <code className="text-xs font-black tracking-widest text-primary break-all text-center">
@@ -512,7 +513,7 @@ export default function LoginPage() {
                     className="h-7 w-7 shrink-0 rounded-lg hover:bg-primary/10"
                     onClick={() => {
                       navigator.clipboard.writeText(generatedSecret);
-                      toast({ title: "Copied", description: "Secret copied to clipboard." });
+                      toast({ title: t('common.copied'), description: t('auth.secretCopiedDesc') });
                     }}
                   >
                     <Copy className="h-3.5 w-3.5" />
@@ -528,10 +529,10 @@ export default function LoginPage() {
                   status={otpStatus}
                   onResetStatus={() => setOtpStatus('idle')}
                   showHeaderSeal={false}
-                  label="6-Digit Confirmation Code"
-                  errorMessage="Invalid 6-digit code. Ensure your phone clock is synced and re-enter."
-                  successTitle="MFA Linked & Verified"
-                  successSubtitle="Authenticator handshake complete. Entering bureau terminal..."
+                  label={t('auth.confirmationCodeLabel')}
+                  errorMessage={t('auth.invalidSetupCodeError')}
+                  successTitle={t('auth.mfaLinkedTitle')}
+                  successSubtitle={t('auth.mfaLinkedSubtitle')}
                   userName={profile?.fullName || fullName || email}
                   userRole={resolvedRoleLabel}
                 />
@@ -556,20 +557,20 @@ export default function LoginPage() {
                   {otpStatus === 'verifying' ? (
                     <span className="flex items-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      Verifying Code...
+                      {t('auth.verifyingCode')}
                     </span>
                   ) : otpStatus === 'success' ? (
                     <span className="flex items-center gap-2">
                       <CheckCircle2 className="h-5 w-5" />
-                      Verified · Redirecting...
+                      {t('auth.verifiedRedirecting')}
                     </span>
                   ) : otpStatus === 'wrong' ? (
                     <span className="flex items-center gap-2">
                       <XCircle className="h-5 w-5" />
-                      Wrong Code · Try Again
+                      {t('auth.wrongCodeTryAgain')}
                     </span>
                   ) : (
-                    'Finalize Handshake'
+                    t('auth.finalizeHandshake')
                   )}
                 </Button>
               </form>
@@ -594,6 +595,9 @@ export default function LoginPage() {
               : 'default'
           }
         />
+        <div className="fixed top-4 right-4 z-50">
+          <LanguageSwitcher />
+        </div>
         <div className="relative z-10 w-full max-w-[430px] animate-glass-enter">
           <Card
             className={cn(
@@ -607,9 +611,11 @@ export default function LoginPage() {
           >
             <div className="h-px w-full bg-gradient-to-r from-transparent via-white/95 dark:via-white/30 to-transparent" />
             <CardHeader className="text-center pt-9 px-8 pb-2">
-              <CardTitle className="text-2xl font-black uppercase tracking-tight">Identity Gateway</CardTitle>
+              <CardTitle className="text-xl sm:text-2xl font-black uppercase tracking-tight">
+                {t('auth.identityGatewayTitle')}
+              </CardTitle>
               <CardDescription className="text-xs font-medium">
-                Enter your 6-digit Google Authenticator code to verify clearance
+                {t('auth.identityGatewayDesc')}
               </CardDescription>
             </CardHeader>
             <CardContent className="px-6 sm:px-8 pb-9 pt-4">
@@ -621,10 +627,10 @@ export default function LoginPage() {
                   status={otpStatus}
                   onResetStatus={() => setOtpStatus('idle')}
                   showHeaderSeal={true}
-                  label="Google Authenticator Code"
-                  errorMessage="The 6-digit MFA code you entered is incorrect. Please check your authenticator app."
-                  successTitle="Identity Verified"
-                  successSubtitle="MFA token validated. Unlocking encrypted terminal..."
+                  label={t('auth.authenticatorCodeLabel')}
+                  errorMessage={t('auth.invalidOtpError')}
+                  successTitle={t('auth.identityVerifiedTitle')}
+                  successSubtitle={t('auth.identityVerifiedSubtitle')}
                   userName={profile?.fullName || email}
                   userRole={resolvedRoleLabel}
                 />
@@ -650,20 +656,20 @@ export default function LoginPage() {
                     {otpStatus === 'verifying' ? (
                       <span className="flex items-center gap-2">
                         <Loader2 className="h-5 w-5 animate-spin" />
-                        Verifying 6-Digit Code...
+                        {t('auth.verifying6DigitCode')}
                       </span>
                     ) : otpStatus === 'success' ? (
                       <span className="flex items-center gap-2">
                         <CheckCircle2 className="h-5 w-5" />
-                        Verified · Entering Terminal
+                        {t('auth.verifiedEnteringTerminal')}
                       </span>
                     ) : otpStatus === 'wrong' ? (
                       <span className="flex items-center gap-2">
                         <XCircle className="h-5 w-5" />
-                        Wrong Code · Re-enter
+                        {t('auth.wrongCodeReenter')}
                       </span>
                     ) : (
-                      'Verify & Confirm Access'
+                      t('auth.verifyConfirmAccess')
                     )}
                   </Button>
                   <Button
@@ -673,7 +679,7 @@ export default function LoginPage() {
                     disabled={otpStatus === 'verifying' || otpStatus === 'success'}
                     className="w-full h-11 rounded-xl text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:bg-white/50 dark:hover:bg-white/5"
                   >
-                    Abort Session
+                    {t('auth.abortSession')}
                   </Button>
                 </div>
               </form>
@@ -688,9 +694,13 @@ export default function LoginPage() {
     <div className="relative flex min-h-screen items-center justify-center bg-background px-4 py-8 overflow-hidden">
       <GlassyAuthBackdrop tone="default" />
 
+      {/* Global Language Switcher visible on /login */}
+      <div className="fixed top-4 right-4 z-50">
+        <LanguageSwitcher />
+      </div>
+
       <div className="relative z-10 w-full max-w-[420px] animate-glass-enter">
         <Card className="relative glass-auth-card rounded-[32px] overflow-hidden">
-          {/* Top Specular Glass Reflection Line */}
           <div className="h-px w-full bg-gradient-to-r from-transparent via-white/95 dark:via-white/30 to-transparent" />
 
           <CardHeader className="space-y-7 text-center pt-10 pb-7 px-8">
@@ -699,29 +709,35 @@ export default function LoginPage() {
               <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-white/80 dark:bg-white/10 backdrop-blur-xl border border-white/85 dark:border-white/15 p-3.5 shadow-[0_8px_24px_-4px_rgba(37,99,235,0.2)] transition-transform duration-300 group-hover:scale-105">
                 <Image 
                   src={logoUrl}
-                  alt="Bureau Logo"
+                  alt={bureauName}
                   width={48}
                   height={48}
                   className="object-contain"
                   priority
+                  referrerPolicy="no-referrer"
                 />
               </div>
             </div>
             
             <div className="space-y-2">
-              <CardTitle className="text-3xl font-black tracking-tighter text-foreground uppercase leading-none">
-                {bureauName.split('Track')[0]} <span className="text-primary italic">Terminal</span>
+              <CardTitle className="text-2xl sm:text-3xl font-black tracking-tighter text-foreground uppercase leading-none">
+                {bureauName.split('Track')[0]}{' '}
+                <span className="text-primary italic">{t('auth.terminalWord')}</span>
               </CardTitle>
-              <CardDescription className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/75">
-                Authorized Personnel Entry
+              <CardDescription className="text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground/75">
+                {t('auth.authorizedPersonnelEntry')}
               </CardDescription>
             </div>
             
             {adminsExist === false && (
               <Tabs value={mode} onValueChange={(v: any) => setMode(v)} className="w-full">
                 <TabsList className="grid grid-cols-2 w-full h-11 bg-white/50 dark:bg-white/[0.04] backdrop-blur-md rounded-xl p-1 border border-white/70 dark:border-white/10">
-                  <TabsTrigger value="login" className="rounded-lg text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-white/90 dark:data-[state=active]:bg-white/10 data-[state=active]:shadow-sm">Sign In</TabsTrigger>
-                  <TabsTrigger value="register" className="rounded-lg text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-white/90 dark:data-[state=active]:bg-white/10 data-[state=active]:shadow-sm">Bootstrap</TabsTrigger>
+                  <TabsTrigger value="login" className="rounded-lg text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-white/90 dark:data-[state=active]:bg-white/10 data-[state=active]:shadow-sm">
+                    {t('auth.signInTab')}
+                  </TabsTrigger>
+                  <TabsTrigger value="register" className="rounded-lg text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-white/90 dark:data-[state=active]:bg-white/10 data-[state=active]:shadow-sm">
+                    {t('auth.bootstrapTab')}
+                  </TabsTrigger>
                 </TabsList>
               </Tabs>
             )}
@@ -731,11 +747,13 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-5">
               {mode === 'register' && (
                 <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <Label className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground ml-1">Official Designation</Label>
+                  <Label className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground ml-1">
+                    {t('auth.officialDesignation')}
+                  </Label>
                   <div className="relative group">
                     <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50 group-focus-within:text-primary group-focus-within:scale-110 transition-all duration-200 z-10" />
                     <Input 
-                      placeholder="Full Official Name" 
+                      placeholder={t('auth.fullOfficialNamePlaceholder')}
                       className="h-14 pl-12 glass-auth-input rounded-2xl text-xs font-bold"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
@@ -746,12 +764,14 @@ export default function LoginPage() {
               )}
               
               <div className="space-y-1.5">
-                <Label className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground ml-1">Terminal Address</Label>
+                <Label className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground ml-1">
+                  {t('auth.terminalAddress')}
+                </Label>
                 <div className="relative group">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50 group-focus-within:text-primary group-focus-within:scale-110 transition-all duration-200 z-10" />
                   <Input 
                     type="email" 
-                    placeholder="official@bureau.gov" 
+                    placeholder={t('auth.emailPlaceholder')}
                     className="h-14 pl-12 glass-auth-input rounded-2xl text-xs font-bold"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -761,7 +781,9 @@ export default function LoginPage() {
               </div>
               
               <div className="space-y-1.5">
-                <Label className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground ml-1">Terminal Access Key</Label>
+                <Label className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground ml-1">
+                  {t('auth.terminalAccessKey')}
+                </Label>
                 <div className="relative group">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50 group-focus-within:text-primary group-focus-within:scale-110 transition-all duration-200 z-10" />
                   <Input 
@@ -775,7 +797,8 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                    title={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                     className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-all z-10"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -785,16 +808,16 @@ export default function LoginPage() {
               
               <Button 
                 type="submit" 
-                className="group relative overflow-hidden w-full h-14 bg-primary hover:bg-primary/95 text-primary-foreground font-black uppercase tracking-[0.28em] rounded-2xl shadow-[0_14px_30px_-6px_rgba(37,99,235,0.4)] hover:shadow-[0_18px_36px_-6px_rgba(37,99,235,0.5)] transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 mt-4"
+                className="group relative overflow-hidden w-full h-14 bg-primary hover:bg-primary/95 text-primary-foreground font-black uppercase tracking-[0.2em] rounded-2xl shadow-[0_14px_30px_-6px_rgba(37,99,235,0.4)] hover:shadow-[0_18px_36px_-6px_rgba(37,99,235,0.5)] transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 mt-4"
                 disabled={isSubmitting}
               >
                 <span className="pointer-events-none absolute inset-0 w-1/2 bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-[150%] skew-x-[-20deg] group-hover:translate-x-[300%] transition-transform duration-1000 ease-out" />
                 {isSubmitting ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : mode === 'login' ? (
-                  "Initialize Session"
+                  t('auth.initializeSession')
                 ) : (
-                  "Register Admin"
+                  t('auth.registerAdmin')
                 )}
               </Button>
             </form>
@@ -803,8 +826,8 @@ export default function LoginPage() {
           <CardFooter className="pt-0 pb-8 px-8 flex flex-col items-center text-center">
             <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-subpanel">
               <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span className="text-[8px] font-black uppercase tracking-[0.28em] text-muted-foreground">
-                6-Digit MFA Protocol Active
+              <span className="text-[8px] font-black uppercase tracking-[0.22em] text-muted-foreground">
+                {t('auth.mfaProtocolActive')}
               </span>
             </div>
           </CardFooter>

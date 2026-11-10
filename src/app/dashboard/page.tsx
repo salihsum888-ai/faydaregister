@@ -51,11 +51,13 @@ import {
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useTranslation } from '@/i18n/language-provider';
 
 export default function OfficerDashboard() {
   const { user } = useUser();
   const db = useFirestore();
   const { toast } = useToast();
+  const { t, formatDate, formatNumber } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCardFilter, setActiveCardFilter] = useState<string | null>(null);
   const [isTogglingDuty, setIsTogglingDuty] = useState(false);
@@ -306,14 +308,14 @@ export default function OfficerDashboard() {
       );
 
       toast({
-        title: newDutyStatus ? 'Active Duty Initialized' : 'Off-Duty Signal Sent',
-        description: `Personnel status updated in the bureau coordination matrix.`,
+        title: newDutyStatus ? t.dashboard.toastDutyActiveTitle : t.dashboard.toastDutyOfflineTitle,
+        description: t.dashboard.toastDutyDesc,
       });
     } catch {
       toast({
         variant: 'destructive',
-        title: 'Protocol Failure',
-        description: 'Could not synchronize duty status with backend.',
+        title: t.dashboard.toastDutyErrorTitle,
+        description: t.dashboard.toastDutyErrorDesc,
       });
     } finally {
       setIsTogglingDuty(false);
@@ -332,9 +334,9 @@ export default function OfficerDashboard() {
     const exportData = filteredRegistrations.map((r) => ({
       ID: r.id,
       Applicant: r.applicantName,
-      'Institution Name': r.institutionName || r.schoolName || 'Individual',
+      'Institution Name': r.institutionName || r.schoolName || t.registrationTable.individualCitizen,
       Date: format(new Date(r.submissionDate), 'yyyy-MM-dd'),
-      Status: r.status,
+      Status: t.common.status[r.status] || r.status,
       Location: r.location,
     }));
 
@@ -353,8 +355,8 @@ export default function OfficerDashboard() {
     );
 
     toast({
-      title: 'Excel Snapshot Generated',
-      description: 'Current worklist exported to spreadsheet.',
+      title: t.dashboard.toastExcelTitle,
+      description: t.dashboard.toastExcelDesc,
     });
     setTimeout(() => setIsExporting(false), 800);
   };
@@ -368,9 +370,9 @@ export default function OfficerDashboard() {
     const rows = filteredRegistrations.map((r) => [
       r.id.substring(0, 15),
       r.applicantName,
-      r.institutionName || r.schoolName || 'Individual',
+      r.institutionName || r.schoolName || t.registrationTable.individualCitizen,
       format(new Date(r.submissionDate), 'MMM dd'),
-      r.status,
+      t.common.status[r.status] || r.status,
     ]);
     autoTable(pdfDoc, {
       startY: 25,
@@ -390,7 +392,7 @@ export default function OfficerDashboard() {
       `Dashboard: Generated PDF worklist archive for ${filteredRegistrations.length} records.`
     );
 
-    toast({ title: 'PDF Snapshot Generated', description: 'Official documentation saved.' });
+    toast({ title: t.dashboard.toastPdfTitle, description: t.dashboard.toastPdfDesc });
     setTimeout(() => setIsExporting(false), 800);
   };
 
@@ -415,14 +417,14 @@ export default function OfficerDashboard() {
               )}
             />
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">
-              Field Terminal v2.4
+              {t.dashboard.eyebrow}
             </p>
           </div>
           <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">
-            Officer Hub
+            {t.dashboard.title}
           </h1>
           <p className="text-sm text-muted-foreground max-w-lg">
-            Unified Command Center for field operations, institutions, and mission triage.
+            {t.dashboard.subtitle}
           </p>
         </div>
 
@@ -440,7 +442,7 @@ export default function OfficerDashboard() {
             </div>
             <div className="flex flex-col">
               <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                Command Status
+                {t.dashboard.commandStatusLabel}
               </span>
               <button
                 onClick={handleToggleDuty}
@@ -457,7 +459,7 @@ export default function OfficerDashboard() {
                 ) : (
                   <Power className="h-3 w-3" />
                 )}
-                {profile?.isDutyActive ? 'Active Duty' : 'Signal Offline'}
+                {profile?.isDutyActive ? t.dashboard.activeDuty : t.dashboard.signalOffline}
               </button>
             </div>
           </div>
@@ -471,7 +473,7 @@ export default function OfficerDashboard() {
             </div>
             <div className="flex flex-col">
               <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                Last Sync
+                {t.dashboard.lastSyncLabel}
               </span>
               <span className="text-sm font-black text-foreground uppercase tracking-tighter">
                 {lastSynced ? format(lastSynced, 'HH:mm:ss') : '--:--:--'}
@@ -485,10 +487,10 @@ export default function OfficerDashboard() {
             </div>
             <div className="flex flex-col">
               <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                Network
+                {t.dashboard.networkLabel}
               </span>
               <span className="text-sm font-black text-green-600 dark:text-emerald-400 uppercase tracking-tighter">
-                Synced
+                {t.common.synced}
               </span>
             </div>
           </div>
@@ -505,45 +507,48 @@ export default function OfficerDashboard() {
           />
           <CardContent className="p-5 sm:p-6 relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">
-                  Today&apos;s Live Intake • {format(new Date(), 'MMM dd, yyyy')}
+                  {t.dashboard.todayLiveIntake.replace('{date}', formatDate(new Date()))}
                 </span>
                 {todaySummary.hasDailyReport ? (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase">
-                    <CheckCircle2 className="h-3 w-3" /> Report Logged
+                    <CheckCircle2 className="h-3 w-3" /> {t.dashboard.reportLogged}
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase">
-                    <Clock className="h-3 w-3" /> Report Pending
+                    <Clock className="h-3 w-3" /> {t.dashboard.reportPending}
                   </span>
                 )}
               </div>
 
               <div className="flex items-baseline gap-3">
                 <span className="text-3xl sm:text-4xl font-black text-foreground tabular-nums">
-                  {todaySummary.total.toLocaleString()}
+                  {formatNumber(todaySummary.total)}
                 </span>
                 <span className="text-xs font-semibold text-muted-foreground">
-                  People Registered Today
+                  {t.dashboard.peopleRegisteredToday}
                 </span>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-[11px] font-bold tabular-nums">
-                  <Building2 className="h-3 w-3" /> {todaySummary.institutionCount} Institution
+                  <Building2 className="h-3 w-3" />{' '}
+                  {t.dashboard.institutionCountBadge.replace('{count}', formatNumber(todaySummary.institutionCount))}
                 </span>
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg glass-subpanel text-slate-700 dark:text-slate-200 text-[11px] font-bold tabular-nums">
                   <UserCheck className="h-3 w-3 text-emerald-500" />{' '}
-                  {todaySummary.nonInstitutionCount} Non-Institution
+                  {t.dashboard.nonInstitutionCountBadge.replace('{count}', formatNumber(todaySummary.nonInstitutionCount))}
                 </span>
                 {todaySummary.hasDailyReport && (
                   <>
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold tabular-nums">
-                      <Phone className="h-2.5 w-2.5" /> {todaySummary.ethio} Ethio
+                      <Phone className="h-2.5 w-2.5" />{' '}
+                      {t.dashboard.ethioCountBadge.replace('{count}', formatNumber(todaySummary.ethio))}
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-orange-500/10 text-orange-600 dark:text-orange-400 text-[10px] font-bold tabular-nums">
-                      <Smartphone className="h-2.5 w-2.5" /> {todaySummary.safaricom} Safaricom
+                      <Smartphone className="h-2.5 w-2.5" />{' '}
+                      {t.dashboard.safaricomCountBadge.replace('{count}', formatNumber(todaySummary.safaricom))}
                     </span>
                   </>
                 )}
@@ -558,7 +563,7 @@ export default function OfficerDashboard() {
               >
                 <Link href="/daily-registrations">
                   <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
-                  {todaySummary.hasDailyReport ? 'Update Daily Report' : 'Log Daily Report'}
+                  {todaySummary.hasDailyReport ? t.dashboard.updateDailyReportBtn : t.dashboard.logDailyReportBtn}
                 </Link>
               </Button>
             </div>
@@ -575,11 +580,11 @@ export default function OfficerDashboard() {
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5" /> Verification Queue
+                  <ShieldCheck className="h-3.5 w-3.5" /> {t.dashboard.verificationQueueEyebrow}
                 </span>
                 <p className="text-2xl sm:text-3xl font-black text-foreground tabular-nums">
-                  {stats.processing.toLocaleString()}{' '}
-                  <span className="text-sm font-bold text-muted-foreground">In Processing</span>
+                  {formatNumber(stats.processing)}{' '}
+                  <span className="text-sm font-bold text-muted-foreground">{t.dashboard.inProcessingLabel}</span>
                 </p>
               </div>
               <Button
@@ -589,14 +594,14 @@ export default function OfficerDashboard() {
                 className="glass-subpanel rounded-xl h-9 px-3.5 text-xs font-bold text-primary hover:bg-primary hover:text-white transition-all shrink-0"
               >
                 <Link href="/status-check">
-                  Verify Now <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                  {t.dashboard.verifyNowBtn} <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                 </Link>
               </Button>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
               {stats.processing > 0
-                ? `You have ${stats.processing} record(s) in Processing status ready for official gateway verification.`
-                : 'All assigned Processing records have been verified. Open the terminal anytime to check status.'}
+                ? t.dashboard.queuePendingDesc.replace('{count}', formatNumber(stats.processing))
+                : t.dashboard.queueClearDesc}
             </p>
           </CardContent>
         </Card>
@@ -622,7 +627,7 @@ export default function OfficerDashboard() {
                     type="button"
                     className="glass-subpanel px-3.5 py-1.5 rounded-[10px] text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-primary/50 hover:text-primary transition-all cursor-pointer"
                   >
-                    Launch
+                    {t.dashboard.launchBtn}
                   </button>
                 }
               />
@@ -630,12 +635,12 @@ export default function OfficerDashboard() {
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <h3 className="text-[14px] font-semibold text-slate-900 dark:text-white">
-                  New Registration
+                  {t.dashboard.cardNewRegTitle}
                 </h3>
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 fill-emerald-500/10" />
               </div>
               <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                Enroll new citizen or institution RIDs into the active bureau registry.
+                {t.dashboard.cardNewRegDesc}
               </p>
             </div>
           </CardContent>
@@ -659,10 +664,10 @@ export default function OfficerDashboard() {
                   trigger={
                     <button
                       type="button"
-                      title="Register under Institution"
+                      title={t.registrationModal.institutionToggleLabel}
                       className="glass-subpanel px-2.5 py-1.5 rounded-[10px] text-[11px] font-semibold text-primary hover:bg-primary/10 transition-all cursor-pointer"
                     >
-                      + Add
+                      {t.dashboard.addShortBtn}
                     </button>
                   }
                 />
@@ -670,22 +675,21 @@ export default function OfficerDashboard() {
                   href="/schools-students"
                   className="glass-subpanel px-3 py-1.5 rounded-[10px] text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-primary/50 hover:text-primary transition-all"
                 >
-                  Open
+                  {t.dashboard.openBtn}
                 </Link>
               </div>
             </div>
             <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <h3 className="text-[14px] font-semibold text-slate-900 dark:text-white">
-                  Institutions
+                  {t.dashboard.cardInstTitle}
                 </h3>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-600 dark:text-violet-400 tabular-nums">
-                  {stats.institutionsCount || 0} Active
+                  {t.dashboard.activeCountBadge.replace('{count}', formatNumber(stats.institutionsCount || 0))}
                 </span>
               </div>
               <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                {stats.institutionRecordsCount || 0} enrolled records across schools, hospitals &
-                companies.
+                {t.dashboard.cardInstDesc.replace('{count}', formatNumber(stats.institutionRecordsCount || 0))}
               </p>
             </div>
           </CardContent>
@@ -705,18 +709,18 @@ export default function OfficerDashboard() {
                 href="/daily-registrations"
                 className="glass-subpanel px-3.5 py-1.5 rounded-[10px] !border-indigo-500/40 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-all"
               >
-                Connected
+                {t.dashboard.connectedBadge}
               </Link>
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <h3 className="text-[14px] font-semibold text-slate-900 dark:text-white">
-                  Daily Totals
+                  {t.dashboard.cardDailyTitle}
                 </h3>
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 fill-emerald-500/10" />
               </div>
               <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                Log daily intake counts and split Institution vs. Non-Institution output.
+                {t.dashboard.cardDailyDesc}
               </p>
             </div>
           </CardContent>
@@ -736,18 +740,18 @@ export default function OfficerDashboard() {
                 href="/communication"
                 className="glass-subpanel px-3.5 py-1.5 rounded-[10px] text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-primary/50 hover:text-primary transition-all"
               >
-                Connect
+                {t.dashboard.connectBtn}
               </Link>
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <h3 className="text-[14px] font-semibold text-slate-900 dark:text-white">
-                  Team Comms
+                  {t.dashboard.cardCommsTitle}
                 </h3>
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 fill-emerald-500/10" />
               </div>
               <p className="text-[12px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                Coordinate with regional supervisors, share 29-digit RIDs, and chat in real time.
+                {t.dashboard.cardCommsDesc}
               </p>
             </div>
           </CardContent>
@@ -760,10 +764,10 @@ export default function OfficerDashboard() {
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-                <VelocityIcon className="h-3.5 w-3.5 text-primary" /> 7-Day Velocity
+                <VelocityIcon className="h-3.5 w-3.5 text-primary" /> {t.dashboard.velocityTitle}
               </h2>
               <span className="text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full glass-subpanel text-primary">
-                Live Telemetry
+                {t.dashboard.liveTelemetryBadge}
               </span>
             </div>
             <Card className="rounded-[24px] overflow-hidden relative group">
@@ -821,7 +825,7 @@ export default function OfficerDashboard() {
                                 <div className="flex items-center gap-2">
                                   <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
                                   <p className="text-sm font-black text-foreground tracking-tighter tabular-nums">
-                                    Total: {payload[0].value}
+                                    {t.dashboard.chartTotalPrefix.replace('{value}', String(payload[0].value))}
                                   </p>
                                 </div>
                               </div>
@@ -854,7 +858,7 @@ export default function OfficerDashboard() {
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-                <Sparkles className="h-3.5 w-3.5 text-primary" /> Performance Metrics (Click Any Card to Filter Ledger)
+                <Sparkles className="h-3.5 w-3.5 text-primary" /> {t.dashboard.performanceMetricsTitle}
               </h2>
               {activeCardFilter && (
                 <button
@@ -862,7 +866,13 @@ export default function OfficerDashboard() {
                   onClick={() => setActiveCardFilter(null)}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full glass-subpanel text-[10px] font-bold text-primary cursor-pointer"
                 >
-                  <RotateCcw className="h-3 w-3" /> Clear Filter ({activeCardFilter})
+                  <RotateCcw className="h-3 w-3" />{' '}
+                  {t.dashboard.clearFilterBtn.replace(
+                    '{filter}',
+                    activeCardFilter === 'INSTITUTIONS'
+                      ? t.dashboard.cardInstTitle
+                      : t.common.status[activeCardFilter] || activeCardFilter
+                  )}
                 </button>
               )}
             </div>
@@ -878,18 +888,23 @@ export default function OfficerDashboard() {
           <section className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-                    Activity Ledger
+                    {t.dashboard.activityLedgerTitle}
                   </h2>
                   {activeCardFilter && (
                     <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-bold">
-                      Filtered: {activeCardFilter === 'INSTITUTIONS' ? 'Institutions' : activeCardFilter}
+                      {t.dashboard.filteredBadge.replace(
+                        '{filter}',
+                        activeCardFilter === 'INSTITUTIONS'
+                          ? t.dashboard.cardInstTitle
+                          : t.common.status[activeCardFilter] || activeCardFilter
+                      )}
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Manage and review your assigned registrations
+                  {t.dashboard.activityLedgerDesc}
                 </p>
               </div>
               <div className="flex items-center gap-2.5">
@@ -904,7 +919,7 @@ export default function OfficerDashboard() {
                   ) : (
                     <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
                   )}
-                  Export XLS
+                  {t.dashboard.exportXlsBtn}
                 </Button>
                 <Button
                   onClick={handleExportPDF}
@@ -917,7 +932,7 @@ export default function OfficerDashboard() {
                   ) : (
                     <FileTextIcon className="mr-1.5 h-3.5 w-3.5 text-rose-600" />
                   )}
-                  Export PDF
+                  {t.dashboard.exportPdfBtn}
                 </Button>
               </div>
             </div>
@@ -931,7 +946,7 @@ export default function OfficerDashboard() {
         {/* Priorities Intelligence */}
         <section className="xl:col-span-4 min-w-0 space-y-4">
           <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-            <Megaphone className="h-3.5 w-3.5 text-primary" /> Intelligence Feed
+            <Megaphone className="h-3.5 w-3.5 text-primary" /> {t.dashboard.intelligenceFeedTitle}
           </h2>
           <div className="space-y-3.5">
             {sortedAnnouncements.length > 0 ? (
@@ -966,7 +981,7 @@ export default function OfficerDashboard() {
                         </h4>
                         {isNew && (
                           <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
-                            New
+                            {t.dashboard.newBadge}
                           </span>
                         )}
                       </div>
@@ -985,7 +1000,7 @@ export default function OfficerDashboard() {
               <div className="p-16 text-center glass-card-surface border-dashed rounded-3xl text-muted-foreground/40 flex flex-col items-center gap-4">
                 <Info className="h-10 w-10 opacity-20" />
                 <p className="text-xs font-black uppercase tracking-[0.2em]">
-                  Zero Active Bulletins
+                  {t.dashboard.zeroBulletins}
                 </p>
               </div>
             )}

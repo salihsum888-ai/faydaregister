@@ -35,21 +35,23 @@ import { updateDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { UserProfile } from '@/lib/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
-
-const profileSchema = z.object({
-  fullName: z.string().min(2, "Full name must be at least 2 characters"),
-  region: z.string().min(1, "Region is required"),
-  cluster: z.string().min(1, "Cluster is required"),
-  profilePhoto: z.string().url("Must be a valid image URL").optional().or(z.literal('')),
-});
-
-type ProfileFormValues = z.infer<typeof profileSchema>;
+import { useTranslation } from '@/i18n/language-provider';
 
 export default function ProfilePage() {
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [isSaving, setIsSaving] = useState(false);
+
+  const profileSchema = z.object({
+    fullName: z.string().min(2, t.profilePage.valNameMin),
+    region: z.string().min(1, t.profilePage.valRegionReq),
+    cluster: z.string().min(1, t.profilePage.valClusterReq),
+    profilePhoto: z.string().url(t.profilePage.valPhotoUrl).optional().or(z.literal('')),
+  });
+
+  type ProfileFormValues = z.infer<typeof profileSchema>;
 
   const userProfileRef = useMemoFirebase(() => {
     if (!db || !user?.uid) return null;
@@ -90,14 +92,14 @@ export default function ProfilePage() {
       });
 
       toast({
-        title: "Profile Synchronized",
-        description: "Your official bureau record has been updated successfully.",
+        title: t.profilePage.toastSavedTitle,
+        description: t.profilePage.toastSavedDesc,
       });
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Update Failed",
-        description: "Could not establish a connection to the profile service.",
+        title: t.profilePage.toastErrorTitle,
+        description: t.profilePage.toastErrorDesc,
       });
     } finally {
       setTimeout(() => setIsSaving(false), 800);
@@ -109,7 +111,7 @@ export default function ProfilePage() {
       <div className="flex h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-12 w-12 animate-spin text-primary opacity-20" />
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">Accessing Profile Data</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">{t.profilePage.loadingText}</p>
         </div>
       </div>
     );
@@ -118,13 +120,13 @@ export default function ProfilePage() {
   return (
     <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in duration-700 pb-20">
       <Link href="/dashboard" className="inline-flex items-center text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
-        <ArrowLeft className="mr-2 h-3 w-3" /> Return to Command Center
+        <ArrowLeft className="mr-2 h-3 w-3" /> {t.profilePage.backToDashboard}
       </Link>
 
       <div className="space-y-1">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Official Settings</p>
-        <h1 className="text-3xl font-black tracking-tight text-foreground font-headline">Bureau Identity</h1>
-        <p className="text-sm text-muted-foreground">Manage your personal credentials and operational sector assignments.</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">{t.profilePage.eyebrow}</p>
+        <h1 className="text-3xl font-black tracking-tight text-foreground font-headline">{t.profilePage.title}</h1>
+        <p className="text-sm text-muted-foreground">{t.profilePage.subtitle}</p>
       </div>
 
       <Form {...form}>
@@ -147,7 +149,7 @@ export default function ProfilePage() {
                   <h2 className="text-xl font-bold text-foreground">{profile?.fullName}</h2>
                   <div className="flex flex-wrap justify-center sm:justify-start gap-2">
                     <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-tighter">
-                      {profile?.role}
+                      {profile?.role === 'admin' ? t.header.administrator : t.header.officer}
                     </span>
                     <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-black uppercase tracking-tighter">
                       UID: {user?.uid.substring(0, 8)}...
@@ -163,7 +165,7 @@ export default function ProfilePage() {
                   name="fullName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Full Name</FormLabel>
+                      <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{t.profilePage.fullNameLabel}</FormLabel>
                       <FormControl>
                         <div className="relative group">
                           <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
@@ -176,12 +178,12 @@ export default function ProfilePage() {
                 />
 
                 <FormItem>
-                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Email Terminal</FormLabel>
+                  <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{t.profilePage.emailLabel}</FormLabel>
                   <div className="relative group opacity-50">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30" />
                     <Input value={profile?.email} disabled className="pl-10 h-12 bg-muted border-border rounded-xl cursor-not-allowed" />
                   </div>
-                  <FormDescription className="text-[10px] font-medium">Auth credentials managed by headquarters.</FormDescription>
+                  <FormDescription className="text-[10px] font-medium">{t.profilePage.emailHelper}</FormDescription>
                 </FormItem>
 
                 <FormField
@@ -189,7 +191,7 @@ export default function ProfilePage() {
                   name="region"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Operational Region</FormLabel>
+                      <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{t.profilePage.regionLabel}</FormLabel>
                       <FormControl>
                         <div className="relative group">
                           <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
@@ -206,7 +208,7 @@ export default function ProfilePage() {
                   name="cluster"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Assigned Cluster</FormLabel>
+                      <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{t.profilePage.clusterLabel}</FormLabel>
                       <FormControl>
                         <div className="relative group">
                           <Layers className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
@@ -224,14 +226,14 @@ export default function ProfilePage() {
                 name="profilePhoto"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Profile Photo URL</FormLabel>
+                    <FormLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{t.profilePage.photoUrlLabel}</FormLabel>
                     <FormControl>
                       <div className="relative group">
                         <Camera className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
                         <Input {...field} placeholder="https://images.unsplash.com/..." className="pl-10 h-12 bg-background border-border rounded-xl" />
                       </div>
                     </FormControl>
-                    <FormDescription className="text-[10px] font-medium">Remote image source for your identification badge.</FormDescription>
+                    <FormDescription className="text-[10px] font-medium">{t.profilePage.photoUrlHelper}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -242,7 +244,7 @@ export default function ProfilePage() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-6 bg-primary/[0.03] border border-primary/10 rounded-2xl">
             <div className="flex items-center gap-3">
               <ShieldCheck className="h-5 w-5 text-primary" />
-              <p className="text-xs font-bold text-foreground">Personnel Verification Required</p>
+              <p className="text-xs font-bold text-foreground">{t.profilePage.verificationNote}</p>
             </div>
             <Button 
               type="submit" 
@@ -250,9 +252,9 @@ export default function ProfilePage() {
               className="w-full sm:w-auto h-12 px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest rounded-xl shadow-xl shadow-primary/10"
             >
               {isSaving ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Synchronizing...</>
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t.profilePage.savingBtn}</>
               ) : (
-                <><Save className="mr-2 h-4 w-4" /> Commit Changes</>
+                <><Save className="mr-2 h-4 w-4" /> {t.profilePage.saveBtn}</>
               )}
             </Button>
           </div>

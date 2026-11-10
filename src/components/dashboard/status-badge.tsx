@@ -1,6 +1,9 @@
+'use client';
+
 import { RegistrationStatus } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/i18n/language-provider';
 
 interface StatusBadgeProps {
   status: RegistrationStatus;
@@ -8,26 +11,33 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
+  const { t } = useTranslation();
+
   const config = {
     Processed: {
-      label: 'Processed',
-      color: 'bg-[#e6f6ef] text-[#14804a] hover:bg-[#e6f6ef] dark:bg-emerald-500/15 dark:text-emerald-400',
+      labelKey: 'common.status.Processed',
+      color:
+        'bg-[#e6f6ef] text-[#14804a] hover:bg-[#e6f6ef] dark:bg-emerald-500/15 dark:text-emerald-400',
     },
     'Pending Review': {
-      label: 'Pending Review',
-      color: 'bg-[#f3ebff] text-[#7839ee] hover:bg-[#f3ebff] dark:bg-purple-500/15 dark:text-purple-400',
+      labelKey: 'common.status.Pending Review',
+      color:
+        'bg-[#f3ebff] text-[#7839ee] hover:bg-[#f3ebff] dark:bg-purple-500/15 dark:text-purple-400',
     },
     Rejected: {
-      label: 'Rejected',
-      color: 'bg-[#feeceb] text-[#d92d20] hover:bg-[#feeceb] dark:bg-rose-500/15 dark:text-rose-400',
+      labelKey: 'common.status.Rejected',
+      color:
+        'bg-[#feeceb] text-[#d92d20] hover:bg-[#feeceb] dark:bg-rose-500/15 dark:text-rose-400',
     },
     Processing: {
-      label: 'Processing',
-      color: 'bg-[#e8f5ff] text-[#0070cc] hover:bg-[#e8f5ff] dark:bg-sky-500/15 dark:text-sky-400',
+      labelKey: 'common.status.Processing',
+      color:
+        'bg-[#e8f5ff] text-[#0070cc] hover:bg-[#e8f5ff] dark:bg-sky-500/15 dark:text-sky-400',
     },
     Failed: {
-      label: 'Uncategorized / Failed',
-      color: 'bg-[#eeeeee] text-[#555555] hover:bg-[#eeeeee] dark:bg-slate-700/50 dark:text-slate-300',
+      labelKey: 'common.status.Failed',
+      color:
+        'bg-[#eeeeee] text-[#555555] hover:bg-[#eeeeee] dark:bg-slate-700/50 dark:text-slate-300',
     },
   }[status];
 
@@ -42,7 +52,7 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
         className
       )}
     >
-      {status === 'Failed' ? 'Failed' : config.label}
+      {t(config.labelKey)}
     </Badge>
   );
 }

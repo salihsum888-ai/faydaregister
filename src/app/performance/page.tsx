@@ -98,6 +98,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { logAuditAction } from '@/lib/audit';
+import { useTranslation } from '@/i18n/language-provider';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -249,6 +250,7 @@ function PerformanceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const { t, formatDate } = useTranslation();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
@@ -820,18 +822,12 @@ function PerformanceContent() {
             </div>
             <div>
               <h1 className="text-3xl md:text-4xl font-black tracking-tight text-foreground font-headline uppercase leading-none">
-                {isGlobalScope
-                  ? 'Global Bureau Quality'
-                  : isRemoteAudit
-                  ? 'Unit Intelligence'
-                  : 'Bureau Quality'}
+                {t.performancePage.titleMain} {t.performancePage.titleHighlight}
               </h1>
               <p className="text-[10px] md:text-xs font-bold text-muted-foreground uppercase tracking-widest mt-1">
-                {isGlobalScope
-                  ? 'All-Personnel Consolidated Accuracy & SLA Matrix'
-                  : isRemoteAudit
-                  ? `Auditing: ${targetProfile?.fullName || 'Official'}`
-                  : 'Personnel Accuracy & Rejection Diagnostics Matrix'}
+                {isRemoteAudit
+                  ? `${t.performancePage.viewingOfficerPrefix} ${targetProfile?.fullName || ''}`
+                  : t.performancePage.subtitle}
               </p>
             </div>
           </div>
@@ -844,12 +840,12 @@ function PerformanceContent() {
               <SelectTrigger className="h-11 min-w-[200px] clay-card rounded-2xl px-4 text-xs font-black uppercase tracking-wider border-none">
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-primary shrink-0" />
-                  <SelectValue placeholder="Select Personnel Scope" />
+                  <SelectValue placeholder={t.performancePage.backToAllBtn} />
                 </div>
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
                 <SelectItem value="GLOBAL" className="text-xs font-black">
-                  Global Bureau (All Personnel)
+                  {t.common.all}
                 </SelectItem>
                 {(allOfficers || []).map((off) => (
                   <SelectItem key={off.id} value={off.id} className="text-xs font-semibold">
@@ -864,18 +860,18 @@ function PerformanceContent() {
             <SelectTrigger className="h-11 min-w-[165px] clay-card rounded-2xl px-4 text-xs font-black uppercase tracking-wider border-none">
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-primary shrink-0" />
-                <SelectValue placeholder="Origin" />
+                <SelectValue placeholder={t.performancePage.allSectorsItem} />
               </div>
             </SelectTrigger>
             <SelectContent className="rounded-2xl">
               <SelectItem value="ALL" className="text-xs font-bold">
-                All Origins
+                {t.performancePage.allSectorsItem}
               </SelectItem>
               <SelectItem value="INSTITUTION" className="text-xs font-bold">
-                Institutions Only
+                {t.performancePage.institutionsHeader}
               </SelectItem>
               <SelectItem value="INDIVIDUAL" className="text-xs font-bold">
-                Individuals Only
+                {t.performancePage.individualOnlyItem}
               </SelectItem>
             </SelectContent>
           </Select>
@@ -884,12 +880,12 @@ function PerformanceContent() {
             <Calendar className="h-4 w-4 text-primary shrink-0" />
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="w-[165px] h-9 border-none bg-transparent font-bold text-xs">
-                <SelectValue placeholder="Select period" />
+                <SelectValue placeholder={t.performancePage.allTimeItem} />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
                 {monthsList.map((m) => (
                   <SelectItem key={m.value} value={m.value} className="font-bold text-xs">
-                    {m.label}
+                    {m.value === 'ALL' ? t.performancePage.allTimeItem : m.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -901,10 +897,7 @@ function PerformanceContent() {
       {!stats || stats.total === 0 ? (
         <div className="flex flex-col items-center justify-center py-36 clay-card rounded-[32px] text-muted-foreground/40 space-y-3">
           <Layers className="h-16 w-16 opacity-20" />
-          <p className="text-sm font-black uppercase tracking-[0.3em]">Matrix Data Depleted</p>
-          <p className="text-xs italic">
-            No registrations detected for the selected scope and operational period.
-          </p>
+          <p className="text-sm font-black uppercase tracking-[0.3em]">{t.performancePage.emptyFilterText}</p>
           {(originFilter !== 'ALL' || selectedMonth !== 'ALL') && (
             <Button
               type="button"
@@ -916,7 +909,7 @@ function PerformanceContent() {
               }}
               className="mt-2 rounded-xl text-xs font-bold"
             >
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset Scope Filters
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> {t.performancePage.resetFiltersTitle}
             </Button>
           )}
         </div>
@@ -940,29 +933,13 @@ function PerformanceContent() {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-black uppercase tracking-wider text-foreground">
-                    SLA Benchmark Target: 85.00% Elite Standard
-                  </span>
-                  <span
-                    className={cn(
-                      'px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest',
-                      stats.successRate >= 85
-                        ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
-                        : stats.successRate >= 80
-                        ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
-                        : 'bg-rose-500/20 text-rose-700 dark:text-rose-300'
-                    )}
-                  >
-                    {stats.successRate >= 85
-                      ? 'Elite SLA Achieved'
-                      : stats.successRate >= 80
-                      ? 'Within Minimum SLA (80%+)'
-                      : 'Below 80.00% SLA Threshold'}
+                    {t.performancePage.kpiSuccessTitle}: 85.00%
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {stats.neededForElite === 0
-                    ? `Current Exact Success Rate (${stats.successRate}%) exceeds the 85.00% Elite Bureau Benchmark.`
-                    : `Requires ${stats.neededForElite} additional Processed record(s) with zero rejections to reach the 85.00% Elite threshold.`}
+                  {t.performancePage.verifiedBadge
+                    .replace('{count}', String(stats.processed))
+                    .replace('{pct}', String(stats.successRate))}
                 </p>
               </div>
             </div>
@@ -975,7 +952,7 @@ function PerformanceContent() {
                 onClick={() => router.push('/full-performance')}
                 className="h-9 rounded-xl text-xs font-bold"
               >
-                Open Intel Hub
+                {t.nav.intelMatrix}
               </Button>
               <Button
                 type="button"
@@ -984,7 +961,7 @@ function PerformanceContent() {
                 onClick={() => router.push('/full-registration')}
                 className="h-9 rounded-xl text-xs font-bold"
               >
-                Open Full Record
+                {t.nav.fullRegistration}
               </Button>
             </div>
           </Card>
@@ -992,14 +969,14 @@ function PerformanceContent() {
           {/* Row 1: 4 Interactive Click-to-Filter Exact Rate Gauges */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             <MetricGauge
-              label="Success Rate"
+              label={t.performancePage.kpiSuccessTitle}
               value={stats.successRate}
               count={stats.processed}
               totalCount={stats.total}
               color={getThresholdColor(stats.successRate)}
               icon={CheckCircle2}
               trend={stats.trends.processed}
-              description="Processed Documents"
+              description={t.performancePage.kpiSuccessDesc}
               inverseTrend={false}
               isActive={auditStatusFilter === 'Processed'}
               onClick={() =>
@@ -1007,14 +984,14 @@ function PerformanceContent() {
               }
             />
             <MetricGauge
-              label="Processing Rate"
+              label={t.performancePage.kpiProcessingTitle}
               value={stats.processingRate}
               count={stats.processing}
               totalCount={stats.total}
               color={COLORS.processing}
               icon={Activity}
               trend={stats.trends.processing}
-              description="Active Processing Queue"
+              description={t.performancePage.kpiProcessingDesc}
               inverseTrend={true}
               isActive={auditStatusFilter === 'Processing'}
               onClick={() =>
@@ -1022,14 +999,14 @@ function PerformanceContent() {
               }
             />
             <MetricGauge
-              label="Rejection Rate"
+              label={t.performancePage.kpiRejectionTitle}
               value={stats.rejectionRate}
               count={stats.rejected}
               totalCount={stats.total}
               color={COLORS.rejected}
               icon={ShieldAlert}
               trend={stats.trends.rejected}
-              description="Rejected Records"
+              description={t.performancePage.kpiRejectionDesc}
               inverseTrend={true}
               isActive={auditStatusFilter === 'Rejected'}
               onClick={() =>
@@ -1037,14 +1014,14 @@ function PerformanceContent() {
               }
             />
             <MetricGauge
-              label="Failed Rate"
+              label={t.common.statusFailed}
               value={stats.errorRate}
               count={stats.failed}
               totalCount={stats.total}
               color={COLORS.failed}
               icon={AlertCircle}
               trend={stats.trends.failed}
-              description="Failed Records"
+              description={t.common.statusFailed}
               inverseTrend={true}
               isActive={auditStatusFilter === 'Failed'}
               onClick={() =>
@@ -1059,7 +1036,7 @@ function PerformanceContent() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[13px] font-bold text-slate-900 dark:text-white">
-                    Daily Pick (Peak)
+                    {t.performancePage.velocityTitle}
                   </p>
                   <div className="clay-badge h-10 w-10 rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center">
                     <Award className="h-4 w-4" />
@@ -1068,15 +1045,12 @@ function PerformanceContent() {
                 <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                   {stats.peakDay}
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Highest daily throughput recorded in this period.
-                </p>
               </div>
               <div className="mt-6 pt-4 border-t border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between">
                 <span className="text-3xl font-extrabold text-amber-600 dark:text-amber-400 tabular-nums tracking-tight">
                   {stats.peakAmount}
                 </span>
-                <span className="text-xs font-semibold text-slate-400">Units Handled</span>
+                <span className="text-xs font-semibold text-slate-400">{t.performancePage.recordsSuffix}</span>
               </div>
             </Card>
 
@@ -1084,7 +1058,7 @@ function PerformanceContent() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[13px] font-bold text-slate-900 dark:text-white">
-                    Primary Rejection Cause
+                    {t.performancePage.reasonsTitle}
                   </p>
                   <div className="clay-badge h-10 w-10 rounded-2xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center">
                     <AlertTriangle className="h-4 w-4" />
@@ -1093,16 +1067,13 @@ function PerformanceContent() {
                 <h3 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight line-clamp-2">
                   {stats.topReason}
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Most frequent protocol discrepancy logged.
-                </p>
               </div>
               <div className="mt-6 pt-4 border-t border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between">
                 <span className="text-3xl font-extrabold text-rose-600 dark:text-rose-400 tabular-nums tracking-tight">
                   {stats.rejected + stats.failed}
                 </span>
                 <span className="text-xs font-semibold text-slate-400">
-                  {stats.rejected} Rejected • {stats.failed} Failed
+                  {stats.rejected} {t.common.statusRejected} • {stats.failed} {t.common.statusFailed}
                 </span>
               </div>
             </Card>
@@ -1111,7 +1082,7 @@ function PerformanceContent() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[13px] font-bold text-slate-900 dark:text-white">
-                    Registry Velocity
+                    {t.performancePage.kpiVolumeTitle}
                   </p>
                   <div className="clay-badge h-10 w-10 rounded-2xl bg-primary/15 text-primary flex items-center justify-center">
                     <Target className="h-4 w-4" />
@@ -1121,17 +1092,19 @@ function PerformanceContent() {
                   {stats.total.toLocaleString()}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Consolidated registration intake volume.
+                  {t.performancePage.kpiVolumeSub}
                 </p>
               </div>
               <div className="mt-6 pt-4 border-t border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between">
                 <div className="clay-badge flex items-center gap-1.5 px-3 py-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 rounded-full">
                   <TrendingUp className="h-3 w-3" />
                   <span className="text-[11px] font-bold">
-                    {stats.processed} Verified ({stats.successRate}%)
+                    {t.performancePage.verifiedBadge
+                      .replace('{count}', String(stats.processed))
+                      .replace('{pct}', String(stats.successRate))}
                   </span>
                 </div>
-                <span className="text-xs font-semibold text-slate-400">Final Ledger</span>
+                <span className="text-xs font-semibold text-slate-400">{t.performancePage.finalLedgerLabel}</span>
               </div>
             </Card>
           </section>
@@ -1144,10 +1117,10 @@ function PerformanceContent() {
                 <div>
                   <h3 className="text-base font-black uppercase tracking-tight text-foreground flex items-center gap-2">
                     <Building2 className="h-5 w-5 text-primary" />
-                    Institution vs Individual Accuracy Split
+                    {t.performancePage.originSplitTitle}
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Exact 2-decimal success and rejection rates by registration origin
+                    {t.performancePage.originSplitSub}
                   </p>
                 </div>
               </div>
@@ -1156,25 +1129,25 @@ function PerformanceContent() {
                 <div className="p-4 rounded-2xl bg-primary/[0.04] border border-primary/15 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-primary">
-                      Institutions
+                      {t.performancePage.institutionsHeader}
                     </span>
                     <span className="text-xs font-bold text-muted-foreground tabular-nums">
-                      {stats.originComparison.institutionSharePct}% of total
+                      {stats.originComparison.institutionSharePct}{t.performancePage.ofTotalSuffix}
                     </span>
                   </div>
                   <p className="text-2xl font-black text-foreground tabular-nums">
-                    {stats.originComparison.institutionTotal.toLocaleString()} records
+                    {stats.originComparison.institutionTotal.toLocaleString()} {t.performancePage.recordsSuffix}
                   </p>
                   <div className="space-y-1.5 pt-2 border-t border-border/60 text-xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground font-semibold">Exact Success Rate</span>
+                      <span className="text-muted-foreground font-semibold">{t.performancePage.exactSuccessLabel}</span>
                       <span className="font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
                         {stats.originComparison.institutionSuccessRate}%
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground font-semibold">
-                        Exact Rejection Rate
+                        {t.performancePage.exactRejectionLabel}
                       </span>
                       <span className="font-black text-rose-600 dark:text-rose-400 tabular-nums">
                         {stats.originComparison.institutionRejectionRate}%
@@ -1186,25 +1159,25 @@ function PerformanceContent() {
                 <div className="p-4 rounded-2xl bg-emerald-500/[0.04] border border-emerald-500/15 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                      Individuals
+                      {t.performancePage.individualsHeader}
                     </span>
                     <span className="text-xs font-bold text-muted-foreground tabular-nums">
-                      {stats.originComparison.individualSharePct}% of total
+                      {stats.originComparison.individualSharePct}{t.performancePage.ofTotalSuffix}
                     </span>
                   </div>
                   <p className="text-2xl font-black text-foreground tabular-nums">
-                    {stats.originComparison.individualTotal.toLocaleString()} records
+                    {stats.originComparison.individualTotal.toLocaleString()} {t.performancePage.recordsSuffix}
                   </p>
                   <div className="space-y-1.5 pt-2 border-t border-border/60 text-xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground font-semibold">Exact Success Rate</span>
+                      <span className="text-muted-foreground font-semibold">{t.performancePage.exactSuccessLabel}</span>
                       <span className="font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
                         {stats.originComparison.individualSuccessRate}%
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground font-semibold">
-                        Exact Rejection Rate
+                        {t.performancePage.exactRejectionLabel}
                       </span>
                       <span className="font-black text-rose-600 dark:text-rose-400 tabular-nums">
                         {stats.originComparison.individualRejectionRate}%
@@ -1221,10 +1194,10 @@ function PerformanceContent() {
                 <div>
                   <h3 className="text-base font-black uppercase tracking-tight text-foreground flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5 text-rose-500" />
-                    Rejection & Failure Reason Breakdown
+                    {t.performancePage.reasonsTitle}
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Click any reason below to isolate matching records in the audit table
+                    {t.performancePage.reasonsSub}
                   </p>
                 </div>
                 {selectedReasonFilter !== 'ALL' && (
@@ -1235,14 +1208,14 @@ function PerformanceContent() {
                     onClick={() => setSelectedReasonFilter('ALL')}
                     className="h-8 rounded-xl text-[10px] font-black uppercase"
                   >
-                    Clear Reason
+                    {t.performancePage.clearReasonBtn}
                   </Button>
                 )}
               </div>
 
               {stats.reasonBreakdown.length === 0 ? (
                 <div className="py-10 text-center text-xs text-muted-foreground font-semibold">
-                  Zero rejections or failures recorded in this period.
+                  {t.performancePage.zeroRejectionsText}
                 </div>
               ) : (
                 <div className="space-y-2.5 max-h-[195px] overflow-y-auto pr-1">
@@ -1297,10 +1270,10 @@ function PerformanceContent() {
               <div>
                 <h3 className="text-base font-black uppercase tracking-tight text-foreground flex items-center gap-2">
                   <Layers className="h-5 w-5 text-primary" />
-                  Side-by-Side Benchmark Comparison Matrix
+                  {t.performancePage.benchmarkTitle}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Compare exact 2-decimal Success, Processing, Rejection, and Failed rates across regional sectors or operational months
+                  {t.performancePage.benchmarkSub}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -1314,7 +1287,7 @@ function PerformanceContent() {
                       : 'bg-muted/40 text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  Sector vs Sector
+                  {t.performancePage.sectorVsSectorBtn}
                 </button>
                 <button
                   type="button"
@@ -1326,7 +1299,7 @@ function PerformanceContent() {
                       : 'bg-muted/40 text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  Month vs Month
+                  {t.performancePage.monthVsMonthBtn}
                 </button>
               </div>
             </div>
@@ -1334,13 +1307,13 @@ function PerformanceContent() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {[
                 {
-                  side: 'Left Benchmark',
+                  side: t.performancePage.leftBenchmarkLabel,
                   selected: compareLeftKey,
                   onSelect: setCompareLeftKey,
                   metrics: sideBySideComparison.left,
                 },
                 {
-                  side: 'Right Benchmark',
+                  side: t.performancePage.rightBenchmarkLabel,
                   selected: compareRightKey,
                   onSelect: setCompareRightKey,
                   metrics: sideBySideComparison.right,
@@ -1356,7 +1329,7 @@ function PerformanceContent() {
                     </span>
                     <Select value={panel.selected} onValueChange={panel.onSelect}>
                       <SelectTrigger className="h-9 w-[190px] rounded-xl text-xs font-bold bg-background">
-                        <SelectValue placeholder="Select target" />
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="rounded-xl">
                         {comparisonOptions.map((opt) => (
@@ -1369,7 +1342,7 @@ function PerformanceContent() {
                   </div>
 
                   <div className="flex items-baseline justify-between">
-                    <span className="text-xs font-bold text-muted-foreground">Total Records</span>
+                    <span className="text-xs font-bold text-muted-foreground">{t.performancePage.totalRecordsLabel}</span>
                     <span className="text-2xl font-black text-foreground tabular-nums">
                       {panel.metrics.total.toLocaleString()}
                     </span>
@@ -1378,46 +1351,46 @@ function PerformanceContent() {
                   <div className="grid grid-cols-2 gap-2.5 text-xs">
                     <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
                       <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 block">
-                        Success Rate
+                        {t.performancePage.kpiSuccessTitle}
                       </span>
                       <span className="text-base font-black tabular-nums">
                         {panel.metrics.successRate.toFixed(2)}%
                       </span>
                       <span className="text-[10px] text-muted-foreground block tabular-nums">
-                        {panel.metrics.processed} Processed
+                        {panel.metrics.processed} {t.common.statusProcessed}
                       </span>
                     </div>
                     <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
                       <span className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 block">
-                        Processing Rate
+                        {t.performancePage.kpiProcessingTitle}
                       </span>
                       <span className="text-base font-black tabular-nums">
                         {panel.metrics.processingRate.toFixed(2)}%
                       </span>
                       <span className="text-[10px] text-muted-foreground block tabular-nums">
-                        {panel.metrics.processing} In Queue
+                        {panel.metrics.processing} {t.performancePage.inQueueSuffix}
                       </span>
                     </div>
                     <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
                       <span className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 block">
-                        Rejection Rate
+                        {t.performancePage.kpiRejectionTitle}
                       </span>
                       <span className="text-base font-black tabular-nums">
                         {panel.metrics.rejectionRate.toFixed(2)}%
                       </span>
                       <span className="text-[10px] text-muted-foreground block tabular-nums">
-                        {panel.metrics.rejected} Rejected
+                        {panel.metrics.rejected} {t.common.statusRejected}
                       </span>
                     </div>
                     <div className="p-2.5 rounded-xl bg-slate-500/10 border border-slate-500/20">
                       <span className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-400 block">
-                        Failed Rate
+                        {t.common.statusFailed}
                       </span>
                       <span className="text-base font-black tabular-nums">
                         {panel.metrics.failedRate.toFixed(2)}%
                       </span>
                       <span className="text-[10px] text-muted-foreground block tabular-nums">
-                        {panel.metrics.failed} Failed
+                        {panel.metrics.failed} {t.common.statusFailed}
                       </span>
                     </div>
                   </div>
@@ -1435,10 +1408,10 @@ function PerformanceContent() {
             <CardHeader className="border-b border-slate-200/70 dark:border-slate-700/60 py-5 px-6 md:px-8 flex flex-row items-center justify-between relative z-10">
               <div>
                 <CardTitle className="text-base font-bold text-slate-900 dark:text-white">
-                  Quality Velocity
+                  {t.performancePage.velocityTitle}
                 </CardTitle>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Daily throughput analysis (Processed vs Rejected) for{' '}
+                  {t.performancePage.velocitySubPrefix}{' '}
                   {selectedMonth === 'ALL'
                     ? format(new Date(), 'MMMM yyyy')
                     : format(new Date(selectedMonth + '-01'), 'MMMM yyyy')}
@@ -1503,13 +1476,13 @@ function PerformanceContent() {
                               <div className="flex items-center gap-2">
                                 <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
                                 <p className="text-xs font-mono font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
-                                  PROCESSED: {payload[0].value}
+                                  {t.common.statusProcessed}: {payload[0].value}
                                 </p>
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="h-2 w-2 rounded-full bg-rose-500 shadow-[0_0_8px_#ef4444]" />
                                 <p className="text-xs font-mono font-black text-rose-600 dark:text-rose-400 tabular-nums">
-                                  REJECTED: {payload[1].value}
+                                  {t.common.statusRejected}: {payload[1].value}
                                 </p>
                               </div>
                             </div>
@@ -1558,11 +1531,10 @@ function PerformanceContent() {
               <div className="space-y-1">
                 <h2 className="text-xl font-black text-foreground uppercase tracking-tight flex items-center gap-2">
                   <ShieldAlert className="h-5 w-5 text-destructive" />
-                  Performance & Rejection Audit Ledger
+                  {t.performancePage.auditTableTitle}
                 </h2>
                 <p className="text-xs font-medium text-muted-foreground">
-                  Inspect, re-verify, or export records by status ({auditedRegistrations.length}{' '}
-                  matching records).
+                  {t.performancePage.auditTableSub.replace('{count}', String(auditedRegistrations.length))}
                 </p>
               </div>
 
@@ -1570,11 +1542,11 @@ function PerformanceContent() {
                 {/* Status Filter Pills */}
                 {(
                   [
-                    { key: 'ALL', label: `All (${stats.total})` },
-                    { key: 'Rejected', label: `Rejected (${stats.rejected})` },
-                    { key: 'Failed', label: `Failed (${stats.failed})` },
-                    { key: 'Processing', label: `Processing (${stats.processing})` },
-                    { key: 'Processed', label: `Processed (${stats.processed})` },
+                    { key: 'ALL', label: `${t.common.all} (${stats.total})` },
+                    { key: 'Rejected', label: `${t.common.statusRejected} (${stats.rejected})` },
+                    { key: 'Failed', label: `${t.common.statusFailed} (${stats.failed})` },
+                    { key: 'Processing', label: `${t.common.statusProcessing} (${stats.processing})` },
+                    { key: 'Processed', label: `${t.common.statusProcessed} (${stats.processed})` },
                   ] as const
                 ).map((tab) => (
                   <button
@@ -1597,7 +1569,7 @@ function PerformanceContent() {
                 <div className="relative w-full sm:w-64 group">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 group-focus-within:text-primary transition-colors z-10" />
                   <Input
-                    placeholder="Search name, RID, reason..."
+                    placeholder={t.performancePage.searchPlaceholder}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="clay-well h-10 pl-9 rounded-xl text-xs font-bold border-none"
@@ -1644,11 +1616,11 @@ function PerformanceContent() {
                       <TableHead className="w-12 pl-6 py-4">
                         <Checkbox checked={allOnPageSelected} onCheckedChange={toggleSelectAll} />
                       </TableHead>
-                      <TableHead className="py-4">Applicant & Origin</TableHead>
-                      <TableHead className="py-4">29-Digit RID</TableHead>
-                      <TableHead className="py-4">Reason / Notes</TableHead>
-                      <TableHead className="py-4 text-center">Status</TableHead>
-                      <TableHead className="py-4 pr-6 text-right">Action</TableHead>
+                      <TableHead className="py-4">{t.performancePage.colApplicant}</TableHead>
+                      <TableHead className="py-4">{t.performancePage.colRid}</TableHead>
+                      <TableHead className="py-4">{t.performancePage.colReason}</TableHead>
+                      <TableHead className="py-4 text-center">{t.performancePage.colStatus}</TableHead>
+                      <TableHead className="py-4 pr-6 text-right">{t.performancePage.colAction}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1681,10 +1653,10 @@ function PerformanceContent() {
                                       {instLabel}
                                     </>
                                   ) : (
-                                    'Individual Walk-In'
+                                    t.performancePage.individualOnlyItem
                                   )}
                                   {' • '}
-                                  {format(new Date(reg.submissionDate), 'MMM dd, yyyy')}
+                                  {formatDate(reg.submissionDate)}
                                 </span>
                               </div>
                             </TableCell>
@@ -1692,7 +1664,6 @@ function PerformanceContent() {
                               <button
                                 type="button"
                                 onClick={() => handleCopyRid(reg.id)}
-                                title="Click to copy full 29-digit RID"
                                 className="inline-flex items-center gap-1.5 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer group/rid"
                               >
                                 <FileDigit className="h-3.5 w-3.5 text-slate-400 group-hover/rid:text-blue-600 dark:group-hover/rid:text-blue-400 shrink-0 transition-colors" />
@@ -1706,7 +1677,7 @@ function PerformanceContent() {
                             </TableCell>
                             <TableCell>
                               <span className="text-xs font-medium text-muted-foreground line-clamp-1 max-w-[200px]">
-                                {reg.rejectionReason || reg.content || 'Verified Protocol Entry'}
+                                {reg.rejectionReason || reg.content || '—'}
                               </span>
                             </TableCell>
                             <TableCell className="text-center">
@@ -1717,16 +1688,14 @@ function PerformanceContent() {
                                 {(reg.status === 'Rejected' || reg.status === 'Failed') && (
                                   <button
                                     type="button"
-                                    title="Re-Verify & Mark as Processed"
                                     onClick={() => handleQuickResolveRecord(reg, 'Processed')}
                                     className="h-8 px-2.5 rounded-lg inline-flex items-center justify-center gap-1 text-[10px] font-black uppercase bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-colors cursor-pointer"
                                   >
-                                    <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> {t.performancePage.approveBtn}
                                   </button>
                                 )}
                                 <button
                                   type="button"
-                                  title="View Audit Deep-Dive"
                                   onClick={() => setSelectedRejection(reg)}
                                   className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
                                 >
@@ -1738,7 +1707,6 @@ function PerformanceContent() {
                                   trigger={
                                     <button
                                       type="button"
-                                      title="Edit Record"
                                       className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                                     >
                                       <SquarePen className="h-4 w-4" />
@@ -1747,13 +1715,12 @@ function PerformanceContent() {
                                 />
                                 <button
                                   type="button"
-                                  title="Delete Record"
                                   onClick={() => {
                                     if (!db) return;
                                     deleteDocumentNonBlocking(doc(db, 'registrations', reg.id));
                                     toast({
-                                      title: 'Record Purged',
-                                      description: `Removed ${reg.applicantName} from the registry.`,
+                                      title: t.common.delete,
+                                      description: reg.applicantName,
                                       variant: 'destructive',
                                     });
                                   }}
@@ -1771,7 +1738,7 @@ function PerformanceContent() {
                         <TableCell colSpan={6} className="h-40 text-center opacity-40">
                           <CheckCircle2 className="h-10 w-10 mx-auto mb-2 text-primary" />
                           <p className="text-xs font-black uppercase tracking-widest">
-                            No Matching Records for Selected Filter
+                            {t.performancePage.emptyFilterText}
                           </p>
                         </TableCell>
                       </TableRow>
@@ -1786,7 +1753,7 @@ function PerformanceContent() {
                 onPageChange={setCurrentPage}
                 showingCount={paginatedRecords.length}
                 totalCount={auditedRegistrations.length}
-                itemLabel="records"
+                itemLabel={t.performancePage.recordsSuffix}
               />
             </Card>
           </div>
@@ -1806,10 +1773,10 @@ function PerformanceContent() {
                     </div>
                     <div>
                       <DialogTitle className="text-lg md:text-xl font-black text-foreground uppercase tracking-tighter">
-                        Audit Deep-Dive
+                        {t.performancePage.deepDiveTitle}
                       </DialogTitle>
                       <DialogDescription className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                        Bureau Internal Security Record
+                        {t.performancePage.deepDiveSub}
                       </DialogDescription>
                     </div>
                   </div>
@@ -1820,7 +1787,7 @@ function PerformanceContent() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="space-y-1">
                     <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                      <User className="h-3 w-3" /> Applicant Identity
+                      <User className="h-3 w-3" /> {t.performancePage.applicantIdentityLabel}
                     </p>
                     <p className="text-sm font-black text-foreground">
                       {selectedRejection.applicantName}
@@ -1828,15 +1795,15 @@ function PerformanceContent() {
                   </div>
                   <div className="space-y-1">
                     <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                      <Calendar className="h-3 w-3" /> Submission Date
+                      <Calendar className="h-3 w-3" /> {t.performancePage.submissionDateLabel}
                     </p>
                     <p className="text-sm font-black text-foreground">
-                      {format(new Date(selectedRejection.submissionDate), 'MMMM dd, yyyy')}
+                      {formatDate(selectedRejection.submissionDate)}
                     </p>
                   </div>
                   <div className="space-y-1 sm:col-span-2">
                     <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                      <FileDigit className="h-3 w-3" /> 29-Digit Registration ID (RID)
+                      <FileDigit className="h-3 w-3" /> {t.performancePage.ridLabel}
                     </p>
                     <p className="text-xs font-mono font-bold text-foreground break-all">
                       {selectedRejection.id}
@@ -1846,7 +1813,7 @@ function PerformanceContent() {
                 {selectedRejection.rejectionReason && (
                   <div className="p-5 bg-rose-500/5 border border-rose-500/10 rounded-2xl space-y-2">
                     <p className="text-[9px] font-black text-rose-600 uppercase tracking-widest">
-                      Protocol Rejection / Failure Reason
+                      {t.performancePage.rejectionReasonLabel}
                     </p>
                     <p className="text-base font-bold text-rose-700 dark:text-rose-400 leading-tight">
                       {selectedRejection.rejectionReason}
@@ -1855,10 +1822,10 @@ function PerformanceContent() {
                 )}
                 <div className="space-y-2">
                   <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                    Submission Payload
+                    {t.performancePage.submissionPayloadLabel}
                   </p>
                   <div className="p-5 bg-muted/50 rounded-[24px] border border-border italic text-sm font-medium">
-                    &ldquo;{selectedRejection.content || 'No narrative content detected.'}&rdquo;
+                    &ldquo;{selectedRejection.content || '—'}&rdquo;
                   </div>
                 </div>
               </div>
@@ -1875,7 +1842,7 @@ function PerformanceContent() {
                     }}
                     className="rounded-xl text-xs font-bold"
                   >
-                    <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> Verify in Status Check
+                    <ExternalLink className="h-3.5 w-3.5 mr-1.5" /> {t.performancePage.verifyInStatusCheckBtn}
                   </Button>
                   {(selectedRejection.status === 'Rejected' ||
                     selectedRejection.status === 'Failed') && (
@@ -1885,7 +1852,7 @@ function PerformanceContent() {
                       onClick={() => handleQuickResolveRecord(selectedRejection, 'Processed')}
                       className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider"
                     >
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Re-Verify & Approve
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> {t.performancePage.reVerifyApproveBtn}
                     </Button>
                   )}
                 </div>
@@ -1893,7 +1860,7 @@ function PerformanceContent() {
                   onClick={() => setSelectedRejection(null)}
                   className="font-black text-[10px] uppercase tracking-widest h-10 px-6 rounded-xl"
                 >
-                  Close Report
+                  {t.performancePage.closeReportBtn}
                 </Button>
               </DialogFooter>
             </>

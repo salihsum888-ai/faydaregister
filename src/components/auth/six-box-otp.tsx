@@ -12,6 +12,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/i18n/language-provider';
 
 export type OtpVerificationStatus = 'idle' | 'verifying' | 'wrong' | 'success';
 
@@ -38,16 +39,22 @@ export function SixBoxOtp({
   onComplete,
   status,
   onResetStatus,
-  errorMessage = 'Invalid 6-digit authenticator code. Please check your app and try again.',
-  successTitle = 'Identity Verified',
-  successSubtitle = 'Cryptographic MFA token validated. Opening secure terminal...',
+  errorMessage,
+  successTitle,
+  successSubtitle,
   userName,
   userRole,
   autoFocus = true,
   disabled = false,
   showHeaderSeal = true,
-  label = 'Enter 6-Digit Authenticator Code',
+  label,
 }: SixBoxOtpProps) {
+  const { t } = useTranslation();
+  const resolvedErrorMessage = errorMessage || t.auth.invalidOtpError;
+  const resolvedSuccessTitle = successTitle || t.auth.identityVerifiedTitle;
+  const resolvedSuccessSubtitle = successSubtitle || t.auth.identityVerifiedSubtitle;
+  const resolvedLabel = label || t.auth.authenticatorCodeLabel;
+
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const lastSubmittedRef = useRef<string>('');
@@ -272,7 +279,7 @@ export function SixBoxOtp({
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-            {label}
+            {resolvedLabel}
           </span>
           <span
             className={cn(
@@ -283,10 +290,10 @@ export function SixBoxOtp({
               status === 'success' && 'text-emerald-600 dark:text-emerald-400'
             )}
           >
-            {status === 'idle' && `${value.length}/6 DIGITS`}
-            {status === 'verifying' && 'VERIFYING...'}
-            {status === 'wrong' && 'WRONG CODE'}
-            {status === 'success' && 'VERIFIED ✓'}
+            {status === 'idle' && t.mfa.digitsCounter.replace('{count}', String(value.length))}
+            {status === 'verifying' && t.mfa.verifyingShort}
+            {status === 'wrong' && t.mfa.wrongCodeShort}
+            {status === 'success' && t.mfa.verifiedShort}
           </span>
         </div>
 
@@ -333,7 +340,7 @@ export function SixBoxOtp({
                   onChange={(e) => handleDigitChange(index, e.target.value)}
                   onKeyDown={(e) => handleKeyDown(index, e)}
                   onPaste={handlePaste}
-                  aria-label={`MFA Digit ${index + 1} of 6`}
+                  aria-label={t.mfa.digitAriaLabel.replace('{index}', String(index + 1))}
                   className={cn(
                     'w-full h-14 sm:h-16 text-center text-xl sm:text-2xl font-mono font-black rounded-2xl border-2 backdrop-blur-xl outline-none transition-all duration-200 tabular-nums caret-primary select-all shadow-[0_4px_14px_-4px_rgba(15,23,42,0.08),0_1px_0_0_rgba(255,255,255,0.65)_inset] dark:shadow-[0_4px_14px_-4px_rgba(0,0,0,0.4),0_1px_0_0_rgba(255,255,255,0.08)_inset]',
                     // IDLE STATES
@@ -387,10 +394,10 @@ export function SixBoxOtp({
         >
           <div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest text-primary">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            <span>Verifying Security Token...</span>
+            <span>{t.mfa.verifyingTokenTitle}</span>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Validating 6-digit cryptographic signature with bureau gateway
+            {t.mfa.verifyingTokenSub}
           </p>
           <div className="h-1.5 w-full bg-primary/15 rounded-full overflow-hidden">
             <div className="h-full w-2/3 bg-primary rounded-full animate-pulse" />
@@ -406,10 +413,10 @@ export function SixBoxOtp({
         >
           <div className="flex items-center justify-center gap-1.5 text-xs font-black uppercase tracking-widest text-rose-600 dark:text-rose-400">
             <XCircle className="w-4 h-4 shrink-0" />
-            <span>Verification Failed · Wrong Code</span>
+            <span>{t.mfa.failedWrongCodeTitle}</span>
           </div>
           <p className="text-[11px] text-rose-700/85 dark:text-rose-200/85 leading-relaxed">
-            {errorMessage}
+            {resolvedErrorMessage}
           </p>
           <button
             type="button"
@@ -417,7 +424,7 @@ export function SixBoxOtp({
             className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-rose-700 dark:text-rose-300 hover:underline pt-0.5"
           >
             <RotateCcw className="w-3 h-3" />
-            Clear &amp; Re-enter Code
+            {t.mfa.clearReenterBtn}
           </button>
         </div>
       )}
@@ -430,10 +437,10 @@ export function SixBoxOtp({
         >
           <div className="flex items-center justify-center gap-1.5 text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>{successTitle} · Access Granted</span>
+            <span>{resolvedSuccessTitle} · {t.mfa.accessGrantedSuffix}</span>
           </div>
           <p className="text-[11px] text-emerald-800/85 dark:text-emerald-200/85 leading-relaxed">
-            {successSubtitle}
+            {resolvedSuccessSubtitle}
           </p>
           {(userName || userRole) && (
             <div className="pt-0.5 text-[10px] font-mono text-emerald-800 dark:text-emerald-300 tracking-wider uppercase">

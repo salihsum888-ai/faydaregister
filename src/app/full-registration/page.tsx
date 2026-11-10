@@ -77,6 +77,7 @@ import { TablePagination } from '@/components/ui/table-pagination';
 import { RegistrationsList } from '@/components/registrations/registrations-list';
 import { useToast } from '@/hooks/use-toast';
 import { logAuditAction } from '@/lib/audit';
+import { useTranslation } from '@/i18n/language-provider';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -129,6 +130,7 @@ type LedgerSortKey =
   | 'status';
 
 export default function FullRegistrationPage() {
+  const { t, formatNumber } = useTranslation();
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
   const router = useRouter();
@@ -341,8 +343,8 @@ export default function FullRegistrationPage() {
     );
 
     toast({
-      title: 'Registry Synchronized',
-      description: 'Historical archives have been recalculated based on latest field reports.',
+      title: t.fullRegistration.toastSyncedTitle,
+      description: t.fullRegistration.toastSyncedDesc,
     });
 
     setTimeout(() => setIsSyncing(false), 800);
@@ -357,8 +359,8 @@ export default function FullRegistrationPage() {
     if (totalVal <= 0) {
       toast({
         variant: 'destructive',
-        title: 'Invalid Intake Volume',
-        description: 'Please enter a valid Ethio or Safaricom count greater than 0.',
+        title: t.fullRegistration.toastInvalidVolumeTitle,
+        description: t.fullRegistration.toastInvalidVolumeDesc,
       });
       return;
     }
@@ -394,8 +396,11 @@ export default function FullRegistrationPage() {
     );
 
     toast({
-      title: 'Monthly Archive Saved',
-      description: `${archiveMonth} ${archiveYear} ledger updated with ${totalVal.toLocaleString()} total intake.`,
+      title: t.fullRegistration.toastArchiveSavedTitle,
+      description: t.fullRegistration.toastArchiveSavedDesc
+        .replace('{month}', archiveMonth)
+        .replace('{year}', archiveYear)
+        .replace('{total}', formatNumber(totalVal)),
     });
 
     setIsSavingArchive(false);
@@ -663,9 +668,9 @@ export default function FullRegistrationPage() {
       `Grand Registry: Exported Excel intelligence (${targetRows.length} periods).`
     );
 
-    toast({
-      title: 'Excel Intelligence Exported',
-      description: `Exported ${targetRows.length} archive period(s) with exact 2-decimal rates.`,
+      toast({
+      title: t.registrationsList.toastExcelCompleteTitle,
+      description: t.registrationsList.toastExcelCompleteDesc.replace('{count}', String(targetRows.length)),
     });
     setTimeout(() => setIsExporting(false), 800);
   };
@@ -723,8 +728,8 @@ export default function FullRegistrationPage() {
     );
 
     toast({
-      title: 'PDF Ledger Generated',
-      description: 'Official documentation with exact 2-decimal rates has been saved.',
+      title: t.registrationsList.toastPdfCompleteTitle,
+      description: t.registrationsList.toastPdfCompleteDesc,
     });
     setTimeout(() => setIsExporting(false), 800);
   };
@@ -752,14 +757,14 @@ export default function FullRegistrationPage() {
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">
-              Bureau Unified Full Record & Ledger
+              {t.fullRegistration.eyebrow}
             </p>
           </div>
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground font-headline uppercase">
-            Full Registration & Record Hub
+            {t.fullRegistration.title}
           </h1>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Inspect every 29-digit Citizen & Institution registration record with exact 2-decimal status rates, or audit finalized Monthly Telecom & Daily Intake archives since July 2025.
+            {t.fullRegistration.subtitle}
           </p>
         </div>
 
@@ -770,16 +775,16 @@ export default function FullRegistrationPage() {
               <SelectTrigger className="h-11 min-w-[210px] rounded-2xl glass-card-surface px-4 text-xs font-black uppercase tracking-wider">
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-primary shrink-0" />
-                  <SelectValue placeholder="All Bureau Personnel" />
+                  <SelectValue placeholder={t.fullRegistration.allPersonnelOption} />
                 </div>
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
                 <SelectItem value="ALL" className="text-xs font-bold">
-                  All Bureau Personnel (Global)
+                  {t.fullRegistration.allPersonnelOption}
                 </SelectItem>
                 {(allOfficers || []).map((off) => (
                   <SelectItem key={off.id} value={off.id} className="text-xs font-semibold">
-                    {off.fullName} ({off.role})
+                    {off.fullName} ({off.role === 'admin' ? t.nav.roleAdmin : t.nav.roleOfficer})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -799,7 +804,9 @@ export default function FullRegistrationPage() {
               )}
             >
               <FileDigit className="h-4 w-4" />
-              <span>29-Digit RID Records ({ridSummary.total})</span>
+              <span>
+                {t.fullRegistration.modeRidRecords.replace('{count}', formatNumber(ridSummary.total))}
+              </span>
             </button>
             <button
               type="button"
@@ -812,7 +819,9 @@ export default function FullRegistrationPage() {
               )}
             >
               <Calendar className="h-4 w-4" />
-              <span>Monthly Telecom Archives ({rawLedger.length})</span>
+              <span>
+                {t.fullRegistration.modeTelecomArchives.replace('{count}', formatNumber(rawLedger.length))}
+              </span>
             </button>
           </div>
         </div>
@@ -826,13 +835,15 @@ export default function FullRegistrationPage() {
             <Card className="rounded-2xl p-4 border border-border/60 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Exact Success Rate
+                  {t.fullRegistration.exactSuccessRate}
                 </p>
                 <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums mt-0.5">
                   {ridSummary.exactSuccessRate}%
                 </p>
                 <p className="text-[11px] text-muted-foreground font-semibold tabular-nums">
-                  {ridSummary.processed} / {ridSummary.total} Processed
+                  {t.fullRegistration.processedFraction
+                    .replace('{processed}', formatNumber(ridSummary.processed))
+                    .replace('{total}', formatNumber(ridSummary.total))}
                 </p>
               </div>
               <div className="h-10 w-10 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
@@ -843,13 +854,15 @@ export default function FullRegistrationPage() {
             <Card className="rounded-2xl p-4 border border-border/60 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Exact Rejection Rate
+                  {t.fullRegistration.exactRejectionRate}
                 </p>
                 <p className="text-2xl font-black text-amber-600 dark:text-amber-400 tabular-nums mt-0.5">
                   {ridSummary.exactRejectionRate}%
                 </p>
                 <p className="text-[11px] text-muted-foreground font-semibold tabular-nums">
-                  {ridSummary.rejected} / {ridSummary.total} Rejected
+                  {t.fullRegistration.rejectedFraction
+                    .replace('{rejected}', formatNumber(ridSummary.rejected))
+                    .replace('{total}', formatNumber(ridSummary.total))}
                 </p>
               </div>
               <div className="h-10 w-10 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center">
@@ -860,13 +873,15 @@ export default function FullRegistrationPage() {
             <Card className="rounded-2xl p-4 border border-border/60 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Exact Failed Rate
+                  {t.fullRegistration.exactFailedRate}
                 </p>
                 <p className="text-2xl font-black text-rose-600 dark:text-rose-400 tabular-nums mt-0.5">
                   {ridSummary.exactFailedRate}%
                 </p>
                 <p className="text-[11px] text-muted-foreground font-semibold tabular-nums">
-                  {ridSummary.failed} / {ridSummary.total} Failed
+                  {t.fullRegistration.failedFraction
+                    .replace('{failed}', formatNumber(ridSummary.failed))
+                    .replace('{total}', formatNumber(ridSummary.total))}
                 </p>
               </div>
               <div className="h-10 w-10 rounded-xl bg-rose-500/15 text-rose-500 flex items-center justify-center">
@@ -877,13 +892,16 @@ export default function FullRegistrationPage() {
             <Card className="rounded-2xl p-4 border border-border/60 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Institution Records
+                  {t.fullRegistration.institutionRecords}
                 </p>
                 <p className="text-2xl font-black text-primary tabular-nums mt-0.5">
-                  {ridSummary.institutionsCount.toLocaleString()}
+                  {formatNumber(ridSummary.institutionsCount)}
                 </p>
                 <p className="text-[11px] text-muted-foreground font-semibold tabular-nums">
-                  {calcExactRate(ridSummary.institutionsCount, ridSummary.total)}% of total records
+                  {t.fullRegistration.institutionShareOfTotal.replace(
+                    '{rate}',
+                    String(calcExactRate(ridSummary.institutionsCount, ridSummary.total))
+                  )}
                 </p>
               </div>
               <div className="h-10 w-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center">
@@ -900,28 +918,40 @@ export default function FullRegistrationPage() {
         <div className="space-y-8 animate-in fade-in duration-300">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <StatsCard
-              label="Grand Telecom Aggregate"
+              label={t.fullRegistration.grandTelecomAggregate}
               value={aggregates.total}
-              sublabel={`Across ${rawLedger.length} operational & finalized months`}
+              sublabel={t.fullRegistration.acrossMonthsSub.replace(
+                '{count}',
+                formatNumber(rawLedger.length)
+              )}
               icon={TrendingUp}
               color="text-primary"
               glow="bg-primary/15"
+              formatNumber={formatNumber}
             />
             <StatsCard
-              label="Total Ethio Line"
+              label={t.fullRegistration.totalEthioLine}
               value={aggregates.ethio}
-              sublabel={`Exact Share: ${aggregates.exactEthioPct}% (${aggregates.ethio.toLocaleString()} / ${aggregates.total.toLocaleString()})`}
+              sublabel={t.fullRegistration.exactShareSub
+                .replace('{rate}', String(aggregates.exactEthioPct))
+                .replace('{part}', formatNumber(aggregates.ethio))
+                .replace('{total}', formatNumber(aggregates.total))}
               icon={Phone}
               color="text-emerald-500"
               glow="bg-emerald-500/15"
+              formatNumber={formatNumber}
             />
             <StatsCard
-              label="Total Safaricom Line"
+              label={t.fullRegistration.totalSafaricomLine}
               value={aggregates.safaricom}
-              sublabel={`Exact Share: ${aggregates.exactSafaricomPct}% (${aggregates.safaricom.toLocaleString()} / ${aggregates.total.toLocaleString()})`}
+              sublabel={t.fullRegistration.exactShareSub
+                .replace('{rate}', String(aggregates.exactSafaricomPct))
+                .replace('{part}', formatNumber(aggregates.safaricom))
+                .replace('{total}', formatNumber(aggregates.total))}
               icon={Smartphone}
               color="text-orange-500"
               glow="bg-orange-500/15"
+              formatNumber={formatNumber}
             />
           </div>
 
@@ -935,10 +965,10 @@ export default function FullRegistrationPage() {
                 <CardHeader className="bg-white/30 dark:bg-white/[0.02] border-b border-white/60 dark:border-white/10 py-4 px-6 flex flex-row items-center justify-between relative z-10">
                   <div>
                     <CardTitle className="text-xs font-black text-foreground uppercase tracking-[0.2em]">
-                      Operational Throughput Analysis
+                      {t.fullRegistration.throughputAnalysisTitle}
                     </CardTitle>
                     <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mt-0.5">
-                      Monthly Ethio & Safaricom trajectory for filtered view
+                      {t.fullRegistration.throughputAnalysisSub}
                     </p>
                   </div>
                   <BarChart3 className="h-4 w-4 text-primary opacity-60" />
@@ -992,13 +1022,13 @@ export default function FullRegistrationPage() {
                                     {p.name}
                                   </p>
                                   <p className="text-sm font-black text-foreground tabular-nums">
-                                    Total: {Number(p.total).toLocaleString()}
+                                    {t.common.total}: {formatNumber(Number(p.total))}
                                   </p>
                                   <p className="text-[11px] font-bold text-emerald-500 tabular-nums">
-                                    Ethio: {Number(p.ethio).toLocaleString()} ({p.exactEthioPct}%)
+                                    Ethio: {formatNumber(Number(p.ethio))} ({p.exactEthioPct}%)
                                   </p>
                                   <p className="text-[11px] font-bold text-orange-500 tabular-nums">
-                                    Safaricom: {Number(p.safaricom).toLocaleString()} (
+                                    Safaricom: {formatNumber(Number(p.safaricom))} (
                                     {p.exactSafaricomPct}%)
                                   </p>
                                 </div>
@@ -1031,7 +1061,7 @@ export default function FullRegistrationPage() {
                 <Card className="overflow-hidden rounded-3xl hover:-translate-y-0.5 transition-all">
                   <CardContent className="p-6">
                     <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-4">
-                      Exact Period-over-Period Momentum
+                      {t.fullRegistration.periodMomentumTitle}
                     </p>
                     <div className="flex items-end gap-3">
                       <span className="text-4xl font-black text-foreground tracking-tighter tabular-nums">
@@ -1050,11 +1080,13 @@ export default function FullRegistrationPage() {
                         ) : (
                           <ArrowDownRight className="h-3 w-3" />
                         )}
-                        {analysis.growth >= 0 ? 'Surge' : 'Decline'}
+                        {analysis.growth >= 0
+                          ? t.fullRegistration.surgeBadge
+                          : t.fullRegistration.declineBadge}
                       </div>
                     </div>
                     <p className="text-[10px] text-muted-foreground font-bold uppercase mt-2">
-                      Exact 2-decimal delta vs previous period
+                      {t.fullRegistration.periodMomentumSub}
                     </p>
                   </CardContent>
                 </Card>
@@ -1062,14 +1094,15 @@ export default function FullRegistrationPage() {
                 <Card className="overflow-hidden rounded-3xl hover:-translate-y-0.5 transition-all">
                   <CardContent className="p-6 space-y-4">
                     <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-                      Exact Carrier Distribution
+                      {t.fullRegistration.carrierDistributionTitle}
                     </p>
                     <div className="space-y-4">
                       <div className="space-y-1.5">
                         <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest">
                           <span className="text-emerald-600 dark:text-emerald-400">
-                            Ethio Network ({analysis.filteredEthio.toLocaleString()} /{' '}
-                            {analysis.filteredTotal.toLocaleString()})
+                            {t.fullRegistration.ethioNetworkLabel
+                              .replace('{part}', formatNumber(analysis.filteredEthio))
+                              .replace('{total}', formatNumber(analysis.filteredTotal))}
                           </span>
                           <span className="text-foreground tabular-nums">
                             {analysis.ethioPct.toFixed(2)}%
@@ -1085,8 +1118,9 @@ export default function FullRegistrationPage() {
                       <div className="space-y-1.5">
                         <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest">
                           <span className="text-orange-600 dark:text-orange-400">
-                            Safaricom Network ({analysis.filteredSafaricom.toLocaleString()} /{' '}
-                            {analysis.filteredTotal.toLocaleString()})
+                            {t.fullRegistration.safaricomNetworkLabel
+                              .replace('{part}', formatNumber(analysis.filteredSafaricom))
+                              .replace('{total}', formatNumber(analysis.filteredTotal))}
                           </span>
                           <span className="text-foreground tabular-nums">
                             {analysis.safaricomPct.toFixed(2)}%
@@ -1112,7 +1146,7 @@ export default function FullRegistrationPage() {
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Search Month or Year..."
+                  placeholder={t.fullRegistration.searchMonthYearPlaceholder}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="h-9 pl-9 border-0 bg-transparent shadow-none focus-visible:ring-0 text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400"
@@ -1123,13 +1157,13 @@ export default function FullRegistrationPage() {
                 <Select value={yearFilter} onValueChange={setYearFilter}>
                   <SelectTrigger className="glass-subpanel w-auto min-w-[115px] h-9 rounded-lg px-3 text-xs font-medium text-slate-700 dark:text-slate-200">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-slate-400">Year</span>
-                      <SelectValue placeholder="All" />
+                      <span className="text-slate-400">{t.fullRegistration.yearLabel}</span>
+                      <SelectValue placeholder={t.common.all} />
                     </div>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all" className="text-xs font-medium">
-                      All Years
+                      {t.fullRegistration.allYearsOption}
                     </SelectItem>
                     {availableYears.map((yr) => (
                       <SelectItem key={yr} value={yr} className="text-xs font-medium">
@@ -1142,19 +1176,19 @@ export default function FullRegistrationPage() {
                 <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
                   <SelectTrigger className="glass-subpanel w-auto min-w-[130px] h-9 rounded-lg px-3 text-xs font-medium text-slate-700 dark:text-slate-200">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-slate-400">Status</span>
-                      <SelectValue placeholder="All" />
+                      <span className="text-slate-400">{t.fullRegistration.statusLabel}</span>
+                      <SelectValue placeholder={t.common.all} />
                     </div>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all" className="text-xs font-medium">
-                      All Records
+                      {t.fullRegistration.allRecordsOption}
                     </SelectItem>
                     <SelectItem value="Operational" className="text-xs font-medium">
-                      Operational
+                      {t.fullRegistration.operationalStatus}
                     </SelectItem>
                     <SelectItem value="Finalized" className="text-xs font-medium">
-                      Finalized
+                      {t.fullRegistration.finalizedStatus}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -1165,7 +1199,7 @@ export default function FullRegistrationPage() {
                   onClick={() => setIsArchiveModalOpen(true)}
                   className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-bold"
                 >
-                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Log Month Archive
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> {t.fullRegistration.logMonthArchiveBtn}
                 </Button>
 
                 <Button
@@ -1180,7 +1214,7 @@ export default function FullRegistrationPage() {
                   ) : (
                     <RefreshCcw className="mr-1.5 h-3.5 w-3.5 text-blue-600" />
                   )}
-                  Sync Registry
+                  {t.fullRegistration.syncRegistryBtn}
                 </Button>
 
                 <Button
@@ -1190,7 +1224,9 @@ export default function FullRegistrationPage() {
                   className="glass-subpanel h-9 px-3 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200"
                 >
                   <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
-                  {selectedIds.size > 0 ? `Excel (${selectedIds.size})` : 'Excel'}
+                  {selectedIds.size > 0
+                    ? `${t.registrationsList.excelBtn} (${selectedIds.size})`
+                    : t.registrationsList.excelBtn}
                 </Button>
 
                 <Button
@@ -1200,7 +1236,9 @@ export default function FullRegistrationPage() {
                   className="glass-subpanel h-9 px-3 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200"
                 >
                   <FileText className="mr-1.5 h-3.5 w-3.5 text-rose-600" />
-                  {selectedIds.size > 0 ? `PDF (${selectedIds.size})` : 'PDF'}
+                  {selectedIds.size > 0
+                    ? `${t.registrationsList.pdfBtn} (${selectedIds.size})`
+                    : t.registrationsList.pdfBtn}
                 </Button>
 
                 <Button
@@ -1214,7 +1252,7 @@ export default function FullRegistrationPage() {
                     setSelectedIds(new Set());
                   }}
                   className="glass-subpanel h-9 w-9 rounded-lg text-slate-500 hover:text-slate-800"
-                  title="Reset filters"
+                  title={t.fullRegistration.resetFiltersTooltip}
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                 </Button>
@@ -1250,7 +1288,7 @@ export default function FullRegistrationPage() {
                       className="cursor-pointer select-none"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span>Reporting Period</span>
+                        <span>{t.fullRegistration.colPeriod}</span>
                         {renderSortIcon('date')}
                       </div>
                     </TableHead>
@@ -1259,7 +1297,7 @@ export default function FullRegistrationPage() {
                       className="cursor-pointer select-none"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span>Ethio Intake (Exact %)</span>
+                        <span>{t.fullRegistration.colEthioIntake}</span>
                         {renderSortIcon('ethio')}
                       </div>
                     </TableHead>
@@ -1268,7 +1306,7 @@ export default function FullRegistrationPage() {
                       className="cursor-pointer select-none"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span>Safaricom Intake (Exact %)</span>
+                        <span>{t.fullRegistration.colSafaricomIntake}</span>
                         {renderSortIcon('safaricom')}
                       </div>
                     </TableHead>
@@ -1277,7 +1315,7 @@ export default function FullRegistrationPage() {
                       className="cursor-pointer select-none"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span>Grand Total</span>
+                        <span>{t.fullRegistration.colGrandTotal}</span>
                         {renderSortIcon('total')}
                       </div>
                     </TableHead>
@@ -1286,7 +1324,7 @@ export default function FullRegistrationPage() {
                       className="cursor-pointer select-none"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span>Exact MoM Delta</span>
+                        <span>{t.fullRegistration.colMomDelta}</span>
                         {renderSortIcon('momGrowthPct')}
                       </div>
                     </TableHead>
@@ -1295,13 +1333,13 @@ export default function FullRegistrationPage() {
                       className="cursor-pointer select-none"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span>Protocol</span>
+                        <span>{t.fullRegistration.colProtocol}</span>
                         {renderSortIcon('status')}
                       </div>
                     </TableHead>
                     <TableHead className="border-r-0 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <span>Action</span>
+                        <span>{t.fullRegistration.colAction}</span>
                       </div>
                     </TableHead>
                   </TableRow>
@@ -1337,14 +1375,17 @@ export default function FullRegistrationPage() {
                                 {item.label}
                               </span>
                               <span className="text-[10px] text-muted-foreground font-medium">
-                                {item.dailyEntriesCount} daily log(s)
+                                {t.fullRegistration.dailyLogsCount.replace(
+                                  '{count}',
+                                  formatNumber(item.dailyEntriesCount)
+                                )}
                               </span>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell className="tabular-nums">
                           <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                            {item.ethio.toLocaleString()}
+                            {formatNumber(item.ethio)}
                           </span>
                           <span className="ml-1.5 text-[11px] font-semibold text-muted-foreground">
                             ({item.exactEthioPct}%)
@@ -1352,7 +1393,7 @@ export default function FullRegistrationPage() {
                         </TableCell>
                         <TableCell className="tabular-nums">
                           <span className="font-bold text-orange-600 dark:text-orange-400">
-                            {item.safaricom.toLocaleString()}
+                            {formatNumber(item.safaricom)}
                           </span>
                           <span className="ml-1.5 text-[11px] font-semibold text-muted-foreground">
                             ({item.exactSafaricomPct}%)
@@ -1360,7 +1401,7 @@ export default function FullRegistrationPage() {
                         </TableCell>
                         <TableCell>
                           <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/50 text-[12px] font-semibold text-blue-600 dark:text-blue-400 tabular-nums">
-                            {item.total.toLocaleString()}
+                            {formatNumber(item.total)}
                           </span>
                         </TableCell>
                         <TableCell className="tabular-nums">
@@ -1378,7 +1419,7 @@ export default function FullRegistrationPage() {
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground font-medium">
-                              Baseline
+                              {t.fullRegistration.baselineLabel}
                             </span>
                           )}
                         </TableCell>
@@ -1391,7 +1432,9 @@ export default function FullRegistrationPage() {
                                 : 'bg-[#ECFDF5] text-[#10B981] dark:bg-emerald-950/50 dark:text-emerald-400'
                             )}
                           >
-                            {item.status}
+                            {item.status === 'Finalized'
+                              ? t.fullRegistration.finalizedStatus
+                              : t.fullRegistration.operationalStatus}
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
@@ -1401,9 +1444,9 @@ export default function FullRegistrationPage() {
                               size="sm"
                               className="h-8 px-2.5 rounded-lg text-xs font-bold text-primary hover:bg-primary/10"
                               onClick={() => setInspectedPeriod(item)}
-                              title="Inspect Period Breakdown"
+                              title={t.fullRegistration.inspectBtn}
                             >
-                              <Eye className="h-3.5 w-3.5 mr-1" /> Inspect
+                              <Eye className="h-3.5 w-3.5 mr-1" /> {t.fullRegistration.inspectBtn}
                             </Button>
                           </div>
                         </TableCell>
@@ -1414,7 +1457,9 @@ export default function FullRegistrationPage() {
                       <TableCell colSpan={8} className="h-48 text-center">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Activity className="h-8 w-8 text-slate-300" />
-                          <p className="text-xs font-semibold text-slate-400">Zero Matches Found</p>
+                          <p className="text-xs font-semibold text-slate-400">
+                            {t.fullRegistration.zeroMatches}
+                          </p>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1429,7 +1474,7 @@ export default function FullRegistrationPage() {
               totalPages={totalPages}
               totalItems={ledger.length}
               shownItems={paginatedLedger.length}
-              itemLabel="Archives"
+              itemLabel={t.fullRegistration.archivesPaginationLabel}
               onPageChange={setCurrentPage}
             />
           </div>
@@ -1447,11 +1492,12 @@ export default function FullRegistrationPage() {
               <DialogHeader className="p-6 border-b bg-muted/20">
                 <DialogTitle className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
                   <Calendar className="h-5 w-5 text-primary" />
-                  {inspectedPeriod.label} — Period Intelligence Breakdown
+                  {t.fullRegistration.inspectModalTitle.replace('{label}', inspectedPeriod.label)}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Exact carrier split and daily field reports recorded during {inspectedPeriod.month}{' '}
-                  {inspectedPeriod.year}.
+                  {t.fullRegistration.inspectModalDesc
+                    .replace('{month}', inspectedPeriod.month)
+                    .replace('{year}', inspectedPeriod.year)}
                 </DialogDescription>
               </DialogHeader>
 
@@ -1459,10 +1505,10 @@ export default function FullRegistrationPage() {
                 <div className="grid grid-cols-3 gap-3">
                   <div className="p-4 rounded-2xl bg-muted/30 border border-border">
                     <span className="text-[10px] font-black uppercase text-muted-foreground block">
-                      Grand Total
+                      {t.fullRegistration.colGrandTotal}
                     </span>
                     <span className="text-2xl font-black text-foreground tabular-nums">
-                      {inspectedPeriod.total.toLocaleString()}
+                      {formatNumber(inspectedPeriod.total)}
                     </span>
                   </div>
                   <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
@@ -1470,7 +1516,7 @@ export default function FullRegistrationPage() {
                       Ethio ({inspectedPeriod.exactEthioPct}%)
                     </span>
                     <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
-                      {inspectedPeriod.ethio.toLocaleString()}
+                      {formatNumber(inspectedPeriod.ethio)}
                     </span>
                   </div>
                   <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-500/20">
@@ -1478,26 +1524,28 @@ export default function FullRegistrationPage() {
                       Safaricom ({inspectedPeriod.exactSafaricomPct}%)
                     </span>
                     <span className="text-2xl font-black text-orange-600 dark:text-orange-400 tabular-nums">
-                      {inspectedPeriod.safaricom.toLocaleString()}
+                      {formatNumber(inspectedPeriod.safaricom)}
                     </span>
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <h4 className="text-xs font-black uppercase tracking-wider text-muted-foreground">
-                    Daily Field Reports in {inspectedPeriod.month} {inspectedPeriod.year} (
-                    {inspectedDailyReports.length})
+                    {t.fullRegistration.dailyReportsInMonthTitle
+                      .replace('{month}', inspectedPeriod.month)
+                      .replace('{year}', inspectedPeriod.year)
+                      .replace('{count}', formatNumber(inspectedDailyReports.length))}
                   </h4>
                   {inspectedDailyReports.length > 0 ? (
                     <div className="border border-border rounded-2xl overflow-hidden max-h-[260px] overflow-y-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Date</TableHead>
+                            <TableHead>{t.registrationsList.colDate}</TableHead>
                             <TableHead>Ethio</TableHead>
                             <TableHead>Safaricom</TableHead>
-                            <TableHead>Total</TableHead>
-                            <TableHead>Institution</TableHead>
+                            <TableHead>{t.common.total}</TableHead>
+                            <TableHead>{t.registrationsList.detailInstitution}</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1507,16 +1555,18 @@ export default function FullRegistrationPage() {
                               <TableRow key={rep.id}>
                                 <TableCell className="text-xs font-bold">{rep.date}</TableCell>
                                 <TableCell className="text-xs font-semibold text-emerald-600 tabular-nums">
-                                  {rep.ethioCount || 0}
+                                  {formatNumber(rep.ethioCount || 0)}
                                 </TableCell>
                                 <TableCell className="text-xs font-semibold text-orange-600 tabular-nums">
-                                  {rep.safaricomCount || 0}
+                                  {formatNumber(rep.safaricomCount || 0)}
                                 </TableCell>
                                 <TableCell className="text-xs font-black tabular-nums">
-                                  {tot}
+                                  {formatNumber(tot)}
                                 </TableCell>
                                 <TableCell className="text-xs text-muted-foreground truncate max-w-[140px]">
-                                  {rep.institutionName || rep.schoolName || 'Standard'}
+                                  {rep.institutionName ||
+                                    rep.schoolName ||
+                                    t.fullRegistration.standardOrigin}
                                 </TableCell>
                               </TableRow>
                             );
@@ -1526,7 +1576,7 @@ export default function FullRegistrationPage() {
                     </div>
                   ) : (
                     <div className="p-6 rounded-2xl bg-muted/20 border border-border text-center text-xs text-muted-foreground">
-                      This period was recorded directly as a finalized monthly summary archive.
+                      {t.fullRegistration.recordedAsSummaryNote}
                     </div>
                   )}
                 </div>
@@ -1542,14 +1592,14 @@ export default function FullRegistrationPage() {
                   }}
                   className="rounded-xl text-xs font-bold"
                 >
-                  Open Daily Reports
+                  {t.fullRegistration.openDailyReportsBtn}
                 </Button>
                 <Button
                   type="button"
                   onClick={() => setInspectedPeriod(null)}
                   className="rounded-xl text-xs font-bold"
                 >
-                  Close
+                  {t.common.close}
                 </Button>
               </DialogFooter>
             </>
@@ -1562,17 +1612,17 @@ export default function FullRegistrationPage() {
         <DialogContent className="sm:max-w-[440px] rounded-3xl p-0 overflow-hidden">
           <DialogHeader className="p-6 border-b bg-muted/20">
             <DialogTitle className="text-base font-black uppercase tracking-tight">
-              Log Monthly Archive Summary
+              {t.fullRegistration.archiveModalTitle}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Record or update a finalized monthly Ethio & Safaricom intake summary in the Grand Ledger.
+              {t.fullRegistration.archiveModalDesc}
             </DialogDescription>
           </DialogHeader>
           <div className="p-6 space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                  Month
+                  {t.fullRegistration.monthFieldLabel}
                 </Label>
                 <Select value={archiveMonth} onValueChange={setArchiveMonth}>
                   <SelectTrigger className="h-10 rounded-xl text-xs font-bold">
@@ -1589,7 +1639,7 @@ export default function FullRegistrationPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                  Year
+                  {t.fullRegistration.yearLabel}
                 </Label>
                 <Select value={archiveYear} onValueChange={setArchiveYear}>
                   <SelectTrigger className="h-10 rounded-xl text-xs font-bold">
@@ -1610,12 +1660,12 @@ export default function FullRegistrationPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-black uppercase tracking-wider text-emerald-600">
-                  Ethio Telecom Count
+                  {t.fullRegistration.ethioCountFieldLabel}
                 </Label>
                 <Input
                   type="number"
                   min={0}
-                  placeholder="e.g. 420"
+                  placeholder="420"
                   value={archiveEthio}
                   onChange={(e) => setArchiveEthio(e.target.value)}
                   className="h-10 rounded-xl text-xs font-bold"
@@ -1623,12 +1673,12 @@ export default function FullRegistrationPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-black uppercase tracking-wider text-orange-600">
-                  Safaricom Count
+                  {t.fullRegistration.safaricomCountFieldLabel}
                 </Label>
                 <Input
                   type="number"
                   min={0}
-                  placeholder="e.g. 180"
+                  placeholder="180"
                   value={archiveSafaricom}
                   onChange={(e) => setArchiveSafaricom(e.target.value)}
                   className="h-10 rounded-xl text-xs font-bold"
@@ -1643,7 +1693,7 @@ export default function FullRegistrationPage() {
               onClick={() => setIsArchiveModalOpen(false)}
               className="rounded-xl text-xs font-bold"
             >
-              Cancel
+              {t.common.cancel}
             </Button>
             <Button
               type="button"
@@ -1651,7 +1701,7 @@ export default function FullRegistrationPage() {
               onClick={handleSaveManualArchive}
               className="rounded-xl bg-primary text-primary-foreground text-xs font-black uppercase tracking-wider"
             >
-              Save Archive
+              {t.fullRegistration.saveArchiveBtn}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1660,14 +1710,14 @@ export default function FullRegistrationPage() {
       <div className="flex items-center gap-4 p-6 bg-amber-500/5 border border-amber-500/10 rounded-3xl">
         <AlertCircle className="h-6 w-6 text-amber-500 shrink-0" />
         <p className="text-[10px] text-amber-600 font-bold uppercase leading-relaxed tracking-[0.1em] max-w-5xl">
-          Operational Security: This unified terminal provides both the 29-Digit Citizen & Institution Registration Ledger and the Monthly Telecom Throughput Archives since July 2025. All success, rejection, failed, and carrier percentages are calculated to exact 2-decimal precision.
+          {t.fullRegistration.securityBanner}
         </p>
       </div>
     </div>
   );
 }
 
-function StatsCard({ label, value, sublabel, icon: Icon, color, glow }: any) {
+function StatsCard({ label, value, sublabel, icon: Icon, color, glow, formatNumber }: any) {
   return (
     <Card className="rounded-[32px] overflow-hidden group relative hover:-translate-y-0.5 transition-all">
       <div
@@ -1689,7 +1739,7 @@ function StatsCard({ label, value, sublabel, icon: Icon, color, glow }: any) {
           </div>
         </div>
         <p className="text-4xl sm:text-5xl font-black text-foreground tracking-tighter tabular-nums">
-          {value.toLocaleString()}
+          {formatNumber ? formatNumber(value) : value.toLocaleString()}
         </p>
         {sublabel && (
           <p className="text-xs font-bold text-muted-foreground mt-2 tabular-nums">{sublabel}</p>

@@ -1,6 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { DashboardStats } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/i18n/language-provider';
 
 interface StatsCardsProps {
   stats: DashboardStats;
@@ -15,10 +16,9 @@ export function StatsCards({
   activeFilter = null,
   onSelectFilter,
 }: StatsCardsProps) {
+  const { t, formatNumber } = useTranslation();
   const actualRecordsSum =
     stats.processed + stats.processing + stats.failed + stats.rejected;
-  const totalRecords = Math.max(actualRecordsSum, 1);
-  const totalPersonnel = Math.max(stats.totalOfficers, 1);
   const instRecords = stats.institutionRecordsCount || 0;
   const instCount = stats.institutionsCount || 0;
 
@@ -38,12 +38,12 @@ export function StatsCards({
     {
       id: 'personnel',
       filterKey: null as string | null,
-      label: 'Personnel Total',
-      unit: 'Bureau',
+      label: t.statsCards.personnelLabel,
+      unit: t.statsCards.personnelUnit,
       value: stats.totalOfficers,
       pct: 100,
-      deltaText: `${stats.totalOfficers}`,
-      subText: 'registered staff',
+      deltaText: `${formatNumber(stats.totalOfficers)}`,
+      subText: t.statsCards.personnelSub,
       isPositive: true,
       strokeColor: '#4f46e5',
       fillId: 'grad-indigo',
@@ -55,12 +55,14 @@ export function StatsCards({
     {
       id: 'onduty',
       filterKey: null as string | null,
-      label: 'On-Duty Status',
-      unit: 'Live',
+      label: t.statsCards.onDutyLabel,
+      unit: t.statsCards.onDutyUnit,
       value: stats.onDutyOfficers,
       pct: onDutyRate,
       deltaText: `${onDutyRate}%`,
-      subText: `${stats.onDutyOfficers}/${stats.totalOfficers} active`,
+      subText: t.statsCards.onDutySub
+        .replace('{active}', formatNumber(stats.onDutyOfficers))
+        .replace('{total}', formatNumber(stats.totalOfficers)),
       isPositive: true,
       strokeColor: '#10b981',
       fillId: 'grad-emerald',
@@ -72,12 +74,12 @@ export function StatsCards({
     {
       id: 'intake',
       filterKey: 'ALL',
-      label: 'Intake Total',
-      unit: 'Records',
+      label: t.statsCards.intakeLabel,
+      unit: t.statsCards.intakeUnit,
       value: stats.total,
       pct: 100,
-      deltaText: `${actualRecordsSum.toLocaleString()}`,
-      subText: 'tracked RIDs',
+      deltaText: `${formatNumber(actualRecordsSum)}`,
+      subText: t.statsCards.intakeSub,
       isPositive: true,
       strokeColor: '#3b82f6',
       fillId: 'grad-blue',
@@ -89,12 +91,12 @@ export function StatsCards({
     {
       id: 'institutions',
       filterKey: 'INSTITUTIONS',
-      label: 'Institutions',
-      unit: `${instCount} Active`,
+      label: t.statsCards.institutionsLabel,
+      unit: t.statsCards.institutionsUnit.replace('{count}', formatNumber(instCount)),
       value: instRecords,
       pct: instRate,
       deltaText: `${instRate}%`,
-      subText: `of ${actualRecordsSum} records`,
+      subText: t.statsCards.institutionsSub.replace('{total}', formatNumber(actualRecordsSum)),
       isPositive: true,
       strokeColor: '#8b5cf6',
       fillId: 'grad-violet',
@@ -106,12 +108,14 @@ export function StatsCards({
     {
       id: 'processed',
       filterKey: 'Processed',
-      label: 'Processed',
-      unit: 'Success',
+      label: t.statsCards.processedLabel,
+      unit: t.statsCards.processedUnit,
       value: stats.processed,
       pct: processedRate,
       deltaText: `${processedRate}%`,
-      subText: `${stats.processed}/${actualRecordsSum} verified`,
+      subText: t.statsCards.processedSub
+        .replace('{count}', formatNumber(stats.processed))
+        .replace('{total}', formatNumber(actualRecordsSum)),
       isPositive: true,
       strokeColor: '#0ea5e9',
       fillId: 'grad-cyan',
@@ -123,12 +127,14 @@ export function StatsCards({
     {
       id: 'processing',
       filterKey: 'Processing',
-      label: 'Processing',
-      unit: 'Active',
+      label: t.statsCards.processingLabel,
+      unit: t.statsCards.processingUnit,
       value: stats.processing,
       pct: processingRate,
       deltaText: `${processingRate}%`,
-      subText: `${stats.processing}/${actualRecordsSum} in queue`,
+      subText: t.statsCards.processingSub
+        .replace('{count}', formatNumber(stats.processing))
+        .replace('{total}', formatNumber(actualRecordsSum)),
       isPositive: true,
       strokeColor: '#f59e0b',
       fillId: 'grad-amber',
@@ -140,12 +146,14 @@ export function StatsCards({
     {
       id: 'failed',
       filterKey: 'Failed',
-      label: 'Failed',
-      unit: 'Queue',
+      label: t.statsCards.failedLabel,
+      unit: t.statsCards.failedUnit,
       value: stats.failed,
       pct: failedRate,
       deltaText: `${failedRate}%`,
-      subText: `${stats.failed}/${actualRecordsSum} failed`,
+      subText: t.statsCards.failedSub
+        .replace('{count}', formatNumber(stats.failed))
+        .replace('{total}', formatNumber(actualRecordsSum)),
       isPositive: false,
       strokeColor: '#f43f5e',
       fillId: 'grad-rose',
@@ -157,12 +165,14 @@ export function StatsCards({
     {
       id: 'rejected',
       filterKey: 'Rejected',
-      label: 'Rejected',
-      unit: 'Queue',
+      label: t.statsCards.rejectedLabel,
+      unit: t.statsCards.rejectedUnit,
       value: stats.rejected,
       pct: rejectedRate,
       deltaText: `${rejectedRate}%`,
-      subText: `${stats.rejected}/${actualRecordsSum} rejected`,
+      subText: t.statsCards.rejectedSub
+        .replace('{count}', formatNumber(stats.rejected))
+        .replace('{total}', formatNumber(actualRecordsSum)),
       isPositive: false,
       strokeColor: '#ef4444',
       fillId: 'grad-red',
@@ -189,7 +199,7 @@ export function StatsCards({
 
         return (
           <Card
-            key={item.label}
+            key={item.id}
             onClick={() => {
               if (!onSelectFilter || !item.filterKey) return;
               if (item.filterKey === 'ALL' || activeFilter === item.filterKey) {
@@ -215,9 +225,9 @@ export function StatsCards({
             <CardContent className="p-6 relative z-10">
               {/* Top Header: Title / Unit */}
               <div className="flex items-center justify-between mb-5">
-                <p className="text-[13px] font-semibold text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-1.5">
+                <p className="text-[13px] font-semibold text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-1.5 flex-wrap">
                   <span
-                    className="inline-block h-2 w-2 rounded-full"
+                    className="inline-block h-2 w-2 rounded-full shrink-0"
                     style={{
                       backgroundColor: item.strokeColor,
                       boxShadow: `0 0 10px ${item.strokeColor}`,
@@ -230,13 +240,13 @@ export function StatsCards({
                 </p>
                 <span
                   className={cn(
-                    'text-[10px] font-mono font-bold px-2 py-0.5 rounded-md backdrop-blur-md border tabular-nums',
+                    'text-[10px] font-mono font-bold px-2 py-0.5 rounded-md backdrop-blur-md border tabular-nums shrink-0',
                     isSelected && item.filterKey !== 'ALL'
                       ? 'bg-primary text-white border-primary'
                       : 'bg-white/55 dark:bg-white/[0.06] border-white/75 dark:border-white/10 text-slate-700 dark:text-slate-200'
                   )}
                 >
-                  {isSelected && item.filterKey !== 'ALL' ? 'Filtered' : `${item.pct}%`}
+                  {isSelected && item.filterKey !== 'ALL' ? t.statsCards.filteredBadge : `${item.pct}%`}
                 </span>
               </div>
 
@@ -244,7 +254,7 @@ export function StatsCards({
               <div className="flex items-end justify-between gap-3">
                 <div className="space-y-3">
                   <div className="text-[30px] font-bold tracking-tight text-slate-900 dark:text-white tabular-nums leading-none">
-                    {item.value.toLocaleString()}
+                    {formatNumber(item.value)}
                   </div>
 
                   <div className="flex items-center gap-1.5">

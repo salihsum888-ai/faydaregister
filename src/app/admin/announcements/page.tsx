@@ -29,6 +29,7 @@ import { collection, query, serverTimestamp, doc } from 'firebase/firestore';
 import { deleteDocumentNonBlocking, addDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { Announcement, UserProfile } from '@/lib/types';
 import { logAuditAction } from '@/lib/audit';
+import { useTranslation } from '@/i18n/language-provider';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +42,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function AdminAnnouncementsPage() {
+  const { t } = useTranslation();
   const db = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
@@ -104,11 +106,11 @@ export default function AdminAnnouncementsPage() {
     if (editingId) {
       setDocumentNonBlocking(doc(db, 'announcements', editingId), payload, { merge: true });
       logAuditAction(db, user, profile.fullName, 'STATUS_UPDATE', editingId, `Modified broadcast: "${title}" [Target: ${targetRegion}/${targetRole}]`);
-      toast({ title: "Broadcast Modified", description: "The instruction has been updated in the intelligence feed." });
+      toast({ title: t.adminAnnouncements.toastModifiedTitle, description: t.adminAnnouncements.toastModifiedDesc });
     } else {
       addDocumentNonBlocking(collection(db, 'announcements'), payload);
       logAuditAction(db, user, profile.fullName, 'RECORD_CREATED', 'broadcast', `Issued new bureau broadcast: "${title}" [Target: ${targetRegion}/${targetRole}]`);
-      toast({ title: "Announcement Published", description: "The broadcast is now live for all targeted bureau staff." });
+      toast({ title: t.adminAnnouncements.toastPublishedTitle, description: t.adminAnnouncements.toastPublishedDesc });
     }
     
     resetForm();
@@ -129,7 +131,7 @@ export default function AdminAnnouncementsPage() {
     deleteDocumentNonBlocking(doc(db, 'announcements', annToDelete.id));
     logAuditAction(db, user, profile.fullName, 'RECORD_DELETED', annToDelete.id, `Purged bureau broadcast: "${annToDelete.title}"`);
     
-    toast({ title: "Announcement Removed", description: "The broadcast has been permanently deleted." });
+    toast({ title: t.adminAnnouncements.toastRemovedTitle, description: t.adminAnnouncements.toastRemovedDesc });
     setIsDeleteDialogOpen(false);
     setAnnToDelete(null);
   };
@@ -147,24 +149,24 @@ export default function AdminAnnouncementsPage() {
     <div className="space-y-10 animate-in fade-in duration-700 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1">
-          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">Bureau Administration</p>
-          <h1 className="text-4xl font-black tracking-tight text-foreground font-headline uppercase leading-none">Broadcast Center</h1>
-          <p className="text-sm text-muted-foreground">Manage system-wide telegrams and targeted operational instructions.</p>
+          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">{t.adminAnnouncements.eyebrow}</p>
+          <h1 className="text-4xl font-black tracking-tight text-foreground font-headline uppercase leading-none">{t.adminAnnouncements.title}</h1>
+          <p className="text-sm text-muted-foreground">{t.adminAnnouncements.subtitle}</p>
         </div>
         
         <div className="flex items-center gap-3 bg-card p-3 rounded-2xl border shadow-sm">
            <div className="flex items-center gap-3 px-4 border-r border-border">
               <div className="p-2 bg-primary/10 rounded-xl"><Megaphone className="h-4 w-4 text-primary" /></div>
               <div className="flex flex-col">
-                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Live Broadcasts</span>
-                <span className="text-sm font-black text-foreground">{announcements.length} Active</span>
+                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">{t.adminAnnouncements.liveBroadcastsLabel}</span>
+                <span className="text-sm font-black text-foreground">{t.adminAnnouncements.activeCountSuffix.replace('{count}', String(announcements.length))}</span>
               </div>
            </div>
            <div className="flex items-center gap-3 px-2">
               <div className="p-2 bg-emerald-500/10 rounded-xl"><Users className="h-4 w-4 text-emerald-500" /></div>
               <div className="flex flex-col">
-                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">Reach Potential</span>
-                <span className="text-sm font-black text-foreground">Global</span>
+                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">{t.adminAnnouncements.reachPotentialLabel}</span>
+                <span className="text-sm font-black text-foreground">{t.adminAnnouncements.globalText}</span>
               </div>
            </div>
         </div>
@@ -180,7 +182,7 @@ export default function AdminAnnouncementsPage() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg font-black text-foreground flex items-center gap-3 uppercase tracking-tight">
                   {editingId ? <Edit3 className="h-5 w-5 text-primary" /> : <Megaphone className="h-5 w-5 text-primary" />}
-                  {editingId ? 'Modify Telegram' : 'Draft Broadcast'}
+                  {editingId ? t.adminAnnouncements.editTitle : t.adminAnnouncements.draftTitle}
                 </CardTitle>
                 {editingId && (
                   <Button variant="ghost" size="icon" onClick={resetForm} className="h-8 w-8 text-muted-foreground hover:text-destructive">
@@ -189,15 +191,15 @@ export default function AdminAnnouncementsPage() {
                 )}
               </div>
               <CardDescription className="text-xs font-medium">
-                {editingId ? 'Updating an active bureau instruction.' : 'Issue a formal update to targeted units.'}
+                {editingId ? t.adminAnnouncements.editDesc : t.adminAnnouncements.draftDesc}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-8">
               <form onSubmit={handleCreateAnnouncement} className="space-y-6">
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Subject Matter</Label>
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.adminAnnouncements.subjectLabel}</Label>
                   <Input 
-                    placeholder="e.g. Protocol Alpha Sync" 
+                    placeholder={t.adminAnnouncements.subjectPlaceholder} 
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     required
@@ -207,28 +209,28 @@ export default function AdminAnnouncementsPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Classification</Label>
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.adminAnnouncements.classificationLabel}</Label>
                     <Select value={type} onValueChange={(v: any) => setType(v)}>
                       <SelectTrigger className="h-11 bg-background border-border rounded-xl font-bold">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="info" className="font-bold">Information</SelectItem>
-                        <SelectItem value="alert" className="font-bold">Critical Alert</SelectItem>
-                        <SelectItem value="update" className="font-bold">Policy Sync</SelectItem>
+                        <SelectItem value="info" className="font-bold">{t.adminAnnouncements.typeInfo}</SelectItem>
+                        <SelectItem value="alert" className="font-bold">{t.adminAnnouncements.typeAlert}</SelectItem>
+                        <SelectItem value="update" className="font-bold">{t.adminAnnouncements.typeUpdate}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Target Rank</Label>
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.adminAnnouncements.targetRankLabel}</Label>
                     <Select value={targetRole} onValueChange={(v: any) => setTargetRole(v)}>
                       <SelectTrigger className="h-11 bg-background border-border rounded-xl font-bold">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all" className="font-bold">All Personnel</SelectItem>
-                        <SelectItem value="reviewer" className="font-bold">Field Officers</SelectItem>
-                        <SelectItem value="admin" className="font-bold">Admin Only</SelectItem>
+                        <SelectItem value="all" className="font-bold">{t.adminAnnouncements.rankAll}</SelectItem>
+                        <SelectItem value="reviewer" className="font-bold">{t.adminAnnouncements.rankReviewer}</SelectItem>
+                        <SelectItem value="admin" className="font-bold">{t.adminAnnouncements.rankAdmin}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -236,7 +238,7 @@ export default function AdminAnnouncementsPage() {
 
                 <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1 flex items-center gap-2">
-                    <Target className="h-3 w-3" /> Targeted Sector
+                    <Target className="h-3 w-3" /> {t.adminAnnouncements.targetedSectorLabel}
                   </Label>
                   <Select value={targetRegion} onValueChange={setTargetRegion}>
                     <SelectTrigger className="h-11 bg-background border-border rounded-xl font-bold">
@@ -244,16 +246,16 @@ export default function AdminAnnouncementsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {regions.map(r => (
-                        <SelectItem key={r} value={r} className="font-bold">{r}</SelectItem>
+                        <SelectItem key={r} value={r} className="font-bold">{r === 'Global' ? t.adminAnnouncements.globalSectorText : r}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Message Payload</Label>
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.adminAnnouncements.messagePayloadLabel}</Label>
                   <Textarea 
-                    placeholder="Enter detailed instructions for the field team..." 
+                    placeholder={t.adminAnnouncements.messagePlaceholder} 
                     className="min-h-[160px] resize-none bg-background border-border rounded-2xl text-sm font-medium leading-relaxed"
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
@@ -262,7 +264,7 @@ export default function AdminAnnouncementsPage() {
                 </div>
 
                 <Button type="submit" className="w-full h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-primary/10 transition-all active:scale-[0.98]">
-                  <Send className="mr-2 h-4 w-4" /> {editingId ? 'Update Instruction' : 'Deploy Telegram'}
+                  <Send className="mr-2 h-4 w-4" /> {editingId ? t.adminAnnouncements.updateBtn : t.adminAnnouncements.deployBtn}
                 </Button>
               </form>
             </CardContent>
@@ -272,11 +274,11 @@ export default function AdminAnnouncementsPage() {
         <section className="xl:col-span-8 space-y-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xs font-black uppercase tracking-[0.3em] text-muted-foreground flex items-center gap-2">
-              <History className="h-4 w-4" /> Operational History
+              <History className="h-4 w-4" /> {t.adminAnnouncements.historyTitle}
             </h2>
             <div className="h-px flex-1 bg-border/40 mx-6 hidden md:block" />
             <span className="text-[9px] font-black px-3 py-1 bg-muted rounded-full text-muted-foreground tracking-widest">
-              SECURE FEED ACTIVE
+              {t.adminAnnouncements.secureFeedBadge}
             </span>
           </div>
 
@@ -301,7 +303,7 @@ export default function AdminAnnouncementsPage() {
                             ann.type === 'alert' ? "bg-red-500/10 text-red-600 border-red-500/20" : 
                             ann.type === 'info' ? "bg-blue-500/10 text-blue-600 border-blue-500/20" : "bg-green-500/10 text-green-600 border-green-500/20"
                           )}>
-                            {ann.type}
+                            {ann.type === 'alert' ? t.adminAnnouncements.typeAlert : ann.type === 'info' ? t.adminAnnouncements.typeInfo : t.adminAnnouncements.typeUpdate}
                           </span>
                           {ann.type === 'alert' && <Zap className="h-3 w-3 text-red-500 animate-pulse" />}
                         </div>
@@ -311,15 +313,15 @@ export default function AdminAnnouncementsPage() {
                         <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-border/40">
                            <div className="flex items-center gap-1.5">
                              <Globe className="h-3 w-3 text-muted-foreground/40" />
-                             <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">{ann.targetRegion || 'Global Sector'}</span>
+                             <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">{ann.targetRegion || t.adminAnnouncements.globalSectorText}</span>
                            </div>
                            <div className="h-3 w-px bg-border/40" />
                            <div className="flex items-center gap-1.5">
                              <Users className="h-3 w-3 text-muted-foreground/40" />
-                             <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">{ann.targetRole || 'All Units'}</span>
+                             <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">{ann.targetRole === 'admin' ? t.adminAnnouncements.rankAdmin : ann.targetRole === 'reviewer' ? t.adminAnnouncements.rankReviewer : t.adminAnnouncements.allUnitsText}</span>
                            </div>
                            <div className="h-3 w-px bg-border/40" />
-                           <span className="text-[9px] font-bold text-muted-foreground/30 uppercase tracking-tighter">Issued: {ann.date}</span>
+                           <span className="text-[9px] font-bold text-muted-foreground/30 uppercase tracking-tighter">{t.adminAnnouncements.issuedPrefix.replace('{date}', ann.date)}</span>
                         </div>
                       </div>
                       
@@ -353,8 +355,8 @@ export default function AdminAnnouncementsPage() {
             {!isLoading && announcements.length === 0 && (
               <div className="flex flex-col items-center justify-center py-40 bg-muted/5 rounded-[40px] border-2 border-dashed text-muted-foreground/20">
                 <Megaphone className="h-20 w-20 mb-6 opacity-5" />
-                <p className="text-sm font-black uppercase tracking-[0.3em]">Intelligence Feed Empty</p>
-                <p className="text-xs font-medium mt-2 italic">Broadcast a protocol to populate the field terminal.</p>
+                <p className="text-sm font-black uppercase tracking-[0.3em]">{t.adminAnnouncements.emptyTitle}</p>
+                <p className="text-xs font-medium mt-2 italic">{t.adminAnnouncements.emptyDesc}</p>
               </div>
             )}
           </div>
@@ -369,10 +371,10 @@ export default function AdminAnnouncementsPage() {
             </div>
             <div className="space-y-2">
               <AlertDialogTitle className="text-2xl font-black text-foreground tracking-tighter uppercase leading-none">
-                Purge Protocol?
+                {t.adminAnnouncements.deleteTitle}
               </AlertDialogTitle>
               <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed font-medium">
-                You are about to permanently delete: <span className="text-foreground font-bold">"{annToDelete?.title}"</span>. This instruction will be immediately removed from all officer terminals and signed into the forensic ledger.
+                {t.adminAnnouncements.deleteDescPrefix} <span className="text-foreground font-bold">"{annToDelete?.title}"</span>. {t.adminAnnouncements.deleteDescSuffix}
               </AlertDialogDescription>
             </div>
           </div>
@@ -381,10 +383,10 @@ export default function AdminAnnouncementsPage() {
               onClick={confirmDelete}
               className="w-full h-14 bg-destructive hover:bg-destructive/90 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-destructive/10 transition-all active:scale-[0.98]"
             >
-              Confirm Destruction
+              {t.adminAnnouncements.confirmDeleteBtn}
             </AlertDialogAction>
             <AlertDialogCancel className="w-full h-12 rounded-2xl font-bold uppercase text-[10px] tracking-widest border-none bg-transparent hover:bg-card">
-              Abort Operation
+              {t.adminAnnouncements.cancelDeleteBtn}
             </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -392,3 +394,4 @@ export default function AdminAnnouncementsPage() {
     </div>
   );
 }
+

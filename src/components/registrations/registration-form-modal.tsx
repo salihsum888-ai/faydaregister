@@ -38,30 +38,7 @@ import { doc, collection, query, where, limit } from 'firebase/firestore';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { logAuditAction } from '@/lib/audit';
 import { cn } from '@/lib/utils';
-
-const formSchema = z.object({
-  applicantName: z.string().min(2, "Name must be at least 2 characters"),
-  id: z.string().regex(/^\d{29}$/, "Registration ID must be exactly 29 digits"),
-  submissionDate: z.string().min(1, "Date is required"),
-  phone: z.string().regex(/^\d+$/, "Phone must contain only numeric digits"),
-  status: z.enum(['Processed', 'Pending Review', 'Rejected', 'Processing', 'Failed']),
-  rejectionReason: z.string().optional(),
-  officer: z.string().optional(),
-  location: z.string().min(1, "Location is required"),
-  remarks: z.string().optional(),
-  isSchoolRegistration: z.boolean().default(false),
-  schoolName: z.string().optional(),
-}).refine((data) => {
-  if (data.isSchoolRegistration) {
-    return Boolean(data.schoolName && data.schoolName.trim().length >= 2);
-  }
-  return true;
-}, {
-  message: "Institution Name is required when Institution Registration is enabled (min 2 characters)",
-  path: ["schoolName"],
-});
-
-type FormValues = z.infer<typeof formSchema>;
+import { useTranslation } from '@/i18n/language-provider';
 
 interface RegistrationFormModalProps {
   registration?: Registration;
@@ -84,6 +61,40 @@ export function RegistrationFormModal({
   const { toast } = useToast();
   const db = useFirestore();
   const { user } = useUser();
+  const { t } = useTranslation();
+
+  const formSchema = useMemo(
+    () =>
+      z
+        .object({
+          applicantName: z.string().min(2, t.registrationModal.valNameMin),
+          id: z.string().regex(/^\d{29}$/, t.registrationModal.valRidExact),
+          submissionDate: z.string().min(1, t.registrationModal.valDateReq),
+          phone: z.string().regex(/^\d+$/, t.registrationModal.valPhoneDigits),
+          status: z.enum(['Processed', 'Pending Review', 'Rejected', 'Processing', 'Failed']),
+          rejectionReason: z.string().optional(),
+          officer: z.string().optional(),
+          location: z.string().min(1, t.registrationModal.valLocationReq),
+          remarks: z.string().optional(),
+          isSchoolRegistration: z.boolean().default(false),
+          schoolName: z.string().optional(),
+        })
+        .refine(
+          (data) => {
+            if (data.isSchoolRegistration) {
+              return Boolean(data.schoolName && data.schoolName.trim().length >= 2);
+            }
+            return true;
+          },
+          {
+            message: t.registrationModal.valInstReq,
+            path: ['schoolName'],
+          }
+        ),
+    [t]
+  );
+
+  type FormValues = z.infer<typeof formSchema>;
 
   const userProfileRef = useMemoFirebase(() => {
     if (!db || !user?.uid) return null;
@@ -171,30 +182,30 @@ export function RegistrationFormModal({
       if (match && match[0]) {
         form.setValue('id', match[0], { shouldValidate: true });
         toast({
-          title: '29-Digit RID Extracted',
-          description: `Extracted ${match[0]} from clipboard.`,
+          title: t.registrationModal.toastExtractedTitle,
+          description: t.registrationModal.toastExtractedDesc.replace('{rid}', match[0]),
         });
       } else {
         const digitsOnly = (text || '').replace(/\D/g, '').slice(0, 29);
         if (digitsOnly.length > 0) {
           form.setValue('id', digitsOnly, { shouldValidate: true });
           toast({
-            title: 'Digits Pasted',
-            description: `Pasted ${digitsOnly.length} numeric digits from clipboard.`,
+            title: t.registrationModal.toastDigitsPastedTitle,
+            description: t.registrationModal.toastDigitsPastedDesc.replace('{count}', String(digitsOnly.length)),
           });
         } else {
           toast({
             variant: 'destructive',
-            title: 'No Numeric ID Found',
-            description: 'Clipboard does not contain a 29-digit Registration ID.',
+            title: t.registrationModal.toastNoIdTitle,
+            description: t.registrationModal.toastNoIdDesc,
           });
         }
       }
     } catch {
       toast({
         variant: 'destructive',
-        title: 'Clipboard Access Blocked',
-        description: 'Please paste the 29-digit RID directly into the field.',
+        title: t.registrationModal.toastClipboardBlockedTitle,
+        description: t.registrationModal.toastClipboardBlockedDesc,
       });
     }
   };
@@ -269,8 +280,8 @@ export function RegistrationFormModal({
         `Registry: Modified record for ${values.applicantName}${cleanedSchoolName ? ` (Institution: ${cleanedSchoolName})` : ''}. New Status: ${values.status}.`
       );
       toast({
-        title: "Registration Updated",
-        description: `Successfully modified record for ${values.applicantName}${cleanedSchoolName ? ` at ${cleanedSchoolName}` : ''}.`,
+        title: t.registrationModal.toastUpdatedTitle,
+        description: t.registrationModal.toastUpdatedDesc.replace('{name}', values.applicantName),
       });
     } else {
       setDocumentNonBlocking(doc(db, 'registrations', values.id), data, { merge: true });
@@ -283,8 +294,8 @@ export function RegistrationFormModal({
         `Registry: Created new registration for ${values.applicantName}${cleanedSchoolName ? ` (Institution: ${cleanedSchoolName})` : ''}.`
       );
       toast({
-        title: "Registration Created",
-        description: `Success: New record for ${values.applicantName}${cleanedSchoolName ? ` enrolled under ${cleanedSchoolName}` : ''} saved.`,
+        title: t.registrationModal.toastCreatedTitle,
+        description: t.registrationModal.toastCreatedDesc.replace('{name}', values.applicantName),
       });
     }
 
@@ -298,9 +309,9 @@ export function RegistrationFormModal({
         {trigger || (
           <Button className={mode === 'add' ? "bg-primary hover:bg-primary/90 text-primary-foreground font-semibold" : "h-7 text-[10px] px-3 font-semibold text-muted-foreground hover:text-foreground"}>
             {mode === 'add' ? (
-              <><Plus className="mr-2 h-4 w-4" /> Add Registration</>
+              <><Plus className="mr-2 h-4 w-4" /> {t.registrationModal.addRegistrationBtn}</>
             ) : (
-              'Edit'
+              t.registrationModal.editBtn
             )}
           </Button>
         )}
@@ -309,7 +320,7 @@ export function RegistrationFormModal({
         <DialogHeader className="p-6 border-b border-white/60 dark:border-white/10 bg-white/40 dark:bg-white/[0.03]">
           <DialogTitle className="text-xl font-bold text-foreground flex items-center gap-2.5">
             {mode === 'add' ? <Plus className="h-6 w-6 text-primary" /> : <Edit2 className="h-6 w-6 text-primary" />}
-            {mode === 'add' ? 'New Bureau Registration' : 'Update Record Details'}
+            {mode === 'add' ? t.registrationModal.newModalTitle : t.registrationModal.editModalTitle}
           </DialogTitle>
         </DialogHeader>
         
@@ -324,7 +335,7 @@ export function RegistrationFormModal({
                   <FormItem className="flex flex-row items-center justify-between gap-3 space-y-0">
                     <div className="flex items-center gap-3">
                       <div className={cn(
-                        "h-10 w-10 rounded-xl flex items-center justify-center transition-colors",
+                        "h-10 w-10 rounded-xl flex items-center justify-center transition-colors shrink-0",
                         field.value
                           ? "bg-primary text-white shadow-md shadow-primary/25"
                           : "bg-slate-200/70 dark:bg-white/10 text-slate-600 dark:text-slate-300"
@@ -333,10 +344,10 @@ export function RegistrationFormModal({
                       </div>
                       <div>
                         <FormLabel className="text-xs font-bold text-foreground cursor-pointer">
-                          Institution Registration
+                          {t.registrationModal.institutionToggleLabel}
                         </FormLabel>
                         <p className="text-[11px] text-muted-foreground">
-                          Enable to assign this record to an institution (School, Hospital, Company, etc.)
+                          {t.registrationModal.institutionToggleDesc}
                         </p>
                       </div>
                     </div>
@@ -365,11 +376,11 @@ export function RegistrationFormModal({
                       <FormItem>
                         <FormLabel className="text-[10px] font-bold uppercase text-primary tracking-wider flex items-center gap-1.5">
                           <Building2 className="h-3.5 w-3.5" />
-                          Institution Name *
+                          {t.registrationModal.institutionNameLabel}
                         </FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="Type or select institution name (e.g., Bole High School, Black Lion Hospital)"
+                            placeholder={t.registrationModal.institutionNamePlaceholder}
                             {...field}
                             className="h-11 bg-background/90 border-primary/30 focus-visible:ring-primary"
                           />
@@ -383,7 +394,7 @@ export function RegistrationFormModal({
                     <div className="space-y-1.5">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                         <Sparkles className="h-3 w-3 text-primary" />
-                        Registered Institution Suggestions
+                        {t.registrationModal.suggestionsLabel}
                       </p>
                       <div className="flex flex-wrap gap-1.5">
                         {filteredSuggestions.map((school) => {
@@ -421,10 +432,10 @@ export function RegistrationFormModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
-                      Full Name *
+                      {t.registrationModal.fullNameLabel}
                     </FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter full name" {...field} className="h-11 bg-background border-border" />
+                      <Input placeholder={t.registrationModal.fullNamePlaceholder} {...field} className="h-11 bg-background border-border" />
                     </FormControl>
                     <FormMessage className="text-[10px]" />
                   </FormItem>
@@ -435,29 +446,31 @@ export function RegistrationFormModal({
                 name="id"
                 render={({ field }) => (
                   <FormItem>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
-                        Registration ID * ({watchedId.length}/29)
+                        {t.registrationModal.ridLabel.replace('{count}', String(watchedId.length))}
                       </FormLabel>
                       {mode === 'add' && (
                         <button
                           type="button"
                           onClick={handleExtractRidFromClipboard}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-primary hover:underline cursor-pointer"
-                          title="Extract 29-digit RID from clipboard"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-primary hover:underline cursor-pointer shrink-0"
+                          title={t.registrationModal.paste29DigitTooltip}
                         >
-                          <ClipboardPaste className="h-3 w-3" /> Paste 29-Digit
+                          <ClipboardPaste className="h-3 w-3" /> {t.registrationModal.paste29DigitBtn}
                         </button>
                       )}
                     </div>
                     <FormControl>
-                      <Input placeholder="29-digit numeric ID" {...field} className="h-11 bg-background border-border font-mono text-xs" maxLength={29} disabled={mode === 'edit'} />
+                      <Input placeholder={t.registrationModal.ridPlaceholder} {...field} className="h-11 bg-background border-border font-mono text-xs" maxLength={29} disabled={mode === 'edit'} />
                     </FormControl>
                     {duplicateRidMatch && (
                       <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                         <span>
-                          Duplicate 29-Digit RID already exists for {duplicateRidMatch.applicantName} ({duplicateRidMatch.status}).
+                          {t.registrationModal.duplicateWarning
+                            .replace('{name}', duplicateRidMatch.applicantName)
+                            .replace('{status}', t.common.status[duplicateRidMatch.status] || duplicateRidMatch.status)}
                         </span>
                       </div>
                     )}
@@ -473,7 +486,7 @@ export function RegistrationFormModal({
                 name="submissionDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Date *</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">{t.registrationModal.dateLabel}</FormLabel>
                     <FormControl>
                       <Input type="date" {...field} className="h-11 bg-background border-border" />
                     </FormControl>
@@ -486,9 +499,9 @@ export function RegistrationFormModal({
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Phone *</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">{t.registrationModal.phoneLabel}</FormLabel>
                     <FormControl>
-                      <Input placeholder="Numeric digits only" {...field} className="h-11 bg-background border-border" />
+                      <Input placeholder={t.registrationModal.phonePlaceholder} {...field} className="h-11 bg-background border-border" />
                     </FormControl>
                     <FormMessage className="text-[10px]" />
                   </FormItem>
@@ -502,19 +515,19 @@ export function RegistrationFormModal({
                 name="status"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Status *</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">{t.registrationModal.statusLabel}</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="h-11 bg-background border-border">
-                          <SelectValue placeholder="Select status" />
+                          <SelectValue placeholder={t.registrationModal.selectStatusPlaceholder} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Pending Review">Pending Review</SelectItem>
-                        <SelectItem value="Processing">Processing</SelectItem>
-                        <SelectItem value="Processed">Processed</SelectItem>
-                        <SelectItem value="Rejected">Rejected</SelectItem>
-                        <SelectItem value="Failed">Failed</SelectItem>
+                        <SelectItem value="Pending Review">{t.common.status['Pending Review']}</SelectItem>
+                        <SelectItem value="Processing">{t.common.status.Processing}</SelectItem>
+                        <SelectItem value="Processed">{t.common.status.Processed}</SelectItem>
+                        <SelectItem value="Rejected">{t.common.status.Rejected}</SelectItem>
+                        <SelectItem value="Failed">{t.common.status.Failed}</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage className="text-[10px]" />
@@ -526,9 +539,9 @@ export function RegistrationFormModal({
                 name="officer"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Officer</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">{t.registrationModal.officerLabel}</FormLabel>
                     <FormControl>
-                      <Input placeholder="Officer name" {...field} className="h-11 bg-background border-border" />
+                      <Input placeholder={t.registrationModal.officerPlaceholder} {...field} className="h-11 bg-background border-border" />
                     </FormControl>
                   </FormItem>
                 )}
@@ -541,16 +554,16 @@ export function RegistrationFormModal({
                 name="rejectionReason"
                 render={({ field }) => (
                   <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
-                    <FormLabel className="text-[10px] font-bold uppercase text-rose-500 tracking-wider">Rejection Reason *</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase text-rose-500 tracking-wider">{t.registrationModal.rejectionReasonLabel}</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="h-11 border-rose-200 bg-rose-500/10 text-rose-600">
-                          <SelectValue placeholder="Select reason" />
+                          <SelectValue placeholder={t.registrationModal.selectReasonPlaceholder} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Biometric Match">Biometric Match</SelectItem>
-                        <SelectItem value="Rejected by Superveser">Rejected by Superveser</SelectItem>
+                        <SelectItem value="Biometric Match">{t.registrationModal.reasonBiometricMatch}</SelectItem>
+                        <SelectItem value="Rejected by Superveser">{t.registrationModal.reasonSupervisor}</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage className="text-[10px]" />
@@ -564,9 +577,9 @@ export function RegistrationFormModal({
               name="location"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Location</FormLabel>
+                  <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">{t.registrationModal.locationLabel}</FormLabel>
                   <FormControl>
-                    <Input placeholder="City or office location" {...field} className="h-11 bg-background border-border" />
+                    <Input placeholder={t.registrationModal.locationPlaceholder} {...field} className="h-11 bg-background border-border" />
                   </FormControl>
                   <FormMessage className="text-[10px]" />
                 </FormItem>
@@ -578,10 +591,10 @@ export function RegistrationFormModal({
               name="remarks"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Remarks</FormLabel>
+                  <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">{t.registrationModal.remarksLabel}</FormLabel>
                   <FormControl>
                     <Textarea 
-                      placeholder="Optional notes" 
+                      placeholder={t.registrationModal.remarksPlaceholder} 
                       className="resize-none min-h-[80px] bg-background border-border" 
                       {...field} 
                     />
@@ -592,10 +605,10 @@ export function RegistrationFormModal({
 
             <div className="flex flex-col gap-3 pt-2">
               <Button type="submit" className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md">
-                {mode === 'add' ? 'Finalize Registration' : 'Update Record Permanently'}
+                {mode === 'add' ? t.registrationModal.finalizeBtn : t.registrationModal.updateBtn}
               </Button>
               <Button type="button" variant="ghost" onClick={() => setOpen(false)} className="h-12 font-bold text-muted-foreground">
-                Discard
+                {t.registrationModal.discardBtn}
               </Button>
             </div>
           </form>

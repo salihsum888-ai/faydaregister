@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { CallSession, CallParticipantState, Conversation, UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/i18n/language-provider';
 
 interface LiveCallOverlayProps {
   currentUserId: string;
@@ -99,6 +100,7 @@ export function LiveCallOverlay({
   onUpdateParticipantState,
   onEndOrLeaveCall,
 }: LiveCallOverlayProps) {
+  const { t } = useTranslation();
   const [isMinimized, setIsMinimized] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -326,7 +328,7 @@ export function LiveCallOverlay({
       setCallStatusBanner(null);
     }
     if (activeCall?.status === 'declined') {
-      setCallStatusBanner('Call Declined by Recipient');
+      setCallStatusBanner(t.liveCall.callDeclinedBanner);
       const timer = setTimeout(() => {
         prevCallIdRef.current = null;
         setCallStatusBanner(null);
@@ -334,7 +336,7 @@ export function LiveCallOverlay({
       }, 2200);
       return () => clearTimeout(timer);
     }
-  }, [activeCall?.id, activeCall?.status]);
+  }, [activeCall?.id, activeCall?.status, t.liveCall.callDeclinedBanner]);
 
   // Connected Call Duration Timer — ONLY runs AFTER the other person answers!
   useEffect(() => {
@@ -364,7 +366,7 @@ export function LiveCallOverlay({
       setRingingElapsedSeconds(elapsed);
       if (elapsed >= 60 && activeCall.callerId === currentUserId) {
         clearInterval(interval);
-        setCallStatusBanner('No Answer');
+        setCallStatusBanner(t.liveCall.noAnswerBanner);
         setTimeout(() => {
           stopAllMediaStreams();
           onEndOrLeaveCall(activeCallConv, 0, 'missed');
@@ -372,7 +374,7 @@ export function LiveCallOverlay({
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [activeCall?.id, activeCall?.startedAt, isAnsweredAndConnected, activeCall?.status]);
+  }, [activeCall?.id, activeCall?.startedAt, isAnsweredAndConnected, activeCall?.status, t.liveCall.noAnswerBanner]);
 
   // Start Web Audio microphone level meter so user sees real voice activity
   const startMicAnalyzer = (stream: MediaStream) => {
@@ -973,19 +975,20 @@ export function LiveCallOverlay({
   // ============================================================================
   if (incomingCall && incomingCallConv) {
     const callerProfile = allUsers?.find((u) => u.id === incomingCall.callerId);
+    const callTypeLabel = incomingCall.callType === 'video' ? t.communication.videoLabel : t.communication.voiceLabel;
     return (
       <div className="fixed inset-0 z-[75] bg-slate-950/90 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-300">
         <div className="w-full max-w-sm rounded-[36px] bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 text-white border border-emerald-500/30 shadow-[0_24px_80px_rgba(16,185,129,0.25)] p-6 sm:p-8 flex flex-col items-center text-center space-y-6">
           <div className="flex items-center justify-between w-full">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase tracking-widest">
               <Radio className="h-3 w-3 animate-pulse" />
-              Incoming {incomingCall.callType === 'video' ? 'Video' : 'Voice'} Call
+              {t.liveCall.incomingCallBadge.replace('{type}', callTypeLabel)}
             </span>
             <button
               type="button"
               onClick={() => setIsRingtoneMuted((m) => !m)}
               className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300"
-              title={isRingtoneMuted ? 'Unmute Ringtone' : 'Silence Ringtone'}
+              title={isRingtoneMuted ? t.liveCall.unmuteRingtoneTooltip : t.liveCall.silenceRingtoneTooltip}
             >
               {isRingtoneMuted ? (
                 <VolumeX className="h-4 w-4 text-rose-400" />
@@ -1013,8 +1016,8 @@ export function LiveCallOverlay({
             </h2>
             <p className="text-xs font-semibold text-emerald-400 animate-pulse">
               {incomingCall.conversationType === 'group'
-                ? `Calling in ${incomingCall.conversationName}...`
-                : `Ringing • Waiting for you to answer...`}
+                ? t.liveCall.callingInGroup.replace('{name}', incomingCall.conversationName || '')
+                : t.liveCall.ringingWaitingAnswer}
             </p>
           </div>
 
@@ -1025,7 +1028,7 @@ export function LiveCallOverlay({
               className="h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[10px] uppercase tracking-wider flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-500/30"
             >
               <Video className="h-5 w-5" />
-              <span>Answer Video</span>
+              <span>{t.liveCall.answerVideoBtn}</span>
             </Button>
             <Button
               type="button"
@@ -1033,7 +1036,7 @@ export function LiveCallOverlay({
               className="h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-[10px] uppercase tracking-wider flex flex-col items-center justify-center gap-1 shadow-lg shadow-blue-600/30"
             >
               <PhoneCall className="h-5 w-5" />
-              <span>Answer Voice</span>
+              <span>{t.liveCall.answerVoiceBtn}</span>
             </Button>
             <Button
               type="button"
@@ -1045,7 +1048,7 @@ export function LiveCallOverlay({
               className="h-14 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-[10px] uppercase tracking-wider flex flex-col items-center justify-center gap-1 shadow-lg shadow-rose-600/30"
             >
               <PhoneOff className="h-5 w-5" />
-              <span>Decline</span>
+              <span>{t.liveCall.declineBtn}</span>
             </Button>
           </div>
         </div>
@@ -1095,8 +1098,8 @@ export function LiveCallOverlay({
               </p>
               <p className="text-[10px] font-mono text-emerald-400 font-bold truncate">
                 {!isAnsweredAndConnected
-                  ? 'Ringing • Waiting for answer...'
-                  : `${formatCallDuration(callElapsedSeconds)} • Connected`}
+                  ? t.liveCall.ringingWaitingShort
+                  : t.liveCall.connectedStatus.replace('{duration}', formatCallDuration(callElapsedSeconds))}
               </p>
             </div>
           </div>
@@ -1110,7 +1113,7 @@ export function LiveCallOverlay({
                   ? 'bg-rose-500/20 text-rose-400'
                   : 'bg-white/10 text-white hover:bg-white/20'
               )}
-              title={isMuted ? 'Unmute' : 'Mute'}
+              title={isMuted ? t.liveCall.unmuteBtn : t.liveCall.muteBtn}
             >
               {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
             </button>
@@ -1118,7 +1121,7 @@ export function LiveCallOverlay({
               type="button"
               onClick={() => setIsMinimized(false)}
               className="h-8 w-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
-              title="Expand Call Console"
+              title={t.liveCall.expandConsoleTooltip}
             >
               <Maximize2 className="h-4 w-4" />
             </button>
@@ -1126,7 +1129,7 @@ export function LiveCallOverlay({
               type="button"
               onClick={handleHangUp}
               className="h-8 w-8 rounded-lg bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center transition-colors cursor-pointer"
-              title="End Call"
+              title={t.liveCall.endCallBtn}
             >
               <PhoneOff className="h-4 w-4" />
             </button>
@@ -1165,8 +1168,8 @@ export function LiveCallOverlay({
             {callStatusBanner
               ? callStatusBanner
               : ringingElapsedSeconds < 3
-              ? 'Calling...'
-              : 'Ringing • Waiting for answer...'}
+              ? t.liveCall.callingStatus
+              : t.liveCall.ringingWaitingShort}
           </span>
 
           <div className="flex items-center gap-2">
@@ -1176,7 +1179,7 @@ export function LiveCallOverlay({
               size="sm"
               onClick={() => setIsRingtoneMuted((m) => !m)}
               className="h-9 rounded-xl bg-white/10 border-white/15 text-white hover:bg-white/20 text-xs font-bold px-3"
-              title={isRingtoneMuted ? 'Unmute Ringback Tone' : 'Mute Ringback Tone'}
+              title={isRingtoneMuted ? t.liveCall.unmuteRingtoneTooltip : t.liveCall.silenceRingtoneTooltip}
             >
               {isRingtoneMuted ? (
                 <VolumeX className="h-4 w-4 text-rose-400" />
@@ -1192,7 +1195,7 @@ export function LiveCallOverlay({
                 onClick={handleFlipCamera}
                 className="h-9 rounded-xl bg-white/10 border-white/15 text-white hover:bg-white/20 text-xs font-bold px-3"
               >
-                <SwitchCamera className="h-4 w-4 mr-1.5" /> Flip Cam
+                <SwitchCamera className="h-4 w-4 mr-1.5" /> {t.liveCall.flipCamBtn}
               </Button>
             )}
             <Button
@@ -1203,7 +1206,7 @@ export function LiveCallOverlay({
               className="h-9 rounded-xl bg-white/10 border-white/15 text-white hover:bg-white/20 text-xs font-bold px-3"
             >
               <Minimize2 className="h-4 w-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">Minimize</span>
+              <span className="hidden sm:inline">{t.liveCall.minimizeBtn}</span>
             </Button>
           </div>
         </div>
@@ -1232,14 +1235,14 @@ export function LiveCallOverlay({
             <p className="text-xs sm:text-sm font-semibold text-emerald-400">
               {callStatusBanner
                 ? callStatusBanner
-                : `Ringing ${activeCall.conversationName} • Waiting for them to pick up...`}
+                : t.liveCall.ringingPersonWaiting.replace('{name}', activeCall.conversationName || '')}
             </p>
             <p className="text-[11px] text-slate-400">
               {hasLocalVideoTrack
-                ? 'Your phone/device camera preview is live'
+                ? t.liveCall.cameraPreviewLive
                 : hasLocalAudioTrack
-                ? 'Your microphone is ready'
-                : 'Connecting your hardware camera & microphone...'}
+                ? t.liveCall.micReady
+                : t.liveCall.connectingHardware}
             </p>
           </div>
 
@@ -1254,7 +1257,7 @@ export function LiveCallOverlay({
                 onClick={() => startLocalMedia(true, isMuted, cameraFacingMode)}
                 className="h-10 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs uppercase tracking-wider"
               >
-                <Camera className="h-4 w-4 mr-1.5" /> Tap to Enable Phone Camera & Mic
+                <Camera className="h-4 w-4 mr-1.5" /> {t.liveCall.tapEnableCameraMicBtn}
               </Button>
             </div>
           )}
@@ -1273,7 +1276,7 @@ export function LiveCallOverlay({
             )}
           >
             {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-            <span>{isMuted ? 'Unmute' : 'Mute'}</span>
+            <span>{isMuted ? t.liveCall.unmuteBtn : t.liveCall.muteBtn}</span>
           </Button>
 
           <Button
@@ -1287,7 +1290,7 @@ export function LiveCallOverlay({
             )}
           >
             {isCameraOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
-            <span>{isCameraOn ? 'Cam On' : 'Cam Off'}</span>
+            <span>{isCameraOn ? t.liveCall.camOnBtn : t.liveCall.camOffBtn}</span>
           </Button>
 
           <Button
@@ -1297,7 +1300,7 @@ export function LiveCallOverlay({
             className="h-13 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-[10px] sm:text-xs uppercase tracking-wider flex flex-col items-center justify-center gap-1 shadow-xl shadow-rose-600/30"
           >
             <PhoneOff className="h-4 w-4" />
-            <span>Cancel Call</span>
+            <span>{t.liveCall.cancelCallBtn}</span>
           </Button>
         </div>
       </div>
@@ -1333,20 +1336,22 @@ export function LiveCallOverlay({
               </span>
               {hasLocalAudioTrack && !isMuted && (
                 <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[9px] font-black uppercase tracking-widest">
-                  Mic Live
+                  {t.liveCall.micLiveBadge}
                 </span>
               )}
               {rtcConnected && (
                 <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-black uppercase tracking-widest">
-                  HD Linked
+                  {t.liveCall.hdLinkedBadge}
                 </span>
               )}
             </div>
             <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">
-              {participantsList.length}{' '}
-              {participantsList.length === 1 ? 'Participant' : 'Participants'} Connected
+              {(participantsList.length === 1
+                ? t.liveCall.participantsConnectedSingle
+                : t.liveCall.participantsConnectedPlural
+              ).replace('{count}', String(participantsList.length))}
               {activeCall.screenSharerName
-                ? ` • ${activeCall.screenSharerName} sharing screen`
+                ? t.liveCall.sharingScreenSuffix.replace('{name}', activeCall.screenSharerName)
                 : ''}
             </p>
           </div>
@@ -1360,10 +1365,10 @@ export function LiveCallOverlay({
               size="sm"
               onClick={handleFlipCamera}
               className="h-8 sm:h-9 rounded-xl bg-white/5 border-white/15 text-white hover:bg-white/15 text-[10px] sm:text-xs font-bold px-2.5"
-              title="Switch Front / Rear Camera (Phone & Tablet)"
+              title={t.liveCall.flipCamBtn}
             >
               <SwitchCamera className="h-3.5 w-3.5 sm:mr-1.5" />
-              <span className="hidden sm:inline">Flip Cam</span>
+              <span className="hidden sm:inline">{t.liveCall.flipCamBtn}</span>
             </Button>
           )}
           <Button
@@ -1374,7 +1379,7 @@ export function LiveCallOverlay({
             className="h-8 sm:h-9 rounded-xl bg-white/5 border-white/15 text-white hover:bg-white/15 text-[10px] sm:text-xs font-bold px-2.5 sm:px-3"
           >
             <Minimize2 className="h-3.5 w-3.5 sm:mr-1.5" />
-            <span className="hidden sm:inline">Minimize</span>
+            <span className="hidden sm:inline">{t.liveCall.minimizeBtn}</span>
           </Button>
         </div>
       </div>
@@ -1388,8 +1393,8 @@ export function LiveCallOverlay({
               <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-wider text-indigo-300">
                 <MonitorUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-indigo-400 animate-pulse" />
                 {isScreenSharing
-                  ? 'You are sharing your screen'
-                  : `${activeCall.screenSharerName || 'Official'}'s Shared Screen`}
+                  ? t.liveCall.youSharingScreen
+                  : t.liveCall.otherSharingScreen.replace('{name}', activeCall.screenSharerName || t.header.officer)}
               </span>
             </div>
 
@@ -1408,12 +1413,12 @@ export function LiveCallOverlay({
                     <MonitorUp className="h-6 w-6 sm:h-8 sm:w-8" />
                   </div>
                   <p className="text-xs sm:text-sm font-black text-white uppercase tracking-wider">
-                    Live Bureau Workspace Screen Stream
+                    {t.liveCall.liveWorkspaceStreamTitle}
                   </p>
                   <p className="text-[11px] sm:text-xs text-slate-400 leading-relaxed">
                     {isScreenSharing
-                      ? 'Your active Fayda Bureau workspace is being broadcast to all call participants.'
-                      : `Viewing ${activeCall.screenSharerName || 'Official'}'s live screen presentation.`}
+                      ? t.liveCall.youSharingDesc
+                      : t.liveCall.otherSharingDesc.replace('{name}', activeCall.screenSharerName || t.header.officer)}
                   </p>
                 </div>
               )}
@@ -1479,11 +1484,11 @@ export function LiveCallOverlay({
                           onClick={() => startLocalMedia(true, isMuted, cameraFacingMode)}
                           className="mt-3 h-8 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider"
                         >
-                          <Camera className="h-3.5 w-3.5 mr-1.5" /> Tap to Enable Phone Camera
+                          <Camera className="h-3.5 w-3.5 mr-1.5" /> {t.liveCall.tapEnableCameraBtn}
                         </Button>
                       ) : (
                         <span className="mt-2.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] sm:text-[10px] font-bold">
-                          Connecting Remote Video...
+                          {t.liveCall.connectingRemoteVideo}
                         </span>
                       )}
                     </div>
@@ -1513,12 +1518,12 @@ export function LiveCallOverlay({
                       <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
                       <span>
                         {mutedState
-                          ? 'Microphone Muted'
+                          ? t.liveCall.micMutedStatus
                           : isMe && hasLocalAudioTrack
-                          ? 'Real Voice Mic Active'
+                          ? t.liveCall.voiceMicActiveStatus
                           : !isMe && hasRemoteAudioTrack
-                          ? 'Live Remote Voice'
-                          : 'Voice Channel Connected'}
+                          ? t.liveCall.liveRemoteVoiceStatus
+                          : t.liveCall.voiceChannelConnectedStatus}
                       </span>
                     </div>
                   </div>
@@ -1528,11 +1533,11 @@ export function LiveCallOverlay({
                 <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-slate-950/80 backdrop-blur-md border border-white/10 text-white">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="text-[11px] sm:text-xs font-black truncate">
-                      {participant.name} {isMe ? '(You)' : ''}
+                      {participant.name} {isMe ? t.liveCall.youSuffix : ''}
                     </span>
                     {participant.isScreenSharing && (
                       <span className="px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-300 text-[8px] sm:text-[9px] font-black uppercase shrink-0">
-                        Screen
+                        {t.liveCall.screenBadge}
                       </span>
                     )}
                   </div>
@@ -1540,7 +1545,6 @@ export function LiveCallOverlay({
                     {isMe && !mutedState && hasLocalAudioTrack && (
                       <div
                         className="flex items-end gap-0.5 h-3.5"
-                        title="Live Microphone Voice Level"
                       >
                         {[15, 35, 60, 80].map((thresh, i) => (
                           <span
@@ -1581,7 +1585,7 @@ export function LiveCallOverlay({
             onClick={() => startLocalMedia(true, isMuted, cameraFacingMode)}
             className="h-7 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white shrink-0"
           >
-            <RefreshCw className="h-3 w-3 mr-1" /> Allow Camera & Mic
+            <RefreshCw className="h-3 w-3 mr-1" /> {t.liveCall.allowCameraMicBtn}
           </Button>
         </div>
       )}
@@ -1599,7 +1603,7 @@ export function LiveCallOverlay({
           )}
         >
           {isMuted ? <MicOff className="h-4 w-4 shrink-0" /> : <Mic className="h-4 w-4 shrink-0" />}
-          <span className="truncate">{isMuted ? 'Unmute' : 'Mute'}</span>
+          <span className="truncate">{isMuted ? t.liveCall.unmuteBtn : t.liveCall.muteBtn}</span>
         </Button>
 
         <Button
@@ -1617,7 +1621,7 @@ export function LiveCallOverlay({
           ) : (
             <VideoOff className="h-4 w-4 shrink-0" />
           )}
-          <span className="truncate">{isCameraOn ? 'Cam On' : 'Cam Off'}</span>
+          <span className="truncate">{isCameraOn ? t.liveCall.camOnBtn : t.liveCall.camOffBtn}</span>
         </Button>
 
         <Button
@@ -1635,7 +1639,7 @@ export function LiveCallOverlay({
           ) : (
             <MonitorUp className="h-4 w-4 shrink-0" />
           )}
-          <span className="truncate">{isScreenSharing ? 'Stop' : 'Screen'}</span>
+          <span className="truncate">{isScreenSharing ? t.liveCall.stopScreenBtn : t.liveCall.shareScreenBtn}</span>
         </Button>
 
         <Button
@@ -1645,7 +1649,7 @@ export function LiveCallOverlay({
           className="h-12 sm:h-12 px-2 sm:px-6 rounded-xl sm:rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-[10px] sm:text-xs uppercase tracking-wider flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 shadow-xl shadow-rose-600/30"
         >
           <PhoneOff className="h-4 w-4 shrink-0" />
-          <span className="truncate">End Call</span>
+          <span className="truncate">{t.liveCall.endCallBtn}</span>
         </Button>
       </div>
     </div>

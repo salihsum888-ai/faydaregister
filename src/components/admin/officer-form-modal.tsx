@@ -40,20 +40,8 @@ import { setDocumentNonBlocking, updateDocumentNonBlocking, deleteDocumentNonBlo
 import { UserProfile } from '@/lib/types';
 import { logAuditAction } from '@/lib/audit';
 import { VerificationAnimation } from '@/components/auth/verification-animation';
-
-const formSchema = z.object({
-  fullName: z.string().min(2, "Full name must be at least 2 characters"),
-  email: z.string().email("Invalid email address"),
-  role: z.enum(['reviewer', 'admin']),
-  password: z.string().optional().refine((val) => !val || val.length >= 8, {
-    message: "Password must be at least 8 characters",
-  }),
-  region: z.string().min(1, "Region is required"),
-  cluster: z.string().min(1, "Cluster is required"),
-  profilePhoto: z.string().optional(),
-});
-
-type FormValues = z.infer<typeof formSchema>;
+import { useTranslation } from '@/i18n/language-provider';
+import { useMemo } from 'react';
 
 interface OfficerFormModalProps {
   mode?: 'add' | 'edit';
@@ -62,12 +50,34 @@ interface OfficerFormModalProps {
 }
 
 export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerFormModalProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [verifiedData, setVerifiedData] = useState<{ fullName: string; role: string } | null>(null);
   const { toast } = useToast();
   const db = useFirestore();
   const { user: currentUser } = useUser();
+
+  const formSchema = useMemo(
+    () =>
+      z.object({
+        fullName: z.string().min(2, t.officerModal.valNameMin),
+        email: z.string().email(t.officerModal.valEmail),
+        role: z.enum(['reviewer', 'admin']),
+        password: z
+          .string()
+          .optional()
+          .refine((val) => !val || val.length >= 8, {
+            message: t.officerModal.valPassMin,
+          }),
+        region: z.string().min(1, t.officerModal.valRegionReq),
+        cluster: z.string().min(1, t.officerModal.valClusterReq),
+        profilePhoto: z.string().optional(),
+      }),
+    [t]
+  );
+
+  type FormValues = z.infer<typeof formSchema>;
 
   const userProfileRef = useMemoFirebase(() => {
     if (!db || !currentUser?.uid) return null;
@@ -122,7 +132,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
     try {
       if (mode === 'add') {
         if (!values.password) {
-          toast({ title: "Error", description: "Password is required for new registration.", variant: "destructive" });
+          toast({ title: t.officerModal.toastPassReqTitle, description: t.officerModal.toastPassReqDesc, variant: "destructive" });
           setIsSubmitting(false);
           return;
         }
@@ -164,8 +174,8 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
           );
 
           toast({
-            title: "Officer Registered",
-            description: `Success: ${values.fullName} has been granted access. MFA setup required on first login.`,
+            title: t.officerModal.toastAddedTitle,
+            description: t.officerModal.toastAddedDesc.replace('{name}', values.fullName),
           });
         } finally {
           await deleteApp(secondaryApp).catch(() => {});
@@ -198,14 +208,14 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
         );
 
         toast({
-          title: "Record Synchronized",
-          description: `Bureau record for ${values.fullName} has been updated.`,
+          title: t.officerModal.toastUpdatedTitle,
+          description: t.officerModal.toastUpdatedDesc.replace('{name}', values.fullName),
         });
       }
 
       setVerifiedData({
         fullName: values.fullName,
-        role: values.role === 'admin' ? 'Bureau Administrator' : 'Field Officer',
+        role: values.role === 'admin' ? t.officerModal.roleAdminLabel : t.officerModal.roleOfficerLabel,
       });
       setTimeout(() => {
         setOpen(false);
@@ -214,8 +224,8 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
       }, 1450);
     } catch (error: any) {
       toast({
-        title: "Operation Failed",
-        description: error.message || "An error occurred during account modification.",
+        title: t.officerModal.toastErrorTitle,
+        description: error.message || t.officerModal.toastErrorDesc,
         variant: "destructive",
       });
     } finally {
@@ -228,7 +238,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
       <DialogTrigger asChild>
         {trigger || (
           <Button className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-black text-[10px] uppercase tracking-widest px-6 h-11 rounded-xl shadow-xl shadow-primary/10">
-            <UserPlus className="mr-2 h-4 w-4" /> Register Officer
+            <UserPlus className="mr-2 h-4 w-4" /> {t.officerModal.registerBtn}
           </Button>
         )}
       </DialogTrigger>
@@ -236,7 +246,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
         <DialogHeader className="p-6 sm:p-8 border-b border-border bg-muted/30">
           <DialogTitle className="text-xl font-black text-foreground flex items-center gap-3 uppercase tracking-tighter">
             {mode === 'add' ? <UserPlus className="h-6 w-6 text-primary" /> : <Edit2 className="h-6 w-6 text-primary" />}
-            {mode === 'add' ? 'Bureau Registration' : 'Update Profile'}
+            {mode === 'add' ? t.officerModal.titleAdd : t.officerModal.titleEdit}
           </DialogTitle>
         </DialogHeader>
         
@@ -244,11 +254,11 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
           <div className="bg-card p-6">
             <VerificationAnimation
               variant="provisioned"
-              title={mode === 'add' ? 'Officer Authenticated & Provisioned' : 'Credentials Verified & Updated'}
+              title={mode === 'add' ? t.officerModal.animTitleAdd : t.officerModal.animTitleEdit}
               subtitle={
                 mode === 'add'
-                  ? 'Account credentials verified. Mandatory Google Authenticator MFA will activate on initial sign-in.'
-                  : 'Updated clearance parameters and officer registry profile verified.'
+                  ? t.officerModal.animSubtitleAdd
+                  : t.officerModal.animSubtitleEdit
               }
               userName={verifiedData.fullName}
               userRole={verifiedData.role}
@@ -265,11 +275,11 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
                 name="fullName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Full Name</FormLabel>
+                    <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.officerModal.fullNameLabel}</FormLabel>
                     <FormControl>
                       <div className="relative group">
                         <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
-                        <Input placeholder="Official Name" {...field} className="pl-10 h-12 bg-background border-border rounded-xl" disabled={isSubmitting} />
+                        <Input placeholder={t.officerModal.fullNamePlaceholder} {...field} className="pl-10 h-12 bg-background border-border rounded-xl" disabled={isSubmitting} />
                       </div>
                     </FormControl>
                     <FormMessage className="text-[10px]" />
@@ -281,11 +291,11 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Email Terminal</FormLabel>
+                    <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.officerModal.emailLabel}</FormLabel>
                     <FormControl>
                       <div className="relative group">
                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
-                        <Input type="email" placeholder="official@bureau.gov" {...field} className="pl-10 h-12 bg-background border-border rounded-xl" disabled={isSubmitting || mode === 'edit'} />
+                        <Input type="email" placeholder={t.officerModal.emailPlaceholder} {...field} className="pl-10 h-12 bg-background border-border rounded-xl" disabled={isSubmitting || mode === 'edit'} />
                       </div>
                     </FormControl>
                     <FormMessage className="text-[10px]" />
@@ -300,11 +310,11 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
                 name="region"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Region</FormLabel>
+                    <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.officerModal.regionLabel}</FormLabel>
                     <FormControl>
                       <div className="relative group">
                         <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
-                        <Input placeholder="e.g. Oromia" {...field} className="pl-10 h-12 bg-background border-border rounded-xl" disabled={isSubmitting} />
+                        <Input placeholder={t.officerModal.regionPlaceholder} {...field} className="pl-10 h-12 bg-background border-border rounded-xl" disabled={isSubmitting} />
                       </div>
                     </FormControl>
                     <FormMessage className="text-[10px]" />
@@ -316,11 +326,11 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
                 name="cluster"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Cluster</FormLabel>
+                    <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.officerModal.clusterLabel}</FormLabel>
                     <FormControl>
                       <div className="relative group">
                         <Layers className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
-                        <Input placeholder="e.g. Sector A" {...field} className="pl-10 h-12 bg-background border-border rounded-xl" disabled={isSubmitting} />
+                        <Input placeholder={t.officerModal.clusterPlaceholder} {...field} className="pl-10 h-12 bg-background border-border rounded-xl" disabled={isSubmitting} />
                       </div>
                     </FormControl>
                     <FormMessage className="text-[10px]" />
@@ -335,16 +345,16 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
                 name="role"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Official Role</FormLabel>
+                    <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.officerModal.roleLabel}</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
                       <FormControl>
                         <SelectTrigger className="h-12 bg-background border-border rounded-xl font-bold text-xs">
-                          <SelectValue placeholder="Select role" />
+                          <SelectValue placeholder={t.officerModal.rolePlaceholder} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="reviewer" className="text-xs font-bold">Field Officer (Reviewer)</SelectItem>
-                        <SelectItem value="admin" className="text-xs font-bold">Bureau Administrator</SelectItem>
+                        <SelectItem value="reviewer" className="text-xs font-bold">{t.officerModal.roleReviewerItem}</SelectItem>
+                        <SelectItem value="admin" className="text-xs font-bold">{t.officerModal.roleAdminItem}</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage className="text-[10px]" />
@@ -357,9 +367,9 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Temp Access Key</FormLabel>
+                      <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.officerModal.passwordLabel}</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="Min 8 chars" {...field} className="h-12 bg-background border-border rounded-xl" disabled={isSubmitting} />
+                        <Input type="password" placeholder={t.officerModal.passwordPlaceholder} {...field} className="h-12 bg-background border-border rounded-xl" disabled={isSubmitting} />
                       </FormControl>
                       <FormMessage className="text-[10px]" />
                     </FormItem>
@@ -373,7 +383,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
               name="profilePhoto"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Badge Image Source (URL)</FormLabel>
+                  <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.officerModal.photoLabel}</FormLabel>
                   <FormControl>
                     <div className="relative group">
                       <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-focus-within:text-primary transition-colors" />
@@ -388,13 +398,13 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
             <div className="pt-6 flex flex-col gap-3">
               <Button type="submit" className="w-full h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-primary/10 transition-all active:scale-[0.98]" disabled={isSubmitting}>
                 {isSubmitting ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Transmitting...</>
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t.officerModal.submittingBtn}</>
                 ) : (
-                  <><ShieldCheck className="mr-2 h-4 w-4" /> {mode === 'add' ? 'Initialize Registration' : 'Confirm Updates'}</>
+                  <><ShieldCheck className="mr-2 h-4 w-4" /> {mode === 'add' ? t.officerModal.submitAddBtn : t.officerModal.submitEditBtn}</>
                 )}
               </Button>
               <Button type="button" variant="ghost" onClick={() => setOpen(false)} className="h-12 text-muted-foreground font-bold uppercase text-[10px] tracking-widest" disabled={isSubmitting}>
-                Cancel Operation
+                {t.officerModal.cancelBtn}
               </Button>
             </div>
           </form>
@@ -404,3 +414,4 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
     </Dialog>
   );
 }
+

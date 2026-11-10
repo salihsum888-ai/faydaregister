@@ -30,23 +30,30 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useState } from 'react';
-
-const formSchema = z.object({
-  applicantName: z.string().min(2, "Name must be at least 2 characters"),
-  id: z.string().regex(/^\d{29}$/, "Registration ID must be exactly 29 digits"),
-  submissionDate: z.string().min(1, "Date is required"),
-  phone: z.string().regex(/^\d+$/, "Phone must contain only digits"),
-  status: z.enum(['Processed', 'Pending Review', 'Rejected', 'Processing', 'Failed']),
-  officer: z.string().optional(),
-  location: z.string().min(1, "Location is required"),
-  remarks: z.string().optional(),
-});
-
-type FormValues = z.infer<typeof formSchema>;
+import { useState, useMemo } from 'react';
+import { useTranslation } from '@/i18n/language-provider';
 
 export function AddRegistrationModal() {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+
+  const formSchema = useMemo(
+    () =>
+      z.object({
+        applicantName: z.string().min(2, t.registrationModal.valNameMin),
+        id: z.string().regex(/^\d{29}$/, t.registrationModal.valRidExact),
+        submissionDate: z.string().min(1, t.registrationModal.valDateReq),
+        phone: z.string().regex(/^\d+$/, t.registrationModal.valPhoneDigits),
+        status: z.enum(['Processed', 'Pending Review', 'Rejected', 'Processing', 'Failed']),
+        officer: z.string().optional(),
+        location: z.string().min(1, t.registrationModal.valLocationReq),
+        remarks: z.string().optional(),
+      }),
+    [t]
+  );
+
+  type FormValues = z.infer<typeof formSchema>;
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -63,7 +70,6 @@ export function AddRegistrationModal() {
 
   function onSubmit(values: FormValues) {
     console.log(values);
-    // In a real app, we would call a server action here to save to Firebase
     setOpen(false);
     form.reset();
   }
@@ -72,12 +78,12 @@ export function AddRegistrationModal() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button className="bg-[#0f172a] hover:bg-[#1e293b] text-white font-semibold shadow-sm">
-          Add Registration
+          {t.registrationModal.addRegistrationBtn}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden rounded-xl">
         <DialogHeader className="p-5 border-b bg-slate-50/50">
-          <DialogTitle className="text-lg font-bold text-slate-800">New Registration</DialogTitle>
+          <DialogTitle className="text-lg font-bold text-slate-800">{t.registrationModal.newModalTitle}</DialogTitle>
         </DialogHeader>
         
         <Form {...form}>
@@ -88,9 +94,9 @@ export function AddRegistrationModal() {
                 name="applicantName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Applicant Name *</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500">{t.registrationModal.fullNameLabel}</FormLabel>
                     <FormControl>
-                      <Input placeholder="Full name" {...field} className="h-9 text-sm" />
+                      <Input placeholder={t.registrationModal.fullNamePlaceholder} {...field} className="h-9 text-sm" />
                     </FormControl>
                     <FormMessage className="text-[9px]" />
                   </FormItem>
@@ -101,9 +107,11 @@ export function AddRegistrationModal() {
                 name="id"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Reg ID (29 Digits) *</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500">
+                      {t.registrationModal.ridLabel.replace('{count}', String((field.value || '').length))}
+                    </FormLabel>
                     <FormControl>
-                      <Input placeholder="29-digit ID" {...field} className="h-9 text-sm" maxLength={29} />
+                      <Input placeholder={t.registrationModal.ridPlaceholder} {...field} className="h-9 text-sm" maxLength={29} />
                     </FormControl>
                     <FormMessage className="text-[9px]" />
                   </FormItem>
@@ -117,7 +125,7 @@ export function AddRegistrationModal() {
                 name="submissionDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Date *</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500">{t.registrationModal.dateLabel}</FormLabel>
                     <FormControl>
                       <Input type="date" {...field} className="h-9 text-sm" />
                     </FormControl>
@@ -130,9 +138,9 @@ export function AddRegistrationModal() {
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Phone *</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500">{t.registrationModal.phoneLabel}</FormLabel>
                     <FormControl>
-                      <Input placeholder="Digits only" {...field} className="h-9 text-sm" />
+                      <Input placeholder={t.registrationModal.phonePlaceholder} {...field} className="h-9 text-sm" />
                     </FormControl>
                     <FormMessage className="text-[9px]" />
                   </FormItem>
@@ -146,19 +154,19 @@ export function AddRegistrationModal() {
                 name="status"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Status *</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500">{t.registrationModal.statusLabel}</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger className="h-9 text-sm">
-                          <SelectValue placeholder="Select" />
+                          <SelectValue placeholder={t.registrationModal.selectStatusPlaceholder} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="Pending Review">Pending Review</SelectItem>
-                        <SelectItem value="Processed">Processed</SelectItem>
-                        <SelectItem value="Processing">Processing</SelectItem>
-                        <SelectItem value="Rejected">Rejected</SelectItem>
-                        <SelectItem value="Failed">Failed</SelectItem>
+                        <SelectItem value="Pending Review">{t.common.status['Pending Review']}</SelectItem>
+                        <SelectItem value="Processed">{t.common.status.Processed}</SelectItem>
+                        <SelectItem value="Processing">{t.common.status.Processing}</SelectItem>
+                        <SelectItem value="Rejected">{t.common.status.Rejected}</SelectItem>
+                        <SelectItem value="Failed">{t.common.status.Failed}</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage className="text-[9px]" />
@@ -170,9 +178,9 @@ export function AddRegistrationModal() {
                 name="officer"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Officer</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase text-slate-500">{t.registrationModal.officerLabel}</FormLabel>
                     <FormControl>
-                      <Input placeholder="Officer name" {...field} className="h-9 text-sm" />
+                      <Input placeholder={t.registrationModal.officerPlaceholder} {...field} className="h-9 text-sm" />
                     </FormControl>
                     <FormMessage className="text-[9px]" />
                   </FormItem>
@@ -185,9 +193,9 @@ export function AddRegistrationModal() {
               name="location"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Location *</FormLabel>
+                  <FormLabel className="text-[10px] font-bold uppercase text-slate-500">{t.registrationModal.locationLabel} *</FormLabel>
                   <FormControl>
-                    <Input placeholder="City or branch location" {...field} className="h-9 text-sm" />
+                    <Input placeholder={t.registrationModal.locationPlaceholder} {...field} className="h-9 text-sm" />
                   </FormControl>
                   <FormMessage className="text-[9px]" />
                 </FormItem>
@@ -199,10 +207,10 @@ export function AddRegistrationModal() {
               name="remarks"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Remarks</FormLabel>
+                  <FormLabel className="text-[10px] font-bold uppercase text-slate-500">{t.registrationModal.remarksLabel}</FormLabel>
                   <FormControl>
                     <Textarea 
-                      placeholder="Optional notes" 
+                      placeholder={t.registrationModal.remarksPlaceholder} 
                       className="resize-none min-h-[70px] text-sm" 
                       {...field} 
                     />
@@ -214,10 +222,10 @@ export function AddRegistrationModal() {
 
             <div className="flex justify-end gap-3 pt-3">
               <Button type="button" variant="outline" onClick={() => setOpen(false)} className="h-9 px-6 text-sm">
-                Cancel
+                {t.registrationModal.discardBtn}
               </Button>
               <Button type="submit" className="bg-[#0f172a] hover:bg-[#1e293b] h-9 px-6 text-sm">
-                Save
+                {t.common.save}
               </Button>
             </div>
           </form>

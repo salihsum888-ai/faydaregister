@@ -46,6 +46,7 @@ import { collection, query, limit, doc } from 'firebase/firestore';
 import { DailyReport, Registration, UserProfile } from '@/lib/types';
 import { logAuditAction } from '@/lib/audit';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from '@/i18n/language-provider';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -58,6 +59,7 @@ export default function LeaderboardPage() {
   const { user } = useUser();
   const db = useFirestore();
   const { toast } = useToast();
+  const { t, formatNumber } = useTranslation();
 
   const [rankingMode, setRankingMode] = useState<RankingMode>('TELECOM_INTAKE');
   const [periodScope, setPeriodScope] = useState<PeriodScope>('ALL_TIME');
@@ -497,16 +499,16 @@ export default function LeaderboardPage() {
             </div>
             <div>
               <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-foreground font-headline uppercase leading-none">
-                Official Tiers
+                {t.leaderboardPage.titleMain} {t.leaderboardPage.titleHighlight}
               </h1>
               <p className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-widest mt-1">
-                Personnel Ranking Matrix •{' '}
+                {t.leaderboardPage.badge} •{' '}
                 {periodScope === 'ALL_TIME'
-                  ? 'All-Time Cumulative'
+                  ? t.leaderboardPage.periodAll
                   : periodScope === 'THIS_MONTH'
                   ? format(new Date(), 'MMMM yyyy')
                   : periodScope === 'THIS_WEEK'
-                  ? 'Current Week'
+                  ? t.leaderboardPage.periodWeek
                   : format(new Date(selectedDate), 'MMMM dd, yyyy')}
               </p>
             </div>
@@ -526,7 +528,7 @@ export default function LeaderboardPage() {
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              Telecom Intake
+              {t.leaderboardPage.viewTotal}
             </button>
             <button
               type="button"
@@ -538,7 +540,7 @@ export default function LeaderboardPage() {
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              RID Accuracy
+              {t.leaderboardPage.viewQuality}
             </button>
           </div>
 
@@ -546,20 +548,20 @@ export default function LeaderboardPage() {
           <Select value={periodScope} onValueChange={(v) => setPeriodScope(v as PeriodScope)}>
             <SelectTrigger className="h-10 w-[145px] rounded-xl text-[10px] font-black uppercase tracking-widest glass-subpanel">
               <Calendar className="h-3.5 w-3.5 mr-1.5 text-primary shrink-0" />
-              <SelectValue placeholder="Period" />
+              <SelectValue placeholder={t.leaderboardPage.periodAll} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL_TIME" className="text-xs font-bold">
-                All Time
+                {t.leaderboardPage.periodAll}
               </SelectItem>
               <SelectItem value="THIS_MONTH" className="text-xs font-bold">
-                This Month
+                {t.leaderboardPage.periodMonth}
               </SelectItem>
               <SelectItem value="THIS_WEEK" className="text-xs font-bold">
-                This Week
+                {t.leaderboardPage.periodWeek}
               </SelectItem>
               <SelectItem value="EXACT_DATE" className="text-xs font-bold">
-                Specific Date
+                {t.leaderboardPage.periodToday}
               </SelectItem>
             </SelectContent>
           </Select>
@@ -577,11 +579,11 @@ export default function LeaderboardPage() {
           <Select value={clusterFilter} onValueChange={setClusterFilter}>
             <SelectTrigger className="h-10 w-[145px] rounded-xl text-[10px] font-black uppercase tracking-widest glass-subpanel">
               <Filter className="h-3.5 w-3.5 mr-1.5 text-primary shrink-0" />
-              <SelectValue placeholder="All Clusters" />
+              <SelectValue placeholder={t.common.all} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL" className="text-xs font-bold">
-                All Clusters
+                {t.common.all}
               </SelectItem>
               {uniqueClusters.map((c) => (
                 <SelectItem key={c} value={c} className="text-xs font-bold">
@@ -740,32 +742,32 @@ export default function LeaderboardPage() {
       {/* Exact 2-Decimal KPI Summary Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <SummaryCard
-          label={rankingMode === 'TELECOM_INTAKE' ? 'Bureau Velocity' : 'Total 29-Digit RIDs'}
-          value={summary.totalRegs.toLocaleString()}
-          sub={`${filteredLeaderboard.length} Active Units Ranked`}
+          label={t.leaderboardPage.kpiAggregateTitle}
+          value={formatNumber(summary.totalRegs)}
+          sub={t.leaderboardPage.kpiAggregateSub}
           icon={Activity}
           color="text-primary"
         />
         <SummaryCard
-          label="Exact Average Output"
+          label={t.leaderboardPage.kpiLeadingVelocityTitle}
           value={summary.avg}
-          sub="Records per ranked officer"
+          sub={t.leaderboardPage.kpiLeadingVelocitySub}
           icon={ArrowUpRight}
           color="text-indigo-500"
         />
         {rankingMode === 'TELECOM_INTAKE' ? (
           <>
             <SummaryCard
-              label="Ethio Telecom Share"
+              label={t.leaderboardPage.kpiEthioShareTitle}
               value={`${summary.ethioShare}%`}
-              sub="Exact carrier share"
+              sub={t.leaderboardPage.colEthio}
               icon={Phone}
               color="text-emerald-500"
             />
             <SummaryCard
-              label="Safaricom Share"
+              label={t.leaderboardPage.kpiSafaricomShareTitle}
               value={`${summary.safaricomShare}%`}
-              sub="Exact carrier share"
+              sub={t.leaderboardPage.colSafaricom}
               icon={Smartphone}
               color="text-orange-500"
             />
@@ -773,16 +775,16 @@ export default function LeaderboardPage() {
         ) : (
           <>
             <SummaryCard
-              label="Bureau Success Rate"
+              label={t.leaderboardPage.kpiRidAccuracyTitle}
               value={`${summary.overallSuccessRate}%`}
-              sub="Exact Processed RID ratio"
+              sub={t.leaderboardPage.exactRidSuccessLabel}
               icon={CheckCircle2}
               color="text-emerald-500"
             />
             <SummaryCard
-              label="Bureau Rejection Rate"
+              label={t.leaderboardPage.colRejFailed}
               value={`${summary.overallRejectionRate}%`}
-              sub="Exact Rejected + Failed ratio"
+              sub={t.common.statusRejected}
               icon={XCircle}
               color="text-rose-500"
             />
@@ -796,7 +798,7 @@ export default function LeaderboardPage() {
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search officer name, cluster, or region..."
+              placeholder={t.leaderboardPage.searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 h-9 rounded-xl text-xs"
@@ -804,7 +806,7 @@ export default function LeaderboardPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-              Showing {filteredLeaderboard.length} Officials
+              {formatNumber(filteredLeaderboard.length)} {t.leaderboardPage.tableTitle}
             </span>
             {(searchQuery || clusterFilter !== 'ALL') && (
               <Button
@@ -816,7 +818,7 @@ export default function LeaderboardPage() {
                 }}
                 className="h-8 px-2.5 text-[10px] font-black uppercase tracking-widest"
               >
-                Reset
+                {t.common.reset}
               </Button>
             )}
           </div>
@@ -831,7 +833,7 @@ export default function LeaderboardPage() {
                   className="w-[100px] pl-6 sm:pl-8 cursor-pointer select-none"
                 >
                   <div className="flex items-center gap-1.5">
-                    <span>Rank</span>
+                    <span>{t.leaderboardPage.colRank}</span>
                     <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                   </div>
                 </TableHead>
@@ -840,12 +842,12 @@ export default function LeaderboardPage() {
                   className="cursor-pointer select-none"
                 >
                   <div className="flex items-center gap-1.5">
-                    <span>Official Identity</span>
+                    <span>{t.leaderboardPage.colOfficer}</span>
                     <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                   </div>
                 </TableHead>
                 <TableHead className="hidden md:table-cell">
-                  <span>Sector / Region</span>
+                  <span>{t.common.region}</span>
                 </TableHead>
                 {rankingMode === 'TELECOM_INTAKE' ? (
                   <>
@@ -854,7 +856,7 @@ export default function LeaderboardPage() {
                       className="hidden sm:table-cell cursor-pointer select-none"
                     >
                       <div className="flex items-center gap-1.5">
-                        <span>Ethio (Share %)</span>
+                        <span>{t.leaderboardPage.colEthio}</span>
                         <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                       </div>
                     </TableHead>
@@ -863,7 +865,7 @@ export default function LeaderboardPage() {
                       className="hidden sm:table-cell cursor-pointer select-none"
                     >
                       <div className="flex items-center gap-1.5">
-                        <span>Safaricom (Share %)</span>
+                        <span>{t.leaderboardPage.colSafaricom}</span>
                         <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                       </div>
                     </TableHead>
@@ -872,7 +874,7 @@ export default function LeaderboardPage() {
                       className="cursor-pointer select-none"
                     >
                       <div className="flex items-center gap-1.5">
-                        <span>Total Intake (Share)</span>
+                        <span>{t.leaderboardPage.colTotalShare}</span>
                         <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                       </div>
                     </TableHead>
@@ -884,7 +886,7 @@ export default function LeaderboardPage() {
                       className="hidden sm:table-cell cursor-pointer select-none"
                     >
                       <div className="flex items-center gap-1.5">
-                        <span>Processed / Total</span>
+                        <span>{t.common.statusProcessed} / {t.common.total}</span>
                         <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                       </div>
                     </TableHead>
@@ -893,7 +895,7 @@ export default function LeaderboardPage() {
                       className="cursor-pointer select-none"
                     >
                       <div className="flex items-center gap-1.5">
-                        <span>Exact Success Rate</span>
+                        <span>{t.leaderboardPage.colSuccessRate}</span>
                         <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                       </div>
                     </TableHead>
@@ -902,14 +904,14 @@ export default function LeaderboardPage() {
                       className="hidden sm:table-cell cursor-pointer select-none"
                     >
                       <div className="flex items-center gap-1.5">
-                        <span>Exact Rejection Rate</span>
+                        <span>{t.leaderboardPage.colRejFailed}</span>
                         <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                       </div>
                     </TableHead>
                   </>
                 )}
                 <TableHead className="pr-6 sm:pr-8 text-right">
-                  <span>Audit</span>
+                  <span>{t.leaderboardPage.colAction}</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -948,7 +950,7 @@ export default function LeaderboardPage() {
                           {perf.name}
                         </span>
                         <span className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
-                          <BadgeCheck className="h-3 w-3 text-[#14804a]" /> Verified Official
+                          <BadgeCheck className="h-3 w-3 text-[#14804a]" /> {t.common.officer}
                         </span>
                       </div>
                     </TableCell>
@@ -968,7 +970,7 @@ export default function LeaderboardPage() {
                         <TableCell className="hidden sm:table-cell">
                           <div className="flex flex-col">
                             <span className="text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 tabular-nums">
-                              {perf.ethio.toLocaleString()}
+                              {formatNumber(perf.ethio)}
                             </span>
                             <span className="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
                               {perf.ethioShare.toFixed(2)}%
@@ -978,7 +980,7 @@ export default function LeaderboardPage() {
                         <TableCell className="hidden sm:table-cell">
                           <div className="flex flex-col">
                             <span className="text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 tabular-nums">
-                              {perf.safaricom.toLocaleString()}
+                              {formatNumber(perf.safaricom)}
                             </span>
                             <span className="text-[10px] font-mono font-bold text-orange-600 dark:text-orange-400">
                               {perf.safaricomShare.toFixed(2)}%
@@ -988,7 +990,7 @@ export default function LeaderboardPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-[6px] bg-[#e6f6ef] text-[#14804a] dark:bg-emerald-500/15 dark:text-emerald-400 text-[12px] font-mono font-bold tabular-nums">
-                              {perf.registrations.toLocaleString()}
+                              {formatNumber(perf.registrations)}
                             </span>
                             <span className="text-[10px] font-mono font-bold text-muted-foreground">
                               ({perf.bureauTelecomShare.toFixed(2)}%)
@@ -1033,7 +1035,7 @@ export default function LeaderboardPage() {
                         className="h-8 px-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider"
                       >
                         <Link href={`/performance?officerId=${perf.officerId}`}>
-                          <Target className="h-3.5 w-3.5 mr-1 text-primary" /> Audit
+                          <Target className="h-3.5 w-3.5 mr-1 text-primary" /> {t.leaderboardPage.auditBtn}
                         </Link>
                       </Button>
                     </TableCell>
@@ -1046,10 +1048,10 @@ export default function LeaderboardPage() {
                       <Zap className="h-14 w-14 text-muted-foreground" />
                       <div className="space-y-1">
                         <p className="text-sm font-black uppercase tracking-[0.2em] text-foreground">
-                          Zero Activity Signals for Selected Scope
+                          {t.leaderboardPage.emptyTitle}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Switch Period Scope to &ldquo;All Time&rdquo; or &ldquo;This Month&rdquo; to inspect cumulative rankings.
+                          {t.leaderboardPage.emptySub}
                         </p>
                       </div>
                     </div>
@@ -1064,7 +1066,7 @@ export default function LeaderboardPage() {
       <div className="p-6 bg-primary/[0.03] border border-primary/10 rounded-[32px] flex items-center gap-6">
         <ShieldCheck className="h-8 w-8 text-primary shrink-0 opacity-40 hidden sm:block" />
         <p className="text-[10px] text-foreground font-bold uppercase leading-relaxed tracking-widest max-w-5xl text-center sm:text-left">
-          Performance Integrity Policy: This leaderboard computes exact 2-decimal percentages for Telecom Carrier Share, Bureau Share, 29-Digit RID Success Rate, and Rejection Rate. Click &ldquo;Audit&rdquo; on any official to open their dedicated Quality & Accuracy Audit workbench.
+          {t.leaderboardPage.policyNote}
         </p>
       </div>
     </div>

@@ -90,6 +90,7 @@ import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useTranslation } from '@/i18n/language-provider';
 
 interface InstitutionSummary {
   institutionName: string;
@@ -110,14 +111,6 @@ interface InstitutionSummary {
 type SortKey = 'applicantName' | 'institutionName' | 'id' | 'submissionDate' | 'status';
 type SortDirection = 'asc' | 'desc';
 
-const REJECTION_PRESETS = [
-  'Biometric Mismatch',
-  'Duplicate Registration (RID)',
-  'Incomplete Demographics',
-  'Packet Sync / Transmission Error',
-  'Unreadable Photo / Document',
-];
-
 const getRecordInstitutionName = (reg: Registration): string =>
   (reg.institutionName || reg.schoolName || '').trim();
 
@@ -129,6 +122,15 @@ export default function InstitutionsPage() {
   const db = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
+  const { t, formatDate, formatNumber } = useTranslation();
+
+  const REJECTION_PRESETS = [
+    t.statusCheck.presetBiometric,
+    t.statusCheck.presetDuplicate,
+    t.statusCheck.presetIncomplete,
+    t.statusCheck.presetPacketSync,
+    t.statusCheck.presetUnreadable,
+  ];
 
   const [selectedInstitution, setSelectedInstitution] = useState<string>('ALL');
   const [institutionSearch, setInstitutionSearch] = useState('');
@@ -217,11 +219,13 @@ export default function InstitutionsPage() {
       { merge: true }
     );
     toast({
-      title: 'Institution Target Quota Saved',
+      title: t.institutionsPage.toastQuotaSavedTitle,
       description:
         targetNum > 0
-          ? `Set enrollment target for ${quotaModalInstitution} to ${targetNum.toLocaleString()}.`
-          : `Cleared enrollment target for ${quotaModalInstitution}.`,
+          ? t.institutionsPage.toastQuotaSavedSetDesc
+              .replace('{name}', quotaModalInstitution)
+              .replace('{target}', formatNumber(targetNum))
+          : t.institutionsPage.toastQuotaSavedClearDesc.replace('{name}', quotaModalInstitution),
     });
     setQuotaModalInstitution(null);
   };
@@ -495,8 +499,8 @@ export default function InstitutionsPage() {
     setCopiedId(id);
     setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 2000);
     toast({
-      title: 'RID Copied',
-      description: `Registration ID ${id} copied to clipboard.`,
+      title: t.institutionsPage.toastRidCopiedTitle,
+      description: t.institutionsPage.toastRidCopiedDesc.replace('{id}', id),
     });
   };
 
@@ -562,15 +566,18 @@ export default function InstitutionsPage() {
       );
 
       toast({
-        title: 'Institution Updated',
-        description: `Updated ${matchingRegs.length} registration records and ${matchingReports.length} daily intake reports to "${trimmedTarget}".`,
+        title: t.institutionsPage.toastInstUpdatedTitle,
+        description: t.institutionsPage.toastInstUpdatedDesc
+          .replace('{regCount}', formatNumber(matchingRegs.length))
+          .replace('{repCount}', formatNumber(matchingReports.length))
+          .replace('{name}', trimmedTarget),
       });
       setRenameDialogOpen(false);
     } catch {
       toast({
         variant: 'destructive',
-        title: 'Update Failed',
-        description: 'Could not batch-update the institution name.',
+        title: t.institutionsPage.toastUpdateFailedTitle,
+        description: t.institutionsPage.toastUpdateFailedDesc,
       });
     } finally {
       setIsRenamingInstitution(false);
@@ -595,8 +602,8 @@ export default function InstitutionsPage() {
     if (!db || !user || !instName) {
       toast({
         variant: 'destructive',
-        title: 'Institution Name Required',
-        description: 'Please enter or select an institution name.',
+        title: t.institutionsPage.toastInstNameReqTitle,
+        description: t.institutionsPage.toastInstNameReqDesc,
       });
       return;
     }
@@ -608,8 +615,8 @@ export default function InstitutionsPage() {
     if (total <= 0) {
       toast({
         variant: 'destructive',
-        title: 'Invalid Intake Count',
-        description: 'Total Ethio + Safaricom intake must be greater than zero.',
+        title: t.institutionsPage.toastInvalidCountTitle,
+        description: t.institutionsPage.toastInvalidCountDesc,
       });
       return;
     }
@@ -647,8 +654,12 @@ export default function InstitutionsPage() {
       }
 
       toast({
-        title: 'Daily Institution Intake Saved',
-        description: `Recorded ${total} intake (${instPeople} under ${instName}) for ${dailyIntakeDate}.`,
+        title: t.institutionsPage.toastDailySavedTitle,
+        description: t.institutionsPage.toastDailySavedDesc
+          .replace('{total}', formatNumber(total))
+          .replace('{inst}', formatNumber(instPeople))
+          .replace('{name}', instName)
+          .replace('{date}', dailyIntakeDate),
       });
       setDailyIntakeDialogOpen(false);
     } finally {
@@ -693,8 +704,11 @@ export default function InstitutionsPage() {
     }
 
     toast({
-      title: `Status Updated to ${newStatus}`,
-      description: `${record.applicantName} (${getRecordInstitutionName(record)}) marked as ${newStatus}.`,
+      title: t.institutionsPage.toastStatusUpdatedTitle.replace('{status}', newStatus),
+      description: t.institutionsPage.toastStatusUpdatedDesc
+        .replace('{name}', record.applicantName)
+        .replace('{institution}', getRecordInstitutionName(record))
+        .replace('{status}', newStatus),
     });
 
     setTimeout(() => setIsUpdatingStatusId(null), 400);
@@ -731,8 +745,8 @@ export default function InstitutionsPage() {
     if (recordsToExport.length === 0 && dailyToExport.length === 0) {
       toast({
         variant: 'destructive',
-        title: 'No Records to Export',
-        description: 'There are no institution records matching the current selection.',
+        title: t.institutionsPage.toastNoRecordsTitle,
+        description: t.institutionsPage.toastNoRecordsDesc,
       });
       return;
     }
@@ -808,10 +822,11 @@ export default function InstitutionsPage() {
     }
 
     toast({
-      title: 'Excel Report Generated',
-      description: `Downloaded spreadsheet for ${
-        activeInstitution === 'ALL' ? 'all institutions' : activeInstitution
-      }.`,
+      title: t.institutionsPage.toastExcelTitle,
+      description: t.institutionsPage.toastExcelDesc.replace(
+        '{target}',
+        activeInstitution === 'ALL' ? t.institutionsPage.allInstitutionsCardTitle : activeInstitution
+      ),
     });
     setTimeout(() => setIsExporting(false), 600);
   };
@@ -837,8 +852,8 @@ export default function InstitutionsPage() {
     if (recordsToExport.length === 0 && dailyToExport.length === 0) {
       toast({
         variant: 'destructive',
-        title: 'No Records to Export',
-        description: 'There are no institution records matching the current selection.',
+        title: t.institutionsPage.toastNoRecordsTitle,
+        description: t.institutionsPage.toastNoRecordsDesc,
       });
       return;
     }
@@ -982,10 +997,11 @@ export default function InstitutionsPage() {
     }
 
     toast({
-      title: 'PDF Report Generated',
-      description: `Official PDF ledger saved for ${
-        activeInstitution === 'ALL' ? 'all institutions' : activeInstitution
-      }.`,
+      title: t.institutionsPage.toastPdfTitle,
+      description: t.institutionsPage.toastPdfDesc.replace(
+        '{target}',
+        activeInstitution === 'ALL' ? t.institutionsPage.allInstitutionsCardTitle : activeInstitution
+      ),
     });
     setTimeout(() => setIsExporting(false), 600);
   };
@@ -1006,8 +1022,10 @@ export default function InstitutionsPage() {
       );
       toast({
         variant: 'destructive',
-        title: 'Record Removed',
-        description: `${recordToDelete.applicantName} has been removed from ${instName}.`,
+        title: t.institutionsPage.toastRecordRemovedTitle,
+        description: t.institutionsPage.toastRecordRemovedDesc
+          .replace('{name}', recordToDelete.applicantName)
+          .replace('{institution}', instName),
       });
       setRecordToDelete(null);
     } finally {
@@ -1031,14 +1049,14 @@ export default function InstitutionsPage() {
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">
-              Institutional Enrollment Registry
+              {t.institutionsPage.eyebrow}
             </p>
           </div>
           <h1 className="text-4xl font-black tracking-tight text-foreground font-headline flex items-center gap-3">
-            Institutions
+            {t.institutionsPage.title}
           </h1>
           <p className="text-sm text-muted-foreground max-w-xl">
-            Browse registered institutions, inspect registrant records by institution name, log daily intake, verify processing queues, and generate official PDF and Excel reports.
+            {t.institutionsPage.subtitle}
           </p>
         </div>
 
@@ -1052,8 +1070,8 @@ export default function InstitutionsPage() {
               <Button className="h-10 px-4 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs shadow-lg shadow-primary/20">
                 <Plus className="mr-1.5 h-4 w-4" />
                 {selectedInstitution !== 'ALL'
-                  ? `Register at ${selectedInstitution}`
-                  : 'Register Under Institution'}
+                  ? t.institutionsPage.registerAtBtn.replace('{name}', selectedInstitution)
+                  : t.institutionsPage.registerUnderBtn}
               </Button>
             }
           />
@@ -1065,7 +1083,7 @@ export default function InstitutionsPage() {
             className="glass-subpanel h-10 px-3.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white/80 dark:hover:bg-white/10"
           >
             <Calendar className="mr-1.5 h-3.5 w-3.5 text-indigo-600" />
-            Log Daily Intake
+            {t.institutionsPage.logDailyIntakeBtn}
           </Button>
 
           {kpiStats.pending > 0 && (
@@ -1081,7 +1099,7 @@ export default function InstitutionsPage() {
               className="glass-subpanel h-10 px-3.5 rounded-xl text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
             >
               <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
-              Verify Queue ({kpiStats.pending})
+              {t.institutionsPage.verifyQueueBtn.replace('{count}', formatNumber(kpiStats.pending))}
             </Button>
           )}
 
@@ -1098,7 +1116,7 @@ export default function InstitutionsPage() {
             ) : (
               <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
             )}
-            Export Excel
+            {t.institutionsPage.exportExcelBtn}
           </Button>
 
           <Button
@@ -1112,7 +1130,7 @@ export default function InstitutionsPage() {
             ) : (
               <FileText className="mr-1.5 h-3.5 w-3.5 text-rose-600" />
             )}
-            Export PDF
+            {t.institutionsPage.exportPdfBtn}
           </Button>
         </div>
       </div>
@@ -1120,9 +1138,10 @@ export default function InstitutionsPage() {
       {/* Interactive Click-to-Filter Glassmorphic KPI Cards */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <GlassKpiCard
-          title="Registered Institutions"
+          title={t.institutionsPage.kpiInstitutionsTitle}
           value={kpiStats.totalInstitutions}
-          subtitle="Click to view all institutions"
+          subtitle={t.institutionsPage.kpiInstitutionsSubtitle}
+          filteredLabel={t.institutionsPage.filteredBadge}
           icon={Building2}
           glow="bg-indigo-500/15"
           strokeColor="#6366f1"
@@ -1134,13 +1153,17 @@ export default function InstitutionsPage() {
           }}
         />
         <GlassKpiCard
-          title="Institution Records"
+          title={t.institutionsPage.kpiRecordsTitle}
           value={kpiStats.totalRecords}
           subtitle={
             kpiStats.dailyIntakeSum > 0
-              ? `+${kpiStats.dailyIntakeSum.toLocaleString()} Daily Institution Intake`
-              : 'Click to show all records'
+              ? t.institutionsPage.kpiRecordsDailySubtitle.replace(
+                  '{count}',
+                  formatNumber(kpiStats.dailyIntakeSum)
+                )
+              : t.institutionsPage.kpiRecordsDefaultSubtitle
           }
+          filteredLabel={t.institutionsPage.filteredBadge}
           icon={Users}
           glow="bg-sky-500/15"
           strokeColor="#0ea5e9"
@@ -1149,13 +1172,20 @@ export default function InstitutionsPage() {
           onClick={() => setStatusFilter('all')}
         />
         <GlassKpiCard
-          title="Verified Registrants"
+          title={t.institutionsPage.kpiVerifiedTitle}
           value={kpiStats.processed}
           subtitle={
             kpiStats.totalRecords > 0
-              ? `${Number(((kpiStats.processed / kpiStats.totalRecords) * 100).toFixed(2))}% Success (${kpiStats.processed}/${kpiStats.totalRecords})`
-              : 'Processed Institution IDs'
+              ? t.institutionsPage.kpiVerifiedPctSubtitle
+                  .replace(
+                    '{pct}',
+                    String(Number(((kpiStats.processed / kpiStats.totalRecords) * 100).toFixed(2)))
+                  )
+                  .replace('{processed}', formatNumber(kpiStats.processed))
+                  .replace('{total}', formatNumber(kpiStats.totalRecords))
+              : t.institutionsPage.kpiVerifiedDefaultSubtitle
           }
+          filteredLabel={t.institutionsPage.filteredBadge}
           icon={CheckCircle2}
           glow="bg-emerald-500/15"
           strokeColor="#10b981"
@@ -1166,13 +1196,19 @@ export default function InstitutionsPage() {
           }
         />
         <GlassKpiCard
-          title="Processing & Pending"
+          title={t.institutionsPage.kpiPendingTitle}
           value={kpiStats.pending}
           subtitle={
             kpiStats.rejected > 0 && kpiStats.totalRecords > 0
-              ? `${kpiStats.rejected} Rejected (${Number(((kpiStats.rejected / kpiStats.totalRecords) * 100).toFixed(2))}%) · Click to filter`
-              : 'Click to filter verification queue'
+              ? t.institutionsPage.kpiPendingRejectedSubtitle
+                  .replace('{rejected}', formatNumber(kpiStats.rejected))
+                  .replace(
+                    '{pct}',
+                    String(Number(((kpiStats.rejected / kpiStats.totalRecords) * 100).toFixed(2)))
+                  )
+              : t.institutionsPage.kpiPendingDefaultSubtitle
           }
+          filteredLabel={t.institutionsPage.filteredBadge}
           icon={Clock}
           glow="bg-amber-500/15"
           strokeColor="#f59e0b"
@@ -1191,10 +1227,10 @@ export default function InstitutionsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-0.5">
             <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
-              <Sparkles className="h-3.5 w-3.5 text-primary" /> Registered Institutions Directory
+              <Sparkles className="h-3.5 w-3.5 text-primary" /> {t.institutionsPage.directoryHeader}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Select an institution card to filter records, rename/merge institution names, or export reports
+              {t.institutionsPage.directorySubtitle}
             </p>
           </div>
 
@@ -1202,7 +1238,7 @@ export default function InstitutionsPage() {
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               <Input
-                placeholder="Filter by institution name..."
+                placeholder={t.institutionsPage.searchInstitutionPlaceholder}
                 value={institutionSearch}
                 onChange={(e) => setInstitutionSearch(e.target.value)}
                 className="h-9 pl-9 rounded-xl glass-subpanel border-white/60 dark:border-white/10 text-xs"
@@ -1215,7 +1251,7 @@ export default function InstitutionsPage() {
                 onClick={() => setSelectedInstitution('ALL')}
                 className="glass-subpanel h-9 px-3 rounded-xl text-xs font-semibold text-primary"
               >
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Show All Institutions
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> {t.institutionsPage.showAllInstitutionsBtn}
               </Button>
             )}
           </div>
@@ -1229,10 +1265,10 @@ export default function InstitutionsPage() {
               </div>
               <div className="space-y-1 max-w-md">
                 <h3 className="text-base font-bold text-foreground">
-                  No Institution Registrations Yet
+                  {t.institutionsPage.emptyTitle}
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Enable the <strong>Institution Registration</strong> toggle when adding a record in the registration form or click below to register your first record under an institution name.
+                  {t.institutionsPage.emptyDesc}
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-3 mt-1">
@@ -1242,7 +1278,7 @@ export default function InstitutionsPage() {
                   existingSchools={existingInstitutionNames}
                   trigger={
                     <Button className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs px-5 h-10">
-                      <Plus className="mr-1.5 h-4 w-4" /> Register First Institution Record
+                      <Plus className="mr-1.5 h-4 w-4" /> {t.institutionsPage.registerFirstBtn}
                     </Button>
                   }
                 />
@@ -1273,12 +1309,14 @@ export default function InstitutionsPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="text-[14px] font-bold text-slate-900 dark:text-white">
-                          All Registered Institutions
+                          {t.institutionsPage.allInstitutionsCardTitle}
                         </h3>
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {institutionsList.length}{' '}
-                        {institutionsList.length === 1 ? 'Institution' : 'Institutions'} in Registry
+                        {(institutionsList.length === 1
+                          ? t.institutionsPage.institutionsCountSingle
+                          : t.institutionsPage.institutionsCountPlural
+                        ).replace('{count}', formatNumber(institutionsList.length))}
                       </p>
                     </div>
                   </div>
@@ -1290,25 +1328,33 @@ export default function InstitutionsPage() {
                         : 'text-slate-500 dark:text-slate-400'
                     )}
                   >
-                    {selectedInstitution === 'ALL' ? 'Active View' : 'View All'}
+                    {selectedInstitution === 'ALL'
+                      ? t.institutionsPage.activeViewBadge
+                      : t.institutionsPage.viewAllBadge}
                   </span>
                 </div>
 
                 <div className="flex items-end justify-between pt-1">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Total Institution Records
+                      {t.institutionsPage.totalInstitutionRecordsLabel}
                     </p>
                     <p className="text-3xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">
-                      {kpiStats.totalRecords.toLocaleString()}
+                      {formatNumber(kpiStats.totalRecords)}
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
                     <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold tabular-nums">
-                      {kpiStats.processed} Processed
+                      {t.institutionsPage.processedCountBadge.replace(
+                        '{count}',
+                        formatNumber(kpiStats.processed)
+                      )}
                     </span>
                     <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-bold tabular-nums">
-                      {kpiStats.pending} Processing
+                      {t.institutionsPage.processingCountBadge.replace(
+                        '{count}',
+                        formatNumber(kpiStats.pending)
+                      )}
                     </span>
                   </div>
                 </div>
@@ -1362,7 +1408,10 @@ export default function InstitutionsPage() {
                           <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                             {inst.locations.length > 0
                               ? inst.locations[0]
-                              : `Updated ${format(new Date(inst.lastSubmissionDate), 'MMM dd, yyyy')}`}
+                              : t.institutionsPage.updatedOnDate.replace(
+                                  '{date}',
+                                  formatDate(inst.lastSubmissionDate)
+                                )}
                           </p>
                         </div>
                       </div>
@@ -1379,7 +1428,10 @@ export default function InstitutionsPage() {
                           trigger={
                             <button
                               type="button"
-                              title={`Add Registrant to ${inst.institutionName}`}
+                              title={t.institutionsPage.addRegistrantTooltip.replace(
+                                '{name}',
+                                inst.institutionName
+                              )}
                               className="glass-subpanel h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-primary transition-colors cursor-pointer"
                             >
                               <Plus className="h-3.5 w-3.5" />
@@ -1388,7 +1440,10 @@ export default function InstitutionsPage() {
                         />
                         <button
                           type="button"
-                          title={`Set Target Quota for ${inst.institutionName}`}
+                          title={t.institutionsPage.setQuotaTooltip.replace(
+                            '{name}',
+                            inst.institutionName
+                          )}
                           onClick={() => handleOpenQuotaModal(inst.institutionName)}
                           className="glass-subpanel h-8 w-8 rounded-lg inline-flex items-center justify-center text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
                         >
@@ -1396,7 +1451,10 @@ export default function InstitutionsPage() {
                         </button>
                         <button
                           type="button"
-                          title={`Printable Summary Report Card for ${inst.institutionName}`}
+                          title={t.institutionsPage.summaryCardTooltip.replace(
+                            '{name}',
+                            inst.institutionName
+                          )}
                           onClick={() => setSummaryReportCardInst(inst)}
                           className="glass-subpanel h-8 w-8 rounded-lg inline-flex items-center justify-center text-primary hover:bg-primary/10 transition-colors cursor-pointer"
                         >
@@ -1404,7 +1462,10 @@ export default function InstitutionsPage() {
                         </button>
                         <button
                           type="button"
-                          title={`Rename or Merge ${inst.institutionName}`}
+                          title={t.institutionsPage.renameMergeTooltip.replace(
+                            '{name}',
+                            inst.institutionName
+                          )}
                           onClick={() => openRenameInstitutionModal(inst.institutionName)}
                           className="glass-subpanel h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-indigo-600 transition-colors cursor-pointer"
                         >
@@ -1412,7 +1473,10 @@ export default function InstitutionsPage() {
                         </button>
                         <button
                           type="button"
-                          title={`Export ${inst.institutionName} Excel`}
+                          title={t.institutionsPage.exportExcelTooltip.replace(
+                            '{name}',
+                            inst.institutionName
+                          )}
                           onClick={() => handleExportExcel(inst.institutionName)}
                           className="glass-subpanel h-8 w-8 rounded-lg inline-flex items-center justify-center text-emerald-600 hover:bg-emerald-500/10 transition-colors cursor-pointer"
                         >
@@ -1420,7 +1484,10 @@ export default function InstitutionsPage() {
                         </button>
                         <button
                           type="button"
-                          title={`Export ${inst.institutionName} PDF`}
+                          title={t.institutionsPage.exportPdfTooltip.replace(
+                            '{name}',
+                            inst.institutionName
+                          )}
                           onClick={() => handleExportPDF(inst.institutionName)}
                           className="glass-subpanel h-8 w-8 rounded-lg inline-flex items-center justify-center text-rose-600 hover:bg-rose-500/10 transition-colors cursor-pointer"
                         >
@@ -1432,22 +1499,28 @@ export default function InstitutionsPage() {
                     <div className="flex items-end justify-between pt-1">
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                          Registered People
+                          {t.institutionsPage.registeredPeopleLabel}
                         </p>
                         <div className="flex items-baseline gap-2">
                           <p className="text-3xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">
-                            {inst.totalRecords.toLocaleString()}
+                            {formatNumber(inst.totalRecords)}
                           </p>
                           {inst.dailyIntakeTotal > 0 && (
                             <span className="text-[11px] font-bold text-primary tabular-nums">
-                              (+{inst.dailyIntakeTotal.toLocaleString()} daily intake)
+                              {t.institutionsPage.dailyIntakeInline.replace(
+                                '{count}',
+                                formatNumber(inst.dailyIntakeTotal)
+                              )}
                             </span>
                           )}
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 justify-end">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold tabular-nums">
-                          {inst.processed} Processed
+                          {t.institutionsPage.processedCountBadge.replace(
+                            '{count}',
+                            formatNumber(inst.processed)
+                          )}
                         </span>
                         {inst.pending > 0 && (
                           <button
@@ -1460,21 +1533,33 @@ export default function InstitutionsPage() {
                                 )}&status=Processing`
                               );
                             }}
-                            title={`Verify ${inst.pending} Processing records for ${inst.institutionName}`}
+                            title={t.institutionsPage.verifyCountBtn.replace(
+                              '{count}',
+                              formatNumber(inst.pending)
+                            )}
                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 text-[10px] font-bold tabular-nums transition-colors cursor-pointer"
                           >
                             <ShieldCheck className="h-3 w-3" />
-                            {inst.pending} Verify
+                            {t.institutionsPage.verifyCountBtn.replace(
+                              '{count}',
+                              formatNumber(inst.pending)
+                            )}
                           </button>
                         )}
                         {inst.rejected > 0 && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-600 dark:text-rose-400 text-[10px] font-bold tabular-nums">
-                            {inst.rejected} Rejected
+                            {t.institutionsPage.rejectedCountBadge.replace(
+                              '{count}',
+                              formatNumber(inst.rejected)
+                            )}
                           </span>
                         )}
                         {inst.failed > 0 && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-600 dark:text-orange-400 text-[10px] font-bold tabular-nums">
-                            {inst.failed} Failed
+                            {t.institutionsPage.failedCountBadge.replace(
+                              '{count}',
+                              formatNumber(inst.failed)
+                            )}
                           </span>
                         )}
                       </div>
@@ -1484,7 +1569,7 @@ export default function InstitutionsPage() {
                     <div className="space-y-2">
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                          <span>Verification Progress</span>
+                          <span>{t.institutionsPage.verificationProgressLabel}</span>
                           <span className="tabular-nums font-bold text-slate-700 dark:text-slate-200">
                             {completionPct.toFixed(2)}%
                           </span>
@@ -1509,7 +1594,10 @@ export default function InstitutionsPage() {
                           <div className="space-y-1 pt-1 border-t border-white/40 dark:border-white/5">
                             <div className="flex items-center justify-between text-[10px] font-semibold text-amber-600 dark:text-amber-400">
                               <span className="flex items-center gap-1">
-                                <Target className="h-3 w-3" /> Target Quota ({combinedVolume.toLocaleString()}/{targetQuota.toLocaleString()})
+                                <Target className="h-3 w-3" />{' '}
+                                {t.institutionsPage.targetQuotaProgressLabel
+                                  .replace('{current}', formatNumber(combinedVolume))
+                                  .replace('{target}', formatNumber(targetQuota))}
                               </span>
                               <span className="tabular-nums font-bold">
                                 {quotaPct.toFixed(2)}%
@@ -1541,11 +1629,14 @@ export default function InstitutionsPage() {
               <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
                 <Building2 className="h-5 w-5 text-primary" />
                 {selectedInstitution === 'ALL'
-                  ? 'All Institution Registration Records'
-                  : `${selectedInstitution} — Registration Records`}
+                  ? t.institutionsPage.allRecordsHeader
+                  : t.institutionsPage.instRecordsHeader.replace('{name}', selectedInstitution)}
               </h2>
               <span className="glass-subpanel px-2.5 py-0.5 rounded-full text-[11px] font-bold text-primary tabular-nums">
-                {scopedRecords.length} {scopedRecords.length === 1 ? 'Record' : 'Records'}
+                {(scopedRecords.length === 1
+                  ? t.institutionsPage.recordCountSingle
+                  : t.institutionsPage.recordCountPlural
+                ).replace('{count}', formatNumber(scopedRecords.length))}
               </span>
               {statusFilter !== 'all' && (
                 <button
@@ -1553,15 +1644,20 @@ export default function InstitutionsPage() {
                   onClick={() => setStatusFilter('all')}
                   className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-bold hover:bg-primary/20 transition-colors cursor-pointer"
                 >
-                  Filter: {statusFilter === 'Processing_Active' ? 'Processing & Pending' : statusFilter}
+                  {t.institutionsPage.filterBadgeLabel.replace(
+                    '{status}',
+                    statusFilter === 'Processing_Active'
+                      ? t.institutionsPage.processingAndPendingOption
+                      : statusFilter
+                  )}
                   <RotateCcw className="h-3 w-3 ml-1" />
                 </button>
               )}
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {selectedInstitution === 'ALL'
-                ? 'Click any column header to sort, update status inline, or click Verify to inspect in the Official Portal Gateway.'
-                : `Managing records for ${selectedInstitution}. You can rename/merge this institution or verify its queue.`}
+                ? t.institutionsPage.recordsTableAllDesc
+                : t.institutionsPage.recordsTableInstDesc.replace('{name}', selectedInstitution)}
             </p>
           </div>
 
@@ -1578,7 +1674,7 @@ export default function InstitutionsPage() {
                       size="sm"
                       className="h-9 px-3.5 rounded-full bg-primary hover:bg-primary/90 text-white font-semibold text-xs"
                     >
-                      <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Record
+                      <Plus className="mr-1.5 h-3.5 w-3.5" /> {t.institutionsPage.addRecordBtn}
                     </Button>
                   }
                 />
@@ -1590,7 +1686,7 @@ export default function InstitutionsPage() {
                   className="glass-subpanel h-9 px-3.5 rounded-full text-slate-700 dark:text-slate-200 font-semibold text-xs"
                 >
                   <GitMerge className="mr-1.5 h-3.5 w-3.5 text-indigo-600" />
-                  Rename / Merge
+                  {t.institutionsPage.renameMergeBtn}
                 </Button>
               </>
             )}
@@ -1601,7 +1697,7 @@ export default function InstitutionsPage() {
               className="glass-subpanel h-9 px-3.5 rounded-full text-slate-700 dark:text-slate-200 font-semibold text-xs hover:bg-white/75 dark:hover:bg-white/10"
             >
               <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
-              Excel ({scopedRecords.length + scopedDailyReports.length})
+              Excel ({formatNumber(scopedRecords.length + scopedDailyReports.length)})
             </Button>
             <Button
               onClick={() => handleExportPDF()}
@@ -1610,7 +1706,7 @@ export default function InstitutionsPage() {
               className="glass-subpanel h-9 px-3.5 rounded-full text-slate-700 dark:text-slate-200 font-semibold text-xs hover:bg-white/75 dark:hover:bg-white/10"
             >
               <FileText className="mr-1.5 h-3.5 w-3.5 text-rose-600" />
-              PDF ({scopedRecords.length + scopedDailyReports.length})
+              PDF ({formatNumber(scopedRecords.length + scopedDailyReports.length)})
             </Button>
           </div>
         </div>
@@ -1621,7 +1717,7 @@ export default function InstitutionsPage() {
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Search applicant name, 29-digit RID, phone, or institution name..."
+                placeholder={t.institutionsPage.searchRecordPlaceholder}
                 value={recordSearch}
                 onChange={(e) => setRecordSearch(e.target.value)}
                 className="h-9 pl-9 border-0 bg-transparent shadow-none focus-visible:ring-0 text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400"
@@ -1633,12 +1729,15 @@ export default function InstitutionsPage() {
                 <SelectTrigger className="glass-subpanel w-auto min-w-[165px] h-9 rounded-lg px-3 text-xs font-medium text-slate-700 dark:text-slate-200">
                   <div className="flex items-center gap-1.5">
                     <Building2 className="h-3.5 w-3.5 text-primary" />
-                    <SelectValue placeholder="All Institutions" />
+                    <SelectValue placeholder={t.institutionsPage.allInstitutionsCardTitle} />
                   </div>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL" className="text-xs font-semibold">
-                    All Institutions ({institutionRegistrations.length})
+                    {t.institutionsPage.allInstitutionsOption.replace(
+                      '{count}',
+                      formatNumber(institutionRegistrations.length)
+                    )}
                   </SelectItem>
                   {institutionsList.map((s) => (
                     <SelectItem
@@ -1646,7 +1745,7 @@ export default function InstitutionsPage() {
                       value={s.institutionName}
                       className="text-xs font-medium"
                     >
-                      {s.institutionName} ({s.totalRecords})
+                      {s.institutionName} ({formatNumber(s.totalRecords)})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1655,31 +1754,31 @@ export default function InstitutionsPage() {
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="glass-subpanel w-auto min-w-[140px] h-9 rounded-lg px-3 text-xs font-medium text-slate-700 dark:text-slate-200">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-slate-400">Status:</span>
-                    <SelectValue placeholder="All" />
+                    <span className="text-slate-400">{t.institutionsPage.statusFilterPrefix}</span>
+                    <SelectValue placeholder={t.institutionsPage.allStatusOption} />
                   </div>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all" className="text-xs font-medium">
-                    All Status
+                    {t.institutionsPage.allStatusOption}
                   </SelectItem>
                   <SelectItem value="Processed" className="text-xs font-medium">
-                    Processed
+                    {t.common.statuses.Processed}
                   </SelectItem>
                   <SelectItem value="Processing" className="text-xs font-medium">
-                    Processing
+                    {t.common.statuses.Processing}
                   </SelectItem>
                   <SelectItem value="Processing_Active" className="text-xs font-medium">
-                    Processing & Pending
+                    {t.institutionsPage.processingAndPendingOption}
                   </SelectItem>
                   <SelectItem value="Pending Review" className="text-xs font-medium">
-                    Pending Review
+                    {t.common.statuses['Pending Review']}
                   </SelectItem>
                   <SelectItem value="Rejected" className="text-xs font-medium">
-                    Rejected
+                    {t.common.statuses.Rejected}
                   </SelectItem>
                   <SelectItem value="Failed" className="text-xs font-medium">
-                    Failed
+                    {t.common.statuses.Failed}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -1694,7 +1793,7 @@ export default function InstitutionsPage() {
                   setSelectedInstitution('ALL');
                 }}
                 className="glass-subpanel h-9 w-9 rounded-lg text-slate-500 hover:text-slate-800"
-                title="Reset filters"
+                title={t.institutionsPage.resetFiltersTooltip}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </Button>
@@ -1711,7 +1810,7 @@ export default function InstitutionsPage() {
                       onClick={() => handleSort('applicantName')}
                       className="flex items-center gap-2 font-bold hover:text-primary transition-colors cursor-pointer"
                     >
-                      <span>Applicant Name</span>
+                      <span>{t.institutionsPage.colApplicantName}</span>
                       {renderSortIcon('applicantName')}
                     </button>
                   </TableHead>
@@ -1721,7 +1820,7 @@ export default function InstitutionsPage() {
                       onClick={() => handleSort('institutionName')}
                       className="flex items-center gap-2 font-bold hover:text-primary transition-colors cursor-pointer"
                     >
-                      <span>Institution Name</span>
+                      <span>{t.institutionsPage.colInstitutionName}</span>
                       {renderSortIcon('institutionName')}
                     </button>
                   </TableHead>
@@ -1731,18 +1830,18 @@ export default function InstitutionsPage() {
                       onClick={() => handleSort('id')}
                       className="flex items-center gap-2 font-bold hover:text-primary transition-colors cursor-pointer"
                     >
-                      <span>Registration ID</span>
+                      <span>{t.institutionsPage.colRegistrationId}</span>
                       {renderSortIcon('id')}
                     </button>
                   </TableHead>
-                  <TableHead>Phone</TableHead>
+                  <TableHead>{t.institutionsPage.colPhone}</TableHead>
                   <TableHead>
                     <button
                       type="button"
                       onClick={() => handleSort('submissionDate')}
                       className="flex items-center gap-2 font-bold hover:text-primary transition-colors cursor-pointer"
                     >
-                      <span>Date</span>
+                      <span>{t.institutionsPage.colDate}</span>
                       {renderSortIcon('submissionDate')}
                     </button>
                   </TableHead>
@@ -1752,11 +1851,11 @@ export default function InstitutionsPage() {
                       onClick={() => handleSort('status')}
                       className="flex items-center gap-2 font-bold hover:text-primary transition-colors cursor-pointer"
                     >
-                      <span>Status</span>
+                      <span>{t.institutionsPage.colStatus}</span>
                       {renderSortIcon('status')}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right pr-6">Action</TableHead>
+                  <TableHead className="text-right pr-6">{t.institutionsPage.colAction}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1789,7 +1888,7 @@ export default function InstitutionsPage() {
                           <button
                             type="button"
                             onClick={() => handleCopyRid(record.id)}
-                            title="Click to copy 29-digit Registration ID"
+                            title={t.institutionsPage.copyRidTooltip}
                             className="inline-flex items-center gap-1.5 text-[12px] font-mono text-slate-600 dark:text-slate-300 hover:text-primary transition-colors cursor-pointer tabular-nums"
                           >
                             <FileDigit className="h-3.5 w-3.5 text-slate-400 shrink-0" />
@@ -1805,7 +1904,7 @@ export default function InstitutionsPage() {
                           {record.phone || '—'}
                         </TableCell>
                         <TableCell className="text-xs text-slate-600 dark:text-slate-300 tabular-nums whitespace-nowrap">
-                          {format(new Date(record.submissionDate), 'dd MMM yyyy')}
+                          {formatDate(record.submissionDate)}
                         </TableCell>
                         <TableCell>
                           <Select
@@ -1820,19 +1919,19 @@ export default function InstitutionsPage() {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="Processed" className="text-xs font-semibold">
-                                Processed
+                                {t.common.statuses.Processed}
                               </SelectItem>
                               <SelectItem value="Processing" className="text-xs font-semibold">
-                                Processing
+                                {t.common.statuses.Processing}
                               </SelectItem>
                               <SelectItem value="Pending Review" className="text-xs font-semibold">
-                                Pending Review
+                                {t.common.statuses['Pending Review']}
                               </SelectItem>
                               <SelectItem value="Rejected" className="text-xs font-semibold">
-                                Rejected
+                                {t.common.statuses.Rejected}
                               </SelectItem>
                               <SelectItem value="Failed" className="text-xs font-semibold">
-                                Failed
+                                {t.common.statuses.Failed}
                               </SelectItem>
                             </SelectContent>
                           </Select>
@@ -1848,16 +1947,16 @@ export default function InstitutionsPage() {
                                   )}&institution=${encodeURIComponent(instName)}`
                                 )
                               }
-                              title="Verify in Portal Gateway"
+                              title={t.institutionsPage.verifyInPortalBtn}
                               className="h-8 px-2.5 rounded-lg inline-flex items-center gap-1 text-[11px] font-bold text-primary bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer"
                             >
                               <ShieldCheck className="h-3.5 w-3.5" />
-                              <span className="hidden xl:inline">Verify</span>
+                              <span className="hidden xl:inline">{t.institutionsPage.verifyActionBtn}</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => setSelectedRecordForView(record)}
-                              title="Inspect Record"
+                              title={t.institutionsPage.inspectRecordTooltip}
                               className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
                             >
                               <Eye className="h-4 w-4" />
@@ -1869,7 +1968,7 @@ export default function InstitutionsPage() {
                               trigger={
                                 <button
                                   type="button"
-                                  title="Edit Record"
+                                  title={t.institutionsPage.editRecordTooltip}
                                   className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                                 >
                                   <SquarePen className="h-4 w-4" />
@@ -1879,7 +1978,7 @@ export default function InstitutionsPage() {
                             <button
                               type="button"
                               onClick={() => setRecordToDelete(record)}
-                              title="Delete Record"
+                              title={t.institutionsPage.deleteRecordTooltip}
                               className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1896,8 +1995,11 @@ export default function InstitutionsPage() {
                         <Building2 className="h-8 w-8 text-slate-300" />
                         <p className="text-xs font-semibold text-slate-400">
                           {selectedInstitution === 'ALL'
-                            ? 'No institution records match your current filter'
-                            : `No individual registration records found for ${selectedInstitution}`}
+                            ? t.institutionsPage.emptyRecordsAll
+                            : t.institutionsPage.emptyRecordsInst.replace(
+                                '{name}',
+                                selectedInstitution
+                              )}
                         </p>
                       </div>
                     </TableCell>
@@ -1913,7 +2015,7 @@ export default function InstitutionsPage() {
             onPageChange={setCurrentPage}
             showingCount={paginatedRecords.length}
             totalCount={scopedRecords.length}
-            itemLabel="institution records"
+            itemLabel={t.institutionsPage.paginationItemsLabel}
           />
         </div>
       </section>
@@ -1925,11 +2027,11 @@ export default function InstitutionsPage() {
             <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
               <Calendar className="h-5 w-5 text-primary" />
               {selectedInstitution === 'ALL'
-                ? 'Daily Institution Intake Reports'
-                : `${selectedInstitution} — Daily Intake Reports`}
+                ? t.institutionsPage.dailyReportsAllHeader
+                : t.institutionsPage.dailyReportsInstHeader.replace('{name}', selectedInstitution)}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Daily Ethio & Safaricom intake totals logged under institution registration
+              {t.institutionsPage.dailyReportsSubtitle}
             </p>
           </div>
           <Button
@@ -1939,7 +2041,7 @@ export default function InstitutionsPage() {
             className="h-9 px-4 rounded-full bg-primary hover:bg-primary/90 text-white font-semibold text-xs self-start sm:self-auto"
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Log Daily Institution Intake
+            {t.institutionsPage.logDailyIntakeActionBtn}
           </Button>
         </div>
 
@@ -1948,12 +2050,12 @@ export default function InstitutionsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-6">Report Date</TableHead>
-                  <TableHead>Institution Name</TableHead>
-                  <TableHead>Network Intake</TableHead>
-                  <TableHead>Institution vs. Non-Institution Breakdown</TableHead>
-                  <TableHead>Total Report</TableHead>
-                  <TableHead className="pr-6">Remarks</TableHead>
+                  <TableHead className="pl-6">{t.institutionsPage.colReportDate}</TableHead>
+                  <TableHead>{t.institutionsPage.colInstitutionName}</TableHead>
+                  <TableHead>{t.institutionsPage.colNetworkIntake}</TableHead>
+                  <TableHead>{t.institutionsPage.colBreakdown}</TableHead>
+                  <TableHead>{t.institutionsPage.colTotalReport}</TableHead>
+                  <TableHead className="pr-6">{t.institutionsPage.colRemarks}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1972,7 +2074,7 @@ export default function InstitutionsPage() {
                     return (
                       <TableRow key={rep.id} className="h-14">
                         <TableCell className="pl-6 font-semibold text-xs tabular-nums">
-                          {format(new Date(rep.date), 'dd MMM yyyy')}
+                          {formatDate(rep.date)}
                         </TableCell>
                         <TableCell>
                           <button
@@ -1987,10 +2089,10 @@ export default function InstitutionsPage() {
                         <TableCell>
                           <div className="flex items-center gap-1.5">
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-xs font-bold tabular-nums">
-                              <Phone className="h-3 w-3" /> {rep.ethioCount}
+                              <Phone className="h-3 w-3" /> {formatNumber(rep.ethioCount)}
                             </span>
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-600 dark:text-orange-400 text-xs font-bold tabular-nums">
-                              <Smartphone className="h-3 w-3" /> {rep.safaricomCount}
+                              <Smartphone className="h-3 w-3" /> {formatNumber(rep.safaricomCount)}
                             </span>
                           </div>
                         </TableCell>
@@ -1998,19 +2100,28 @@ export default function InstitutionsPage() {
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/15 text-primary text-xs font-bold tabular-nums">
                               <Building2 className="h-3 w-3" />
-                              {instPeople} Institution
+                              {t.institutionsPage.institutionCountBadge.replace(
+                                '{count}',
+                                formatNumber(instPeople)
+                              )}
                             </span>
                             {nonInstPeople > 0 && (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 text-xs font-semibold tabular-nums">
                                 <User className="h-3 w-3" />
-                                {nonInstPeople} Non-Institution
+                                {t.institutionsPage.nonInstitutionCountBadge.replace(
+                                  '{count}',
+                                  formatNumber(nonInstPeople)
+                                )}
                               </span>
                             )}
                           </div>
                         </TableCell>
                         <TableCell>
                           <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-xs font-black tabular-nums">
-                            {total} Total
+                            {t.institutionsPage.totalReportBadge.replace(
+                              '{count}',
+                              formatNumber(total)
+                            )}
                           </span>
                         </TableCell>
                         <TableCell className="pr-6 text-xs text-muted-foreground">
@@ -2025,7 +2136,7 @@ export default function InstitutionsPage() {
                       <div className="flex flex-col items-center justify-center gap-2">
                         <Calendar className="h-6 w-6 text-slate-300" />
                         <p className="text-xs font-semibold text-slate-400">
-                          No daily institution intake reports logged yet
+                          {t.institutionsPage.emptyDailyReports}
                         </p>
                       </div>
                     </TableCell>
@@ -2043,29 +2154,28 @@ export default function InstitutionsPage() {
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
               <GitMerge className="h-5 w-5 text-primary" />
-              Rename or Merge Institution
+              {t.institutionsPage.renameModalTitle}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Batch-update every registration record and daily intake report currently filed under{' '}
-              <strong className="text-foreground">{sourceInstitutionToRename}</strong>. If you enter an existing institution name, both institutions will merge cleanly.
+              {t.institutionsPage.renameModalDesc.replace('{name}', sourceInstitutionToRename)}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                New or Target Institution Name
+                {t.institutionsPage.newTargetInstitutionLabel}
               </Label>
               <Input
                 value={targetInstitutionNameInput}
                 onChange={(e) => setTargetInstitutionNameInput(e.target.value)}
-                placeholder="Enter corrected institution name..."
+                placeholder={t.institutionsPage.newTargetInstitutionPlaceholder}
                 className="h-10 rounded-xl glass-subpanel text-sm font-semibold"
               />
             </div>
             {existingInstitutionNames.filter((n) => n !== sourceInstitutionToRename).length > 0 && (
               <div className="space-y-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  Or Merge Into Existing Institution:
+                  {t.institutionsPage.orMergeIntoExistingLabel}
                 </span>
                 <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
                   {existingInstitutionNames
@@ -2096,7 +2206,7 @@ export default function InstitutionsPage() {
               onClick={() => setRenameDialogOpen(false)}
               className="rounded-xl text-xs font-semibold"
             >
-              Cancel
+              {t.common.cancel}
             </Button>
             <Button
               type="button"
@@ -2109,7 +2219,7 @@ export default function InstitutionsPage() {
               ) : (
                 <GitMerge className="mr-1.5 h-3.5 w-3.5" />
               )}
-              Apply to All Records
+              {t.institutionsPage.applyToAllRecordsBtn}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2121,28 +2231,28 @@ export default function InstitutionsPage() {
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
               <Calendar className="h-5 w-5 text-primary" />
-              Log Daily Institution Intake
+              {t.institutionsPage.dailyIntakeModalTitle}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Record daily Ethio Telecom and Safaricom registration totals directly under an institution name.
+              {t.institutionsPage.dailyIntakeModalDesc}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Institution Name
+                  {t.institutionsPage.colInstitutionName}
                 </Label>
                 <Input
                   value={dailyIntakeInstitution}
                   onChange={(e) => setDailyIntakeInstitution(e.target.value)}
-                  placeholder="Enter institution name..."
+                  placeholder={t.institutionsPage.newTargetInstitutionPlaceholder}
                   className="h-9 rounded-xl glass-subpanel text-xs font-semibold"
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Report Date
+                  {t.institutionsPage.colReportDate}
                 </Label>
                 <Input
                   type="date"
@@ -2176,7 +2286,7 @@ export default function InstitutionsPage() {
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                  Ethio Intake
+                  {t.institutionsPage.ethioIntakeLabel}
                 </Label>
                 <Input
                   type="number"
@@ -2188,7 +2298,7 @@ export default function InstitutionsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-bold text-orange-600 dark:text-orange-400">
-                  Safaricom Intake
+                  {t.institutionsPage.safaricomIntakeLabel}
                 </Label>
                 <Input
                   type="number"
@@ -2200,7 +2310,7 @@ export default function InstitutionsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-bold text-primary">
-                  Institution Count
+                  {t.institutionsPage.institutionCountLabel}
                 </Label>
                 <Input
                   type="number"
@@ -2214,12 +2324,12 @@ export default function InstitutionsPage() {
 
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Remarks (Optional)
+                {t.institutionsPage.remarksOptionalLabel}
               </Label>
               <Input
                 value={dailyRemarks}
                 onChange={(e) => setDailyRemarks(e.target.value)}
-                placeholder="Field campaign notes or shift details..."
+                placeholder={t.institutionsPage.remarksOptionalPlaceholder}
                 className="h-9 rounded-xl glass-subpanel text-xs"
               />
             </div>
@@ -2231,7 +2341,7 @@ export default function InstitutionsPage() {
               onClick={() => setDailyIntakeDialogOpen(false)}
               className="rounded-xl text-xs font-semibold"
             >
-              Cancel
+              {t.common.cancel}
             </Button>
             <Button
               type="button"
@@ -2244,7 +2354,7 @@ export default function InstitutionsPage() {
               ) : (
                 <Check className="mr-1.5 h-3.5 w-3.5" />
               )}
-              Save Daily Intake
+              {t.institutionsPage.saveDailyIntakeBtn}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2259,14 +2369,15 @@ export default function InstitutionsPage() {
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2 text-rose-600 dark:text-rose-400">
               <AlertTriangle className="h-5 w-5" />
-              Specify {pendingStatusChange?.newStatus} Reason
+              {t.institutionsPage.specifyReasonTitle.replace(
+                '{status}',
+                pendingStatusChange?.newStatus || ''
+              )}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Record the official reason why{' '}
-              <strong className="text-foreground">
-                {pendingStatusChange?.record.applicantName}
-              </strong>{' '}
-              was marked as {pendingStatusChange?.newStatus}.
+              {t.institutionsPage.specifyReasonDesc
+                .replace('{name}', pendingStatusChange?.record.applicantName || '')
+                .replace('{status}', pendingStatusChange?.newStatus || '')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
@@ -2290,7 +2401,7 @@ export default function InstitutionsPage() {
             <Input
               value={rejectionReasonInput}
               onChange={(e) => setRejectionReasonInput(e.target.value)}
-              placeholder="Or type custom rejection / failure reason..."
+              placeholder={t.institutionsPage.customReasonPlaceholder}
               className="h-10 rounded-xl glass-subpanel text-xs font-medium"
             />
           </div>
@@ -2301,7 +2412,7 @@ export default function InstitutionsPage() {
               onClick={() => setPendingStatusChange(null)}
               className="rounded-xl text-xs font-semibold"
             >
-              Cancel
+              {t.common.cancel}
             </Button>
             <Button
               type="button"
@@ -2317,7 +2428,10 @@ export default function InstitutionsPage() {
               }}
               className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold"
             >
-              Confirm {pendingStatusChange?.newStatus}
+              {t.institutionsPage.confirmStatusBtn.replace(
+                '{status}',
+                pendingStatusChange?.newStatus || ''
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2335,19 +2449,22 @@ export default function InstitutionsPage() {
                 <div className="flex items-center justify-between gap-3">
                   <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
                     <Building2 className="h-5 w-5 text-primary" />
-                    Institution Registration File
+                    {t.institutionsPage.fileModalTitle}
                   </DialogTitle>
                   <StatusBadge status={selectedRecordForView.status} />
                 </div>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Registered under {getRecordInstitutionName(selectedRecordForView)}
+                  {t.institutionsPage.fileModalRegisteredUnder.replace(
+                    '{name}',
+                    getRecordInstitutionName(selectedRecordForView)
+                  )}
                 </DialogDescription>
               </DialogHeader>
               <div className="p-6 space-y-4">
                 <div className="glass-subpanel rounded-2xl p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Applicant Name
+                      {t.institutionsPage.colApplicantName}
                     </span>
                     <span className="text-sm font-bold text-foreground">
                       {selectedRecordForView.applicantName}
@@ -2355,7 +2472,7 @@ export default function InstitutionsPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Institution Name
+                      {t.institutionsPage.colInstitutionName}
                     </span>
                     <span className="text-xs font-bold text-primary flex items-center gap-1">
                       <Building2 className="h-3.5 w-3.5" />
@@ -2364,7 +2481,7 @@ export default function InstitutionsPage() {
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      29-Digit RID
+                      {t.institutionsPage.colRegistrationId}
                     </span>
                     <button
                       type="button"
@@ -2377,7 +2494,7 @@ export default function InstitutionsPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Phone
+                      {t.institutionsPage.colPhone}
                     </span>
                     <span className="text-xs font-mono font-semibold text-foreground tabular-nums">
                       {selectedRecordForView.phone}
@@ -2385,7 +2502,7 @@ export default function InstitutionsPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Location
+                      {t.common.location}
                     </span>
                     <span className="text-xs font-semibold text-foreground">
                       {selectedRecordForView.location}
@@ -2393,16 +2510,16 @@ export default function InstitutionsPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Submission Date
+                      {t.institutionsPage.submissionDateLabel}
                     </span>
                     <span className="text-xs font-semibold text-foreground tabular-nums">
-                      {format(new Date(selectedRecordForView.submissionDate), 'MMMM dd, yyyy')}
+                      {formatDate(selectedRecordForView.submissionDate)}
                     </span>
                   </div>
                   {selectedRecordForView.rejectionReason && (
                     <div className="pt-2 border-t border-white/60 dark:border-white/10">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 block mb-1">
-                        Rejection / Failure Reason
+                        {t.institutionsPage.rejectionFailureReasonLabel}
                       </span>
                       <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">
                         {selectedRecordForView.rejectionReason}
@@ -2412,7 +2529,7 @@ export default function InstitutionsPage() {
                   {selectedRecordForView.remarks && (
                     <div className="pt-2 border-t border-white/60 dark:border-white/10">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
-                        Remarks
+                        {t.common.remarks}
                       </span>
                       <p className="text-xs text-muted-foreground">
                         {selectedRecordForView.remarks}
@@ -2437,14 +2554,14 @@ export default function InstitutionsPage() {
                     className="rounded-xl text-xs font-bold text-primary"
                   >
                     <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
-                    Verify in Portal Gateway
+                    {t.institutionsPage.verifyInPortalBtn}
                   </Button>
                   <Button
                     variant="outline"
                     onClick={() => setSelectedRecordForView(null)}
                     className="rounded-xl text-xs font-semibold"
                   >
-                    Close
+                    {t.common.close}
                   </Button>
                 </div>
               </div>
@@ -2461,16 +2578,21 @@ export default function InstitutionsPage() {
         <AlertDialogContent className="rounded-[28px] border border-white/60 dark:border-white/10 glass-card-surface max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-lg font-black uppercase tracking-tight">
-              Remove Institution Record?
+              {t.institutionsPage.deleteModalTitle}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
-              You are about to permanently remove{' '}
-              <strong>{recordToDelete?.applicantName}</strong> from{' '}
-              <strong>{recordToDelete ? getRecordInstitutionName(recordToDelete) : ''}</strong>. This action will be recorded in the audit ledger.
+              {t.institutionsPage.deleteModalDesc
+                .replace('{name}', recordToDelete?.applicantName || '')
+                .replace(
+                  '{institution}',
+                  recordToDelete ? getRecordInstitutionName(recordToDelete) : ''
+                )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-xl text-xs font-bold">Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-xl text-xs font-bold">
+              {t.common.cancel}
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
@@ -2480,7 +2602,7 @@ export default function InstitutionsPage() {
               className="rounded-xl bg-destructive hover:bg-destructive/90 text-white text-xs font-bold"
             >
               {isDeleting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-              Delete Record
+              {t.institutionsPage.deleteRecordTooltip}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2495,17 +2617,16 @@ export default function InstitutionsPage() {
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
               <Target className="h-5 w-5 text-amber-500" />
-              Set Institution Target Quota
+              {t.institutionsPage.quotaModalTitle}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Set the expected total enrollment quota for{' '}
-              <strong className="text-foreground">{quotaModalInstitution}</strong> to track exact 2-decimal field campaign completion.
+              {t.institutionsPage.quotaModalDesc.replace('{name}', quotaModalInstitution || '')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Target Registrants Quota (Set 0 to clear)
+                {t.institutionsPage.quotaInputLabel}
               </Label>
               <Input
                 type="number"
@@ -2528,7 +2649,7 @@ export default function InstitutionsPage() {
                       : 'glass-subpanel text-slate-700 dark:text-slate-200 border-white/40 hover:border-amber-400'
                   )}
                 >
-                  {preset.toLocaleString()}
+                  {formatNumber(preset)}
                 </button>
               ))}
             </div>
@@ -2540,7 +2661,7 @@ export default function InstitutionsPage() {
               onClick={() => setQuotaModalInstitution(null)}
               className="rounded-xl text-xs font-semibold"
             >
-              Cancel
+              {t.common.cancel}
             </Button>
             <Button
               type="button"
@@ -2548,7 +2669,7 @@ export default function InstitutionsPage() {
               className="rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold"
             >
               <Check className="mr-1.5 h-3.5 w-3.5" />
-              Save Quota
+              {t.institutionsPage.saveQuotaBtn}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2582,22 +2703,28 @@ export default function InstitutionsPage() {
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary">
                       <Award className="h-3.5 w-3.5" />
-                      Official Institutional Summary Dossier
+                      {t.institutionsPage.summaryDossierEyebrow}
                     </div>
                     <h3 className="text-2xl font-black text-foreground tracking-tight">
                       {inst.institutionName}
                     </h3>
                     <p className="text-xs text-muted-foreground">
-                      Generated {format(new Date(), 'MMMM dd, yyyy · HH:mm')} · Locations:{' '}
-                      {inst.locations.length > 0 ? inst.locations.join(', ') : 'Primary Sector'}
+                      {t.institutionsPage.summaryGeneratedLine
+                        .replace('{date}', format(new Date(), 'MMMM dd, yyyy · HH:mm'))
+                        .replace(
+                          '{locations}',
+                          inst.locations.length > 0
+                            ? inst.locations.join(', ')
+                            : t.institutionsPage.primarySectorFallback
+                        )}
                     </p>
                   </div>
                   <div className="text-right">
                     <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
-                      Combined Volume
+                      {t.institutionsPage.combinedVolumeLabel}
                     </span>
                     <span className="text-3xl font-black text-primary tabular-nums">
-                      {combinedVol.toLocaleString()}
+                      {formatNumber(combinedVol)}
                     </span>
                   </div>
                 </div>
@@ -2605,46 +2732,54 @@ export default function InstitutionsPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
                     <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                      Success Rate
+                      {t.institutionsPage.successRateLabel}
                     </p>
                     <p className="text-xl font-black text-foreground tabular-nums mt-0.5">
                       {successPct.toFixed(2)}%
                     </p>
                     <p className="text-[10px] font-semibold text-muted-foreground tabular-nums">
-                      {inst.processed} / {total} Processed
+                      {t.institutionsPage.processedOfTotal
+                        .replace('{count}', formatNumber(inst.processed))
+                        .replace('{total}', formatNumber(total))}
                     </p>
                   </div>
                   <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20">
                     <p className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                      Processing Rate
+                      {t.institutionsPage.processingRateLabel}
                     </p>
                     <p className="text-xl font-black text-foreground tabular-nums mt-0.5">
                       {processingPct.toFixed(2)}%
                     </p>
                     <p className="text-[10px] font-semibold text-muted-foreground tabular-nums">
-                      {inst.pending} / {total} In Queue
+                      {t.institutionsPage.inQueueOfTotal
+                        .replace('{count}', formatNumber(inst.pending))
+                        .replace('{total}', formatNumber(total))}
                     </p>
                   </div>
                   <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20">
                     <p className="text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                      Rejection Rate
+                      {t.institutionsPage.rejectionRateLabel}
                     </p>
                     <p className="text-xl font-black text-foreground tabular-nums mt-0.5">
                       {rejectedPct.toFixed(2)}%
                     </p>
                     <p className="text-[10px] font-semibold text-muted-foreground tabular-nums">
-                      {inst.rejected} / {total} Rejected
+                      {t.institutionsPage.rejectedOfTotal
+                        .replace('{count}', formatNumber(inst.rejected))
+                        .replace('{total}', formatNumber(total))}
                     </p>
                   </div>
                   <div className="p-3.5 rounded-2xl bg-slate-500/10 border border-slate-500/20">
                     <p className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                      Failed Rate
+                      {t.institutionsPage.failedRateLabel}
                     </p>
                     <p className="text-xl font-black text-foreground tabular-nums mt-0.5">
                       {failedPct.toFixed(2)}%
                     </p>
                     <p className="text-[10px] font-semibold text-muted-foreground tabular-nums">
-                      {inst.failed} / {total} Failed
+                      {t.institutionsPage.failedOfTotal
+                        .replace('{count}', formatNumber(inst.failed))
+                        .replace('{total}', formatNumber(total))}
                     </p>
                   </div>
                 </div>
@@ -2652,10 +2787,16 @@ export default function InstitutionsPage() {
                 <div className="p-4 rounded-2xl glass-subpanel space-y-3">
                   <div className="flex items-center justify-between text-xs font-bold">
                     <span className="text-muted-foreground uppercase tracking-wider text-[10px]">
-                      Daily Telecom Field Intake ({inst.dailyReportsCount} Reports)
+                      {t.institutionsPage.dailyTelecomIntakeHeader.replace(
+                        '{count}',
+                        formatNumber(inst.dailyReportsCount)
+                      )}
                     </span>
                     <span className="font-black text-foreground tabular-nums">
-                      {inst.dailyIntakeTotal.toLocaleString()} People
+                      {t.institutionsPage.peopleUnit.replace(
+                        '{count}',
+                        formatNumber(inst.dailyIntakeTotal)
+                      )}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-xs">
@@ -2664,7 +2805,7 @@ export default function InstitutionsPage() {
                         Ethio Telecom
                       </span>
                       <span className="font-black tabular-nums">
-                        {inst.dailyEthioTotal.toLocaleString()}
+                        {formatNumber(inst.dailyEthioTotal)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between p-2.5 rounded-xl bg-orange-500/10">
@@ -2672,14 +2813,16 @@ export default function InstitutionsPage() {
                         Safaricom
                       </span>
                       <span className="font-black tabular-nums">
-                        {inst.dailySafaricomTotal.toLocaleString()}
+                        {formatNumber(inst.dailySafaricomTotal)}
                       </span>
                     </div>
                   </div>
                   {targetQuota > 0 && (
                     <div className="pt-2 border-t border-border/60 flex items-center justify-between text-xs">
                       <span className="font-bold text-amber-600 dark:text-amber-400">
-                        Target Quota Completion ({combinedVol.toLocaleString()} / {targetQuota.toLocaleString()})
+                        {t.institutionsPage.targetQuotaCompletionLabel
+                          .replace('{current}', formatNumber(combinedVol))
+                          .replace('{target}', formatNumber(targetQuota))}
                       </span>
                       <span className="font-black tabular-nums">{quotaCompletionPct.toFixed(2)}%</span>
                     </div>
@@ -2696,7 +2839,7 @@ export default function InstitutionsPage() {
                       className="rounded-xl text-xs font-bold"
                     >
                       <FileText className="mr-1.5 h-3.5 w-3.5 text-rose-600" />
-                      Download PDF
+                      {t.institutionsPage.downloadPdfBtn}
                     </Button>
                     <Button
                       type="button"
@@ -2705,7 +2848,7 @@ export default function InstitutionsPage() {
                       className="rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold"
                     >
                       <Printer className="mr-1.5 h-3.5 w-3.5" />
-                      Print Summary Card
+                      {t.institutionsPage.printSummaryCardBtn}
                     </Button>
                   </div>
                   <Button
@@ -2715,7 +2858,7 @@ export default function InstitutionsPage() {
                     onClick={() => setSummaryReportCardInst(null)}
                     className="rounded-xl text-xs font-semibold"
                   >
-                    Close
+                    {t.common.close}
                   </Button>
                 </div>
               </div>
@@ -2731,6 +2874,7 @@ function GlassKpiCard({
   title,
   value,
   subtitle,
+  filteredLabel,
   icon: Icon,
   glow,
   strokeColor,
@@ -2741,6 +2885,7 @@ function GlassKpiCard({
   title: string;
   value: number;
   subtitle: string;
+  filteredLabel?: string;
   icon: any;
   glow: string;
   strokeColor: string;
@@ -2782,7 +2927,7 @@ function GlassKpiCard({
           </div>
           {active && (
             <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
-              Filtered
+              {filteredLabel || 'Filtered'}
             </span>
           )}
         </div>

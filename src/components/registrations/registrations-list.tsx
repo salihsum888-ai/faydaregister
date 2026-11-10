@@ -101,6 +101,7 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { TablePagination } from '@/components/ui/table-pagination';
+import { useTranslation } from '@/i18n/language-provider';
 
 interface RegistrationsListProps {
   initialRegistrations: Registration[];
@@ -109,15 +110,6 @@ interface RegistrationsListProps {
 type SortKey = keyof Registration;
 type SortDirection = 'asc' | 'desc';
 type DatePreset = 'all' | 'today' | '7d' | 'month' | 'custom';
-
-const PRESET_REASONS = [
-  'Duplicate Biometric Entry',
-  'Blurry Document Scan',
-  'Invalid 29-Digit RID',
-  'Biometric Mismatch',
-  'Network Timeout During Sync',
-  'Incomplete Applicant Data',
-];
 
 function getInstitutionLabel(reg: Registration): string {
   return (reg.institutionName || reg.schoolName || '').trim();
@@ -129,6 +121,7 @@ function calcExactRate(count: number, total: number): number {
 }
 
 export function RegistrationsList({ initialRegistrations }: RegistrationsListProps) {
+  const { t, formatDate, formatNumber } = useTranslation();
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -207,8 +200,8 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
     } catch {
       toast({
         variant: 'destructive',
-        title: 'Camera Unavailable',
-        description: 'Could not access camera. Paste or type the 29-digit slip text below instead.',
+        title: t.registrationsList.toastCameraUnavailableTitle,
+        description: t.registrationsList.toastCameraUnavailableDesc,
       });
     }
   };
@@ -232,13 +225,13 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
     if (exactMatch) {
       setViewingRegistration(exactMatch);
       toast({
-        title: '29-Digit RID Located',
-        description: `Opened record for ${exactMatch.applicantName}.`,
+        title: t.registrationsList.toastRidLocatedTitle,
+        description: t.registrationsList.toastRidLocatedDesc.replace('{name}', exactMatch.applicantName),
       });
     } else {
       toast({
-        title: 'Filtered by 29-Digit RID',
-        description: `Applied search filter for RID ${rid}.`,
+        title: t.registrationsList.toastFilteredByRidTitle,
+        description: t.registrationsList.toastFilteredByRidDesc.replace('{rid}', rid),
       });
     }
   };
@@ -248,8 +241,8 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
     setCopiedId(id);
     setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 2000);
     toast({
-      title: 'RID Copied',
-      description: `Registration ID ${id} copied to clipboard.`,
+      title: t.registrationTable.toastRidCopiedTitle,
+      description: t.registrationTable.toastRidCopiedDesc.replace('{id}', id),
     });
   };
 
@@ -286,7 +279,10 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
 
       if (dupId) {
         duplicateRecordIds.add(r.id);
-        duplicateReasonById.set(r.id, `Duplicate 29-Digit RID (${ridCounts.get(cleanId)}x)`);
+        duplicateReasonById.set(
+          r.id,
+          t.registrationsList.duplicateReasonBadge.replace('{count}', String(ridCounts.get(cleanId) || 0))
+        );
       }
     });
 
@@ -295,7 +291,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
       duplicateReasonById,
       totalDuplicates: duplicateRecordIds.size,
     };
-  }, [initialRegistrations]);
+  }, [initialRegistrations, t]);
 
   // Base filtered records (by search, origin/institution, date range, duplicate toggle — before status card click)
   const baseScopedRegistrations = useMemo(() => {
@@ -480,8 +476,10 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
     }
 
     toast({
-      title: `Status Updated to ${newStatus}`,
-      description: `${record.applicantName} synchronized to ${newStatus}.`,
+      title: t.registrationsList.toastStatusUpdatedTitle.replace('{status}', t.common.status[newStatus]),
+      description: t.registrationsList.toastStatusUpdatedDesc
+        .replace('{name}', record.applicantName)
+        .replace('{status}', t.common.status[newStatus]),
     });
 
     setTimeout(() => setIsUpdatingStatusId(null), 400);
@@ -536,15 +534,17 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
       );
 
       toast({
-        title: 'Bulk Triage Complete',
-        description: `Successfully synchronized ${count} records to ${newStatus}.`,
+        title: t.registrationsList.toastBulkCompleteTitle,
+        description: t.registrationsList.toastBulkCompleteDesc
+          .replace('{count}', String(count))
+          .replace('{status}', t.common.status[newStatus]),
       });
       setSelectedIds(new Set());
     } catch {
       toast({
         variant: 'destructive',
-        title: 'Bulk Update Failed',
-        description: 'Protocol error during mass status synchronization.',
+        title: t.registrationsList.toastBulkFailedTitle,
+        description: t.registrationsList.toastBulkFailedDesc,
       });
     } finally {
       setIsBulkProcessing(false);
@@ -597,8 +597,8 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
       );
 
       toast({
-        title: 'Registry Purged',
-        description: `Successfully removed ${count} records from the active ledger.`,
+        title: t.registrationsList.toastPurgedTitle,
+        description: t.registrationsList.toastPurgedDesc.replace('{count}', String(count)),
         variant: 'destructive',
       });
       setSelectedIds(new Set());
@@ -606,8 +606,8 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
     } catch {
       toast({
         variant: 'destructive',
-        title: 'Purge Failed',
-        description: 'Clearance error during mass record deletion.',
+        title: t.registrationsList.toastPurgeFailedTitle,
+        description: t.registrationsList.toastPurgeFailedDesc,
       });
     } finally {
       setIsBulkProcessing(false);
@@ -654,15 +654,15 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
     try {
       deleteDocumentNonBlocking(doc(db, 'registrations', registrationToDelete.id));
       toast({
-        title: 'Record Purged',
-        description: `Successfully removed ${registrationToDelete.name} from the bureau registry.`,
+        title: t.registrationsList.toastRecordPurgedTitle,
+        description: t.registrationsList.toastRecordPurgedDesc.replace('{name}', registrationToDelete.name),
         variant: 'destructive',
       });
       setIsDeleteDialogOpen(false);
     } catch {
       toast({
-        title: 'Purge Failed',
-        description: 'An error occurred while removing the record.',
+        title: t.registrationsList.toastPurgeFailedTitle,
+        description: t.registrationsList.toastPurgeFailedDesc,
         variant: 'destructive',
       });
     } finally {
@@ -674,8 +674,8 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
   const handleExportExcel = () => {
     if (filteredRegistrations.length === 0) {
       toast({
-        title: 'Export Failed',
-        description: 'No data available to export.',
+        title: t.registrationsList.toastExportFailedTitle,
+        description: t.registrationsList.toastExportFailedDesc,
         variant: 'destructive',
       });
       return;
@@ -684,7 +684,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
       'No.': idx + 1,
       'Registration ID (29-Digit)': reg.id,
       'Applicant Name': reg.applicantName,
-      'Origin / Institution': getInstitutionLabel(reg) || 'Individual Walk-In',
+      'Origin / Institution': getInstitutionLabel(reg) || t.registrationsList.individualBadge,
       'Submission Date': reg.submissionDate
         ? format(new Date(reg.submissionDate), 'yyyy-MM-dd HH:mm')
         : 'N/A',
@@ -699,16 +699,16 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
     XLSX.utils.book_append_sheet(wb, ws, 'Registrations');
     XLSX.writeFile(wb, `Bureau_Registrations_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
     toast({
-      title: 'Excel Export Complete',
-      description: `Exported ${filteredRegistrations.length} records with institution and reason details.`,
+      title: t.registrationsList.toastExcelCompleteTitle,
+      description: t.registrationsList.toastExcelCompleteDesc.replace('{count}', String(filteredRegistrations.length)),
     });
   };
 
   const handleExportPDF = () => {
     if (filteredRegistrations.length === 0) {
       toast({
-        title: 'Export Failed',
-        description: 'No data available to export.',
+        title: t.registrationsList.toastExportFailedTitle,
+        description: t.registrationsList.toastExportFailedDesc,
         variant: 'destructive',
       });
       return;
@@ -754,8 +754,8 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
     });
     docPdf.save(`Bureau_Registrations_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
     toast({
-      title: 'PDF Export Complete',
-      description: 'Official ledger document has been generated.',
+      title: t.registrationsList.toastPdfCompleteTitle,
+      description: t.registrationsList.toastPdfCompleteDesc,
     });
   };
 
@@ -764,48 +764,60 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
       {/* Row 1: 5 Interactive Click-to-Filter KPI & Exact Rate Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <PulseCard
-          label="Total Records"
-          subtitle="Click to show all records"
+          label={t.registrationsList.pulseTotalLabel}
+          subtitle={t.registrationsList.pulseTotalSubtitle}
           value={pulseStats.total}
           rateText="100%"
-          fractionText={`${pulseStats.total.toLocaleString()} / ${pulseStats.total.toLocaleString()}`}
+          fractionText={`${formatNumber(pulseStats.total)} / ${formatNumber(pulseStats.total)}`}
           ringScore={100}
           ringColor="#6366f1"
           icon={Target}
           iconBg="bg-indigo-600 text-white"
           active={statusFilter === 'all'}
+          activeBadgeLabel={t.registrationsList.pulseActiveBadge}
+          recordsSuffix={t.registrationsList.pulseRecordsSuffix}
+          exactRateLabel={t.registrationsList.pulseExactRate}
+          formatNumber={formatNumber}
           onClick={() => {
             setStatusFilter('all');
             setCurrentPage(1);
           }}
         />
         <PulseCard
-          label="Success Rate"
-          subtitle="Processed Citizen IDs"
+          label={t.registrationsList.pulseSuccessLabel}
+          subtitle={t.registrationsList.pulseSuccessSubtitle}
           value={pulseStats.processed}
           rateText={`${pulseStats.successRate}%`}
-          fractionText={`${pulseStats.processed.toLocaleString()} / ${pulseStats.total.toLocaleString()}`}
+          fractionText={`${formatNumber(pulseStats.processed)} / ${formatNumber(pulseStats.total)}`}
           ringScore={pulseStats.successRate}
           ringColor="#10b981"
           icon={CheckCircle2}
           iconBg="bg-emerald-500 text-white"
           active={statusFilter === 'Processed'}
+          activeBadgeLabel={t.registrationsList.pulseActiveBadge}
+          recordsSuffix={t.registrationsList.pulseRecordsSuffix}
+          exactRateLabel={t.registrationsList.pulseExactRate}
+          formatNumber={formatNumber}
           onClick={() => {
             setStatusFilter((prev) => (prev === 'Processed' ? 'all' : 'Processed'));
             setCurrentPage(1);
           }}
         />
         <PulseCard
-          label="Processing Rate"
-          subtitle="Active Verification Queue"
+          label={t.registrationsList.pulseProcessingLabel}
+          subtitle={t.registrationsList.pulseProcessingSubtitle}
           value={pulseStats.processing}
           rateText={`${pulseStats.processingRate}%`}
-          fractionText={`${pulseStats.processing.toLocaleString()} / ${pulseStats.total.toLocaleString()}`}
+          fractionText={`${formatNumber(pulseStats.processing)} / ${formatNumber(pulseStats.total)}`}
           ringScore={pulseStats.processingRate}
           ringColor="#f59e0b"
           icon={Clock}
           iconBg="bg-amber-500 text-white"
           active={statusFilter === 'Processing_Active' || statusFilter === 'Processing'}
+          activeBadgeLabel={t.registrationsList.pulseActiveBadge}
+          recordsSuffix={t.registrationsList.pulseRecordsSuffix}
+          exactRateLabel={t.registrationsList.pulseExactRate}
+          formatNumber={formatNumber}
           onClick={() => {
             setStatusFilter((prev) =>
               prev === 'Processing_Active' ? 'all' : 'Processing_Active'
@@ -814,32 +826,40 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
           }}
         />
         <PulseCard
-          label="Rejection Rate"
-          subtitle="Protocol Rejections"
+          label={t.registrationsList.pulseRejectionLabel}
+          subtitle={t.registrationsList.pulseRejectionSubtitle}
           value={pulseStats.rejected}
           rateText={`${pulseStats.rejectionRate}%`}
-          fractionText={`${pulseStats.rejected.toLocaleString()} / ${pulseStats.total.toLocaleString()}`}
+          fractionText={`${formatNumber(pulseStats.rejected)} / ${formatNumber(pulseStats.total)}`}
           ringScore={pulseStats.rejectionRate}
           ringColor="#ef4444"
           icon={ShieldAlert}
           iconBg="bg-rose-500 text-white"
           active={statusFilter === 'Rejected'}
+          activeBadgeLabel={t.registrationsList.pulseActiveBadge}
+          recordsSuffix={t.registrationsList.pulseRecordsSuffix}
+          exactRateLabel={t.registrationsList.pulseExactRate}
+          formatNumber={formatNumber}
           onClick={() => {
             setStatusFilter((prev) => (prev === 'Rejected' ? 'all' : 'Rejected'));
             setCurrentPage(1);
           }}
         />
         <PulseCard
-          label="Failed Rate"
-          subtitle="System / Sync Failures"
+          label={t.registrationsList.pulseFailedLabel}
+          subtitle={t.registrationsList.pulseFailedSubtitle}
           value={pulseStats.failed}
           rateText={`${pulseStats.failedRate}%`}
-          fractionText={`${pulseStats.failed.toLocaleString()} / ${pulseStats.total.toLocaleString()}`}
+          fractionText={`${formatNumber(pulseStats.failed)} / ${formatNumber(pulseStats.total)}`}
           ringScore={pulseStats.failedRate}
           ringColor="#64748b"
           icon={AlertCircle}
           iconBg="bg-slate-600 text-white"
           active={statusFilter === 'Failed'}
+          activeBadgeLabel={t.registrationsList.pulseActiveBadge}
+          recordsSuffix={t.registrationsList.pulseRecordsSuffix}
+          exactRateLabel={t.registrationsList.pulseExactRate}
+          formatNumber={formatNumber}
           onClick={() => {
             setStatusFilter((prev) => (prev === 'Failed' ? 'all' : 'Failed'));
             setCurrentPage(1);
@@ -854,10 +874,10 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
             <div className="space-y-1">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h2 className="text-xl font-bold text-foreground font-headline">
-                  Registration Ledger
+                  {t.registrationsList.ledgerTitle}
                 </h2>
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-bold tabular-nums">
-                  {filteredRegistrations.length.toLocaleString()} Matching Records
+                  {t.registrationsList.matchingRecordsBadge.replace('{count}', formatNumber(filteredRegistrations.length))}
                 </span>
                 {duplicateTracker.totalDuplicates > 0 && (
                   <button
@@ -875,13 +895,17 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                   >
                     <AlertTriangle className="h-3 w-3" />
                     {showDuplicatesOnly
-                      ? `Showing ${duplicateTracker.totalDuplicates} Duplicate RIDs (Clear)`
-                      : `${duplicateTracker.totalDuplicates} Duplicate 29-Digit RID Detected`}
+                      ? t.registrationsList.showingDuplicatesBtn.replace('{count}', formatNumber(duplicateTracker.totalDuplicates))
+                      : t.registrationsList.duplicatesDetectedBtn.replace('{count}', formatNumber(duplicateTracker.totalDuplicates))}
                   </button>
                 )}
               </div>
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">
-                Exact Success: {pulseStats.successRate}% · Rejection: {pulseStats.rejectionRate}% · Processing: {pulseStats.processingRate}% · Failed: {pulseStats.failedRate}%
+                {t.registrationsList.exactSummaryLine
+                  .replace('{success}', String(pulseStats.successRate))
+                  .replace('{rejection}', String(pulseStats.rejectionRate))
+                  .replace('{processing}', String(pulseStats.processingRate))
+                  .replace('{failed}', String(pulseStats.failedRate))}
               </p>
             </div>
 
@@ -901,7 +925,8 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                     }}
                     className="flex-1 sm:flex-none border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 font-black text-[10px] uppercase tracking-widest h-11 bg-background"
                   >
-                    <ShieldCheck className="mr-1.5 h-4 w-4" /> Verify Queue ({pulseStats.processing})
+                    <ShieldCheck className="mr-1.5 h-4 w-4" />{' '}
+                    {t.registrationsList.verifyQueueBtn.replace('{count}', formatNumber(pulseStats.processing))}
                   </Button>
                 )}
                 <Button
@@ -913,21 +938,21 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                   }}
                   className="flex-1 sm:flex-none border-primary/30 text-primary hover:bg-primary/10 font-black text-[10px] uppercase tracking-widest h-11 bg-background"
                 >
-                  <ScanLine className="mr-1.5 h-4 w-4" /> Scan 29-Digit RID
+                  <ScanLine className="mr-1.5 h-4 w-4" /> {t.registrationsList.scanRidBtn}
                 </Button>
                 <Button
                   onClick={handleExportExcel}
                   variant="outline"
                   className="flex-1 sm:flex-none border-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 font-black text-[10px] uppercase tracking-widest h-11 bg-background"
                 >
-                  <FileSpreadsheet className="mr-1.5 h-4 w-4" /> Excel
+                  <FileSpreadsheet className="mr-1.5 h-4 w-4" /> {t.registrationsList.excelBtn}
                 </Button>
                 <Button
                   onClick={handleExportPDF}
                   variant="outline"
                   className="flex-1 sm:flex-none border-rose-500/20 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 font-black text-[10px] uppercase tracking-widest h-11 bg-background"
                 >
-                  <FileText className="mr-1.5 h-4 w-4" /> PDF
+                  <FileText className="mr-1.5 h-4 w-4" /> {t.registrationsList.pdfBtn}
                 </Button>
                 <RegistrationFormModal
                   mode="add"
@@ -936,7 +961,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                   defaultSchoolName={originFilter.startsWith('INST:') ? originFilter.slice(5) : ''}
                   trigger={
                     <Button className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 text-white font-black text-[10px] uppercase tracking-widest h-11 px-4 rounded-xl shadow-lg shadow-primary/10">
-                      <Plus className="mr-1.5 h-4 w-4" /> Add Record
+                      <Plus className="mr-1.5 h-4 w-4" /> {t.registrationsList.addRecordBtn}
                     </Button>
                   }
                 />
@@ -944,7 +969,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
               <div className="relative w-full sm:w-72">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40" />
                 <Input
-                  placeholder="Search Name, RID, Phone, Institution..."
+                  placeholder={t.registrationsList.searchPlaceholder}
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value);
@@ -961,14 +986,14 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
             <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border/60">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mr-1">
-                  Quick Horizon:
+                  {t.registrationsList.quickHorizonLabel}
                 </span>
                 {(
                   [
-                    { id: 'all', label: 'All Time' },
-                    { id: 'today', label: 'Today' },
-                    { id: '7d', label: 'Last 7 Days' },
-                    { id: 'month', label: 'This Month' },
+                    { id: 'all', label: t.registrationsList.presetAll },
+                    { id: 'today', label: t.registrationsList.presetToday },
+                    { id: '7d', label: t.registrationsList.preset7d },
+                    { id: 'month', label: t.registrationsList.presetMonth },
                   ] as const
                 ).map((preset) => (
                   <button
@@ -999,7 +1024,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                   onClick={resetFilters}
                   className="h-8 px-3 font-black text-[10px] uppercase tracking-widest text-primary hover:bg-primary/10 rounded-lg"
                 >
-                  <RotateCcw className="mr-1.5 h-3 w-3" /> Reset All Filters
+                  <RotateCcw className="mr-1.5 h-3 w-3" /> {t.registrationsList.resetAllFiltersBtn}
                 </Button>
               )}
             </div>
@@ -1007,7 +1032,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5 ml-1">
-                  <Filter className="h-3 w-3" /> Status Gate
+                  <Filter className="h-3 w-3" /> {t.registrationsList.statusGateLabel}
                 </label>
                 <Select
                   value={statusFilter}
@@ -1017,26 +1042,26 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                   }}
                 >
                   <SelectTrigger className="h-10 bg-background border-border rounded-xl text-[10px] font-bold uppercase">
-                    <SelectValue placeholder="All Records" />
+                    <SelectValue placeholder={t.common.all} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all" className="text-[10px] font-bold uppercase">
-                      All Statuses ({pulseStats.total})
+                      {t.registrationsList.allStatusesOption.replace('{count}', formatNumber(pulseStats.total))}
                     </SelectItem>
                     <SelectItem value="Processed" className="text-[10px] font-bold uppercase">
-                      Processed ({pulseStats.processed})
+                      {t.common.status.Processed} ({formatNumber(pulseStats.processed)})
                     </SelectItem>
                     <SelectItem
                       value="Processing_Active"
                       className="text-[10px] font-bold uppercase"
                     >
-                      Processing ({pulseStats.processing})
+                      {t.common.status.Processing} ({formatNumber(pulseStats.processing)})
                     </SelectItem>
                     <SelectItem value="Rejected" className="text-[10px] font-bold uppercase">
-                      Rejected ({pulseStats.rejected})
+                      {t.common.status.Rejected} ({formatNumber(pulseStats.rejected)})
                     </SelectItem>
                     <SelectItem value="Failed" className="text-[10px] font-bold uppercase">
-                      Failed ({pulseStats.failed})
+                      {t.common.status.Failed} ({formatNumber(pulseStats.failed)})
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -1044,7 +1069,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5 ml-1">
-                  <Building2 className="h-3 w-3" /> Origin / Institution
+                  <Building2 className="h-3 w-3" /> {t.registrationsList.originLabel}
                 </label>
                 <Select
                   value={originFilter}
@@ -1054,20 +1079,20 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                   }}
                 >
                   <SelectTrigger className="h-10 bg-background border-border rounded-xl text-[10px] font-bold uppercase">
-                    <SelectValue placeholder="All Origins" />
+                    <SelectValue placeholder={t.common.all} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL" className="text-[10px] font-bold uppercase">
-                      All Records (Walk-In + Institutions)
+                      {t.registrationsList.allOriginsOption}
                     </SelectItem>
                     <SelectItem value="INDIVIDUAL_ONLY" className="text-[10px] font-bold uppercase">
-                      Individual / Walk-In Only
+                      {t.registrationsList.individualOnlyOption}
                     </SelectItem>
                     <SelectItem
                       value="INSTITUTION_ONLY"
                       className="text-[10px] font-bold uppercase"
                     >
-                      All Institution Records Only
+                      {t.registrationsList.institutionOnlyOption}
                     </SelectItem>
                     {existingInstitutionNames.map((inst) => (
                       <SelectItem
@@ -1075,7 +1100,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                         value={`INST:${inst}`}
                         className="text-[10px] font-bold"
                       >
-                        Institution: {inst}
+                        {t.registrationsList.institutionPrefix.replace('{name}', inst)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1084,7 +1109,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5 ml-1">
-                  <Calendar className="h-3 w-3" /> From Date
+                  <Calendar className="h-3 w-3" /> {t.registrationsList.fromDateLabel}
                 </label>
                 <Input
                   type="date"
@@ -1100,7 +1125,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1.5 ml-1">
-                  <Calendar className="h-3 w-3" /> To Date
+                  <Calendar className="h-3 w-3" /> {t.registrationsList.toDateLabel}
                 </label>
                 <Input
                   type="date"
@@ -1121,7 +1146,10 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
             {selectedIds.size > 0 && (
               <div className="sticky top-0 left-0 right-0 z-30 min-h-[3.5rem] h-auto bg-primary text-primary-foreground flex flex-col sm:flex-row sm:items-center px-4 sm:px-6 py-3 sm:py-2 gap-3 sm:gap-4 animate-in slide-in-from-top duration-300 shadow-xl">
                 <p className="text-[11px] font-black uppercase tracking-widest flex-1">
-                  {selectedIds.size} {selectedIds.size === 1 ? 'Record' : 'Records'} Selected
+                  {(selectedIds.size === 1
+                    ? t.registrationsList.selectedSingular
+                    : t.registrationsList.selectedPlural
+                  ).replace('{count}', formatNumber(selectedIds.size))}
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <Button
@@ -1130,7 +1158,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                     className="h-8 px-2.5 text-[10px] font-black uppercase tracking-tighter hover:bg-white/10"
                     onClick={() => setSelectedIds(new Set())}
                   >
-                    <X className="mr-1 h-3.5 w-3.5" /> Clear
+                    <X className="mr-1 h-3.5 w-3.5" /> {t.registrationsList.clearBtn}
                   </Button>
                   <div className="hidden sm:block w-px h-5 bg-white/20" />
                   <Button
@@ -1140,7 +1168,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                     onClick={() => handleBulkStatusTrigger('Processed')}
                     disabled={isBulkProcessing}
                   >
-                    <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Processed
+                    <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> {t.common.status.Processed}
                   </Button>
                   <Button
                     variant="ghost"
@@ -1149,7 +1177,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                     onClick={() => handleBulkStatusTrigger('Processing')}
                     disabled={isBulkProcessing}
                   >
-                    <RefreshCcw className="mr-1 h-3.5 w-3.5" /> Processing
+                    <RefreshCcw className="mr-1 h-3.5 w-3.5" /> {t.common.status.Processing}
                   </Button>
                   <Button
                     variant="ghost"
@@ -1158,7 +1186,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                     onClick={() => handleBulkStatusTrigger('Rejected')}
                     disabled={isBulkProcessing}
                   >
-                    <ShieldAlert className="mr-1 h-3.5 w-3.5" /> Reject
+                    <ShieldAlert className="mr-1 h-3.5 w-3.5" /> {t.registrationsList.rejectBtn}
                   </Button>
                   <Button
                     variant="ghost"
@@ -1167,7 +1195,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                     onClick={() => handleBulkStatusTrigger('Failed')}
                     disabled={isBulkProcessing}
                   >
-                    <AlertCircle className="mr-1 h-3.5 w-3.5" /> Failed
+                    <AlertCircle className="mr-1 h-3.5 w-3.5" /> {t.common.status.Failed}
                   </Button>
                   <div className="hidden sm:block w-px h-5 bg-white/20" />
                   <Button
@@ -1177,7 +1205,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                     onClick={() => setIsConfirmBulkDeleteDialogOpen(true)}
                     disabled={isBulkProcessing}
                   >
-                    <Trash2 className="mr-1 h-3.5 w-3.5" /> Purge
+                    <Trash2 className="mr-1 h-3.5 w-3.5" /> {t.registrationsList.purgeBtn}
                   </Button>
                 </div>
               </div>
@@ -1195,7 +1223,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                       onClick={() => requestSort('id')}
                     >
                       <div className="flex items-center">
-                        Registration ID {getSortIcon('id')}
+                        {t.registrationsList.colRegId} {getSortIcon('id')}
                       </div>
                     </TableHead>
                     <TableHead
@@ -1203,7 +1231,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                       onClick={() => requestSort('applicantName')}
                     >
                       <div className="flex items-center">
-                        Applicant & Origin {getSortIcon('applicantName')}
+                        {t.registrationsList.colApplicantOrigin} {getSortIcon('applicantName')}
                       </div>
                     </TableHead>
                     <TableHead
@@ -1211,7 +1239,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                       onClick={() => requestSort('submissionDate')}
                     >
                       <div className="flex items-center justify-center">
-                        Date {getSortIcon('submissionDate')}
+                        {t.registrationsList.colDate} {getSortIcon('submissionDate')}
                       </div>
                     </TableHead>
                     <TableHead
@@ -1219,7 +1247,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                       onClick={() => requestSort('phone')}
                     >
                       <div className="flex items-center justify-center">
-                        Phone {getSortIcon('phone')}
+                        {t.registrationsList.colPhone} {getSortIcon('phone')}
                       </div>
                     </TableHead>
                     <TableHead
@@ -1227,11 +1255,11 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                       onClick={() => requestSort('status')}
                     >
                       <div className="flex items-center justify-center">
-                        Quick Status {getSortIcon('status')}
+                        {t.registrationsList.colQuickStatus} {getSortIcon('status')}
                       </div>
                     </TableHead>
                     <TableHead className="text-right text-[10px] font-black uppercase tracking-widest pr-6 text-muted-foreground">
-                      Action
+                      {t.registrationsList.colAction}
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1262,7 +1290,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                               <button
                                 type="button"
                                 onClick={() => handleCopyRid(reg.id)}
-                                title="Click to copy full RID"
+                                title={t.registrationTable.copyFullRidTooltip}
                                 className="inline-flex items-center gap-1.5 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors whitespace-nowrap group/rid cursor-pointer"
                               >
                                 <FileDigit className="h-3.5 w-3.5 text-slate-400 group-hover/rid:text-blue-600 dark:group-hover/rid:text-blue-400 shrink-0 transition-colors" />
@@ -1292,7 +1320,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                                     setOriginFilter(`INST:${instName}`);
                                     setCurrentPage(1);
                                   }}
-                                  title={`Filter by ${instName}`}
+                                  title={instName}
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap transition-colors cursor-pointer"
                                 >
                                   <Building2 className="h-3 w-3" />
@@ -1300,13 +1328,13 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                                 </button>
                               ) : (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 text-[9px] font-bold uppercase tracking-wider">
-                                  Individual
+                                  {t.registrationsList.individualBadge}
                                 </span>
                               )}
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
                               <p className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-tighter">
-                                {(reg.location || 'Sector Unspecified').split(',')[0]}
+                                {(reg.location || t.registrationsList.sectorUnspecified).split(',')[0]}
                               </p>
                               {(reg.status === 'Rejected' || reg.status === 'Failed') &&
                                 reg.rejectionReason && (
@@ -1319,8 +1347,12 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                           <TableCell className="text-center">
                             <p className="text-[10px] font-bold text-muted-foreground uppercase whitespace-nowrap">
                               {reg.submissionDate
-                                ? format(new Date(reg.submissionDate), 'MMM dd, yyyy')
-                                : 'N/A'}
+                                ? formatDate(reg.submissionDate, {
+                                    month: 'short',
+                                    day: '2-digit',
+                                    year: 'numeric',
+                                  })
+                                : t.common.na}
                             </p>
                           </TableCell>
                           <TableCell className="text-center hidden sm:table-cell">
@@ -1351,22 +1383,22 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                                 </SelectTrigger>
                                 <SelectContent align="center">
                                   <SelectItem value="Processed" className="text-xs font-bold">
-                                    Processed
+                                    {t.common.status.Processed}
                                   </SelectItem>
                                   <SelectItem value="Processing" className="text-xs font-bold">
-                                    Processing
+                                    {t.common.status.Processing}
                                   </SelectItem>
                                   <SelectItem
                                     value="Rejected"
                                     className="text-xs font-bold text-rose-600"
                                   >
-                                    Rejected (Reason...)
+                                    {t.registrationsList.rejectedReasonOption}
                                   </SelectItem>
                                   <SelectItem
                                     value="Failed"
                                     className="text-xs font-bold text-slate-600"
                                   >
-                                    Failed (Reason...)
+                                    {t.registrationsList.failedReasonOption}
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
@@ -1376,7 +1408,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                             <div className="inline-flex items-center justify-end gap-1">
                               <button
                                 type="button"
-                                title="Verify in Status Check"
+                                title={t.registrationsList.verifyInStatusCheckTooltip}
                                 onClick={() =>
                                   router.push(`/status-check?id=${encodeURIComponent(reg.id)}`)
                                 }
@@ -1386,7 +1418,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                               </button>
                               <button
                                 type="button"
-                                title="View Record"
+                                title={t.registrationsList.viewRecordTooltip}
                                 onClick={() => setViewingRegistration(reg)}
                                 className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
                               >
@@ -1399,7 +1431,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                                 trigger={
                                   <button
                                     type="button"
-                                    title="Edit Record"
+                                    title={t.registrationsList.editRecordTooltip}
                                     className="h-8 w-8 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                                   >
                                     <SquarePen className="h-4 w-4" />
@@ -1408,7 +1440,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                               />
                               <button
                                 type="button"
-                                title="Delete Record"
+                                title={t.registrationsList.deleteRecordTooltip}
                                 onClick={() => {
                                   setRegistrationToDelete({
                                     id: reg.id,
@@ -1431,7 +1463,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                         <div className="flex flex-col items-center justify-center gap-4 opacity-20">
                           <Activity className="h-16 w-16 text-muted-foreground" />
                           <p className="text-sm font-black uppercase tracking-[0.2em] text-muted-foreground">
-                            Registry Scan Complete: Zero Matches
+                            {t.registrationsList.emptyScanComplete}
                           </p>
                         </div>
                       </TableCell>
@@ -1448,7 +1480,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
             onPageChange={setCurrentPage}
             showingCount={currentItems.length}
             totalCount={sortedRegistrations.length}
-            itemLabel="records"
+            itemLabel={t.registrationsList.paginationItemsLabel}
             className="px-0 pt-6 pb-0 border-t border-border bg-transparent"
           />
         </div>
@@ -1463,22 +1495,32 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
           <DialogHeader>
             <DialogTitle className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
               <ShieldAlert className="h-5 w-5 text-rose-500" />
-              Specify {pendingStatusAction?.newStatus} Reason
+              {t.registrationsList.reasonModalTitle.replace(
+                '{status}',
+                pendingStatusAction ? t.common.status[pendingStatusAction.newStatus] : ''
+              )}
             </DialogTitle>
             <DialogDescription className="text-xs">
               {pendingStatusAction?.mode === 'bulk'
-                ? `Provide the protocol reason for marking ${selectedIds.size} selected records as ${pendingStatusAction?.newStatus}.`
-                : `Provide the protocol reason for marking ${pendingStatusAction?.record?.applicantName} as ${pendingStatusAction?.newStatus}.`}
+                ? t.registrationsList.reasonModalBulkDesc
+                    .replace('{count}', formatNumber(selectedIds.size))
+                    .replace('{status}', t.common.status[pendingStatusAction.newStatus])
+                : t.registrationsList.reasonModalSingleDesc
+                    .replace('{name}', pendingStatusAction?.record?.applicantName || '')
+                    .replace(
+                      '{status}',
+                      pendingStatusAction ? t.common.status[pendingStatusAction.newStatus] : ''
+                    )}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Quick Select Common Reason
+                {t.registrationsList.quickSelectReasonLabel}
               </Label>
               <div className="flex flex-wrap gap-1.5">
-                {PRESET_REASONS.map((preset) => (
+                {t.registrationsList.presetReasons.map((preset) => (
                   <button
                     key={preset}
                     type="button"
@@ -1498,10 +1540,13 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
 
             <div className="space-y-1.5">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Custom Protocol Note / Reason
+                {t.registrationsList.customReasonLabel}
               </Label>
               <Input
-                placeholder={`Enter ${pendingStatusAction?.newStatus?.toLowerCase()} reason...`}
+                placeholder={t.registrationsList.customReasonPlaceholder.replace(
+                  '{status}',
+                  pendingStatusAction ? t.common.status[pendingStatusAction.newStatus] : ''
+                )}
                 value={reasonInput}
                 onChange={(e) => setReasonInput(e.target.value)}
                 className="h-11 rounded-xl font-semibold text-xs"
@@ -1516,14 +1561,17 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
               onClick={() => setPendingStatusAction(null)}
               className="rounded-xl text-xs font-bold"
             >
-              Cancel
+              {t.common.cancel}
             </Button>
             <Button
               type="button"
               onClick={handleConfirmReasonModal}
               className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wider"
             >
-              Confirm {pendingStatusAction?.newStatus}
+              {t.registrationsList.confirmStatusBtn.replace(
+                '{status}',
+                pendingStatusAction ? t.common.status[pendingStatusAction.newStatus] : ''
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1543,10 +1591,10 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                 </div>
                 <div>
                   <DialogTitle className="text-lg sm:text-xl font-black text-foreground uppercase tracking-tighter leading-none mb-1">
-                    Documentation Archive
+                    {t.registrationsList.docArchiveTitle}
                   </DialogTitle>
                   <DialogDescription className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                    Authorized Bureau Record
+                    {t.registrationsList.docArchiveSubtitle}
                   </DialogDescription>
                 </div>
               </div>
@@ -1562,43 +1610,50 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                   <div className="flex items-center gap-2 mb-2">
                     <ShieldAlert className="h-4 w-4 text-rose-500" />
                     <p className="text-[10px] font-black uppercase text-rose-600 tracking-widest">
-                      Protocol {viewingRegistration.status} Reason
+                      {t.registrationsList.protocolReasonTitle.replace(
+                        '{status}',
+                        t.common.status[viewingRegistration.status]
+                      )}
                     </p>
                   </div>
                   <p className="text-sm font-bold text-rose-700 leading-tight">
-                    Detail: {viewingRegistration.rejectionReason}
+                    {t.registrationsList.detailPrefix.replace('{reason}', viewingRegistration.rejectionReason)}
                   </p>
                 </div>
               )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-10 relative z-10">
               <DetailItem
-                label="Applicant Identity"
+                label={t.registrationsList.detailApplicant}
                 value={viewingRegistration?.applicantName}
                 icon={User}
               />
               <DetailItem
-                label="Inbound Date"
+                label={t.registrationsList.detailInboundDate}
                 value={
                   viewingRegistration?.submissionDate
-                    ? format(new Date(viewingRegistration.submissionDate), 'MMMM dd, yyyy')
-                    : 'N/A'
+                    ? formatDate(viewingRegistration.submissionDate, {
+                        month: 'long',
+                        day: '2-digit',
+                        year: 'numeric',
+                      })
+                    : t.common.na
                 }
                 icon={Calendar}
               />
               <DetailItem
-                label="Communication Hub"
+                label={t.registrationsList.detailPhone}
                 value={viewingRegistration?.phone}
                 icon={Phone}
               />
               <DetailItem
-                label="Processing Sector"
+                label={t.registrationsList.detailLocation}
                 value={viewingRegistration?.location}
                 icon={MapPin}
               />
               {viewingRegistration && getInstitutionLabel(viewingRegistration) && (
                 <DetailItem
-                  label="Registered Institution"
+                  label={t.registrationsList.detailInstitution}
                   value={getInstitutionLabel(viewingRegistration)}
                   icon={Building2}
                 />
@@ -1608,11 +1663,11 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
             <div className="space-y-6 relative z-10">
               <div className="space-y-2">
                 <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                  <RefreshCcw className="h-3 w-3" /> Audit Log & Remarks
+                  <RefreshCcw className="h-3 w-3" /> {t.registrationsList.auditLogRemarksLabel}
                 </p>
                 <div className="p-5 sm:p-6 bg-muted/40 rounded-[24px] sm:rounded-[28px] border border-border/50">
                   <p className="text-sm text-foreground leading-relaxed italic font-medium">
-                    &ldquo;{viewingRegistration?.remarks || 'No internal annotations detected.'}&rdquo;
+                    &ldquo;{viewingRegistration?.remarks || t.registrationsList.noAnnotations}&rdquo;
                   </p>
                 </div>
               </div>
@@ -1620,7 +1675,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
               <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-primary/[0.02] border border-primary/5 rounded-2xl gap-4">
                 <div className="space-y-1">
                   <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                    Full Protocol ID
+                    {t.registrationsList.fullProtocolIdLabel}
                   </p>
                   <p className="text-[10px] sm:text-[11px] font-mono font-bold text-primary break-all">
                     {viewingRegistration?.id}
@@ -1631,7 +1686,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                   onClick={() =>
                     viewingRegistration && handleCopyRid(viewingRegistration.id)
                   }
-                  title="Copy Full RID"
+                  title={t.registrationTable.copyFullRidTooltip}
                   className="h-10 w-10 rounded-xl bg-background border border-border flex items-center justify-center text-slate-500 hover:text-blue-600 hover:border-blue-500/40 shrink-0 self-end sm:self-auto transition-colors"
                 >
                   {viewingRegistration && copiedId === viewingRegistration.id ? (
@@ -1647,10 +1702,10 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                 <div className="p-4 rounded-2xl bg-muted/30 border border-border/60 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-                      <Keyboard className="h-3.5 w-3.5 text-primary" /> Rapid Triage Actions
+                      <Keyboard className="h-3.5 w-3.5 text-primary" /> {t.registrationsList.rapidTriageTitle}
                     </span>
                     <span className="text-[9px] font-bold text-muted-foreground">
-                      Instant Status Assignment
+                      {t.registrationsList.instantStatusLabel}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -1665,7 +1720,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                       }}
                       className="h-9 text-[10px] font-black uppercase tracking-wider border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
                     >
-                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Processed
+                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> {t.common.status.Processed}
                     </Button>
                     <Button
                       type="button"
@@ -1678,7 +1733,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                       }}
                       className="h-9 text-[10px] font-black uppercase tracking-wider border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
                     >
-                      <RefreshCcw className="mr-1 h-3.5 w-3.5" /> Processing
+                      <RefreshCcw className="mr-1 h-3.5 w-3.5" /> {t.common.status.Processing}
                     </Button>
                     <Button
                       type="button"
@@ -1691,7 +1746,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                       }}
                       className="h-9 text-[10px] font-black uppercase tracking-wider border-rose-500/30 text-rose-600 hover:bg-rose-500/10"
                     >
-                      <ShieldAlert className="mr-1 h-3.5 w-3.5" /> Rejected
+                      <ShieldAlert className="mr-1 h-3.5 w-3.5" /> {t.common.status.Rejected}
                     </Button>
                     <Button
                       type="button"
@@ -1704,7 +1759,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                       }}
                       className="h-9 text-[10px] font-black uppercase tracking-wider border-slate-500/30 text-slate-600 hover:bg-slate-500/10"
                     >
-                      <AlertCircle className="mr-1 h-3.5 w-3.5" /> Failed
+                      <AlertCircle className="mr-1 h-3.5 w-3.5" /> {t.common.status.Failed}
                     </Button>
                   </div>
                 </div>
@@ -1723,14 +1778,15 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                 }}
                 className="h-11 px-5 rounded-xl font-black text-[10px] uppercase tracking-widest"
               >
-                <ShieldCheck className="mr-1.5 h-4 w-4 text-emerald-600" /> Verify in Status Check
+                <ShieldCheck className="mr-1.5 h-4 w-4 text-emerald-600" />{' '}
+                {t.registrationsList.verifyInStatusCheckTooltip}
               </Button>
             )}
             <Button
               onClick={() => setViewingRegistration(null)}
               className="w-full sm:w-auto h-11 px-8 rounded-xl font-black text-[10px] uppercase tracking-widest"
             >
-              Close Record
+              {t.registrationsList.closeRecordBtn}
             </Button>
           </div>
         </DialogContent>
@@ -1742,19 +1798,21 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
           <DialogHeader>
             <DialogTitle className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
               <ScanLine className="h-5 w-5 text-primary" />
-              29-Digit RID Slip & Camera Scanner
+              {t.registrationsList.scannerModalTitle}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Extract a 29-digit Registration ID from an enrollment slip, barcode scanner, or pasted text to immediately locate or inspect the record.
+              {t.registrationsList.scannerModalDesc}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="flex items-center justify-between gap-2 p-3 rounded-2xl bg-muted/40 border border-border">
               <div className="space-y-0.5">
-                <p className="text-xs font-bold text-foreground">Optical Camera Viewfinder</p>
+                <p className="text-xs font-bold text-foreground">
+                  {t.registrationsList.cameraViewfinderTitle}
+                </p>
                 <p className="text-[10px] text-muted-foreground">
-                  Use your device camera or USB barcode scanner to read the slip
+                  {t.registrationsList.cameraViewfinderDesc}
                 </p>
               </div>
               <Button
@@ -1765,7 +1823,9 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                 className="h-9 rounded-xl text-xs font-bold"
               >
                 <Camera className="mr-1.5 h-3.5 w-3.5" />
-                {isCameraScanning ? 'Stop Camera' : 'Start Camera'}
+                {isCameraScanning
+                  ? t.registrationsList.stopCameraBtn
+                  : t.registrationsList.startCameraBtn}
               </Button>
             </div>
 
@@ -1785,10 +1845,10 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
 
             <div className="space-y-1.5">
               <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Paste Enrollment Slip Text or Scan Barcode Output
+                {t.registrationsList.pasteSlipLabel}
               </Label>
               <Input
-                placeholder="Paste raw slip text or 29-digit numeric RID here..."
+                placeholder={t.registrationsList.pasteSlipPlaceholder}
                 value={scannerTextInput}
                 onChange={(e) => setScannerTextInput(e.target.value)}
                 className="h-11 rounded-xl font-mono text-xs"
@@ -1798,7 +1858,10 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
             {extracted29DigitRids.length > 0 ? (
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                  Detected 29-Digit Registration IDs ({extracted29DigitRids.length})
+                  {t.registrationsList.detectedRidsLabel.replace(
+                    '{count}',
+                    String(extracted29DigitRids.length)
+                  )}
                 </p>
                 <div className="space-y-1.5">
                   {extracted29DigitRids.map((rid) => {
@@ -1816,8 +1879,10 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                           </p>
                           <p className="text-[10px] font-semibold text-muted-foreground">
                             {matchedRec
-                              ? `Match Found: ${matchedRec.applicantName} (${matchedRec.status})`
-                              : 'Not yet in local view — click to filter ledger'}
+                              ? t.registrationsList.matchFoundDesc
+                                  .replace('{name}', matchedRec.applicantName)
+                                  .replace('{status}', t.common.status[matchedRec.status])
+                              : t.registrationsList.notInLocalViewDesc}
                           </p>
                         </div>
                         <Button
@@ -1826,7 +1891,9 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
                           onClick={() => handleApplyScannedRid(rid)}
                           className="h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-wider shrink-0"
                         >
-                          {matchedRec ? 'Inspect Record' : 'Filter Ledger'}
+                          {matchedRec
+                            ? t.registrationsList.inspectRecordBtn
+                            : t.registrationsList.filterLedgerBtn}
                         </Button>
                       </div>
                     );
@@ -1836,7 +1903,10 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
             ) : (
               scannerTextInput.trim().length > 0 && (
                 <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                  Keep typing or paste a slip containing a 29-digit Registration ID ({scannerTextInput.replace(/\D/g, '').length}/29 digits detected).
+                  {t.registrationsList.keepTypingHint.replace(
+                    '{count}',
+                    String(scannerTextInput.replace(/\D/g, '').length)
+                  )}
                 </p>
               )
             )}
@@ -1849,7 +1919,7 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
               onClick={() => setIsRidScannerOpen(false)}
               className="rounded-xl text-xs font-bold"
             >
-              Close Scanner
+              {t.registrationsList.closeScannerBtn}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1868,12 +1938,20 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
             </div>
             <div className="space-y-2">
               <AlertDialogTitle className="text-2xl font-black text-foreground tracking-tighter uppercase leading-none">
-                {isDeleting ? 'PURGING RECORD...' : 'PERMANENT DELETION'}
+                {isDeleting
+                  ? t.registrationsList.singleDeleteDeletingTitle
+                  : t.registrationsList.singleDeleteTitle}
               </AlertDialogTitle>
               <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed font-medium">
                 {isDeleting
-                  ? `Removing registry documentation for ${registrationToDelete?.name}. Please wait...`
-                  : `You are about to permanently purge the record for ${registrationToDelete?.name} from the bureau registry. This action is final and subject to administrative audit.`}
+                  ? t.registrationsList.singleDeleteDeletingDesc.replace(
+                      '{name}',
+                      registrationToDelete?.name || ''
+                    )
+                  : t.registrationsList.singleDeleteDesc.replace(
+                      '{name}',
+                      registrationToDelete?.name || ''
+                    )}
               </AlertDialogDescription>
             </div>
           </div>
@@ -1889,12 +1967,12 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
               {isDeleting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                'Confirm Destruction'
+                t.registrationsList.confirmDestructionBtn
               )}
             </AlertDialogAction>
             {!isDeleting && (
               <AlertDialogCancel className="w-full h-12 rounded-2xl font-bold uppercase text-[10px] tracking-widest border-none bg-transparent hover:bg-card">
-                Abort Protocol
+                {t.registrationsList.abortProtocolBtn}
               </AlertDialogCancel>
             )}
           </AlertDialogFooter>
@@ -1917,12 +1995,17 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
             </div>
             <div className="space-y-2">
               <AlertDialogTitle className="text-2xl font-black text-foreground tracking-tighter uppercase leading-none">
-                {isBulkProcessing ? 'PURGING REGISTRY...' : 'MASS DELETION PROTOCOL'}
+                {isBulkProcessing
+                  ? t.registrationsList.bulkDeleteDeletingTitle
+                  : t.registrationsList.bulkDeleteTitle}
               </AlertDialogTitle>
               <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed font-medium">
                 {isBulkProcessing
-                  ? 'Executing bulk record destruction. Synchronizing with forensic ledger...'
-                  : `You are about to permanently purge ${selectedIds.size} records from the bureau hub. This operation cannot be reversed.`}
+                  ? t.registrationsList.bulkDeleteDeletingDesc
+                  : t.registrationsList.bulkDeleteDesc.replace(
+                      '{count}',
+                      formatNumber(selectedIds.size)
+                    )}
               </AlertDialogDescription>
             </div>
           </div>
@@ -1938,12 +2021,12 @@ export function RegistrationsList({ initialRegistrations }: RegistrationsListPro
               {isBulkProcessing ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                'Confirm Destruction'
+                t.registrationsList.confirmDestructionBtn
               )}
             </AlertDialogAction>
             {!isBulkProcessing && (
               <AlertDialogCancel className="w-full h-12 rounded-2xl font-bold uppercase text-[10px] tracking-widest border-none bg-transparent hover:bg-card">
-                Abort Mass Action
+                {t.registrationsList.abortMassActionBtn}
               </AlertDialogCancel>
             )}
           </AlertDialogFooter>
@@ -1964,6 +2047,10 @@ function PulseCard({
   icon: Icon,
   iconBg,
   active,
+  activeBadgeLabel,
+  recordsSuffix,
+  exactRateLabel,
+  formatNumber,
   onClick,
 }: any) {
   const dashOffset = 44 - (44 * Math.min(Math.max(ringScore || 0, 0), 100)) / 100;
@@ -1997,7 +2084,7 @@ function PulseCard({
           </div>
           {active && (
             <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[9px] font-black uppercase tracking-wider shrink-0">
-              Active
+              {activeBadgeLabel}
             </span>
           )}
         </div>
@@ -2006,11 +2093,11 @@ function PulseCard({
           <div className="space-y-0.5">
             <div className="flex items-baseline gap-2">
               <span className="text-[22px] font-black tracking-tight text-slate-900 dark:text-white tabular-nums leading-none">
-                {value.toLocaleString()}
+                {formatNumber ? formatNumber(value) : value.toLocaleString()}
               </span>
             </div>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold tabular-nums">
-              {fractionText} records
+              {fractionText} {recordsSuffix}
             </p>
           </div>
 
@@ -2042,7 +2129,7 @@ function PulseCard({
               </span>
             </div>
             <p className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">
-              Exact Rate
+              {exactRateLabel}
             </p>
           </div>
         </div>
