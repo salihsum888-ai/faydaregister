@@ -154,7 +154,7 @@ export default function LoginPage() {
     if (verificationPhase !== 'none') return;
     if (otpStatus === 'verifying' || otpStatus === 'success') return;
 
-    const isMfaRequired = true; 
+    const isMfaRequired = profile.twoFactorEnabled !== false;
 
     if (isMfaRequired && !isOtpVerified) {
       if (profile.twoFactorSecret) {
@@ -175,6 +175,11 @@ export default function LoginPage() {
         }
       }
       return;
+    }
+
+    if (typeof window !== 'undefined' && user?.uid) {
+      sessionStorage.setItem('fayda_mfa_verified', 'true');
+      sessionStorage.setItem('fayda_mfa_verified_uid', user.uid);
     }
 
     if (profile.role === 'admin') {

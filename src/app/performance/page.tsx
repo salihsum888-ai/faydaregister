@@ -138,21 +138,25 @@ function MetricGauge({
   description,
   inverseTrend = false,
   isActive = false,
+  isSuccessGauge = false,
   onClick,
 }: any) {
+  const { t, formatNumber } = useTranslation();
   const data = [{ name: label, value: value, fill: color }];
   const isUp = trend > 0;
   const isNeutral = trend === 0;
   const isGood = inverseTrend ? trend < 0 : trend > 0;
 
-  const tooltipText =
-    label === 'Success Rate'
-      ? value >= 85
-        ? 'Elite Status: Protocol efficiency exceeding 85.00%. Click to filter Processed records.'
-        : value >= 80
-        ? 'Cautionary: Quality dipped below 85.00% threshold. Click to filter Processed records.'
-        : 'Critical Alert: Success rate below minimum 80.00% protocol. Click to filter Processed records.'
-      : `${description} • Click gauge to filter audit ledger.`;
+  const tooltipText = isSuccessGauge
+    ? value >= 85
+      ? t.intelMatrix.tooltipElite
+      : value >= 80
+      ? t.intelMatrix.tooltipCaution
+      : t.intelMatrix.tooltipCritical
+    : t.intelMatrix.tooltipInspect
+        .replace('{desc}', description)
+        .replace('{count}', formatNumber(count || 0))
+        .replace('{total}', formatNumber(totalCount || 0));
 
   return (
     <TooltipProvider>
@@ -199,7 +203,7 @@ function MetricGauge({
                   ) : (
                     <ArrowDownRight className="h-3 w-3" />
                   ))}
-                {isNeutral ? 'Steady' : `${Math.abs(trend).toFixed(2)}%`}
+                {isNeutral ? t.intelMatrix.stableBadge : `${Math.abs(trend).toFixed(2)}%`}
               </div>
             </div>
 
@@ -225,9 +229,9 @@ function MetricGauge({
                 </span>
                 {typeof count === 'number' && (
                   <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 tabular-nums mt-0.5">
-                    {count.toLocaleString()}
-                    {typeof totalCount === 'number' ? ` / ${totalCount.toLocaleString()}` : ''}{' '}
-                    records
+                    {t.intelMatrix.recordsCountUnit
+                      .replace('{count}', formatNumber(count))
+                      .replace('{total}', formatNumber(totalCount || 0))}
                   </span>
                 )}
               </div>
@@ -595,6 +599,10 @@ function PerformanceContent() {
       const rejected = items.filter((r) => r.status === 'Rejected').length;
       const failed = items.filter((r) => r.status === 'Failed').length;
       const exactTotal = processed + processing + rejected + failed;
+      const uniqueDays = new Set(
+        items.map((r) => format(new Date(r.submissionDate), 'yyyy-MM-dd'))
+      ).size;
+      const dailyAvg = uniqueDays > 0 ? Number((exactTotal / uniqueDays).toFixed(1)) : 0;
       return {
         key,
         total: exactTotal,
@@ -602,15 +610,21 @@ function PerformanceContent() {
         processing,
         rejected,
         failed,
+        dailyAvg,
         successRate: calcExactRate(processed, exactTotal),
         processingRate: calcExactRate(processing, exactTotal),
         rejectionRate: calcExactRate(rejected, exactTotal),
         failedRate: calcExactRate(failed, exactTotal),
       };
     };
+    const left = computeSlice(compareLeftKey);
+    const right = computeSlice(compareRightKey);
     return {
-      left: computeSlice(compareLeftKey),
-      right: computeSlice(compareRightKey),
+      left,
+      right,
+      deltaSuccess: Number((left.successRate - right.successRate).toFixed(2)),
+      deltaRejection: Number((left.rejectionRate - right.rejectionRate).toFixed(2)),
+      deltaVolume: left.total - right.total,
     };
   }, [registrations, compareMode, compareLeftKey, compareRightKey]);
 
@@ -688,13 +702,79 @@ function PerformanceContent() {
       reg.id,
       `Performance Audit: Updated ${reg.applicantName} (${reg.id}) status to ${nextStatus}.`
     );
+    const localizedStatus =
+      nextStatus === 'Processed'
+        ? t.common.statusProcessed
+        : nextStatus === 'Processing'
+        ? t.common.statusProcessing
+        : nextStatus === 'Rejected'
+        ? t.common.statusRejected
+        : t.common.statusFailed;
     toast({
-      title: `Status Updated to ${nextStatus}`,
-      description: `${reg.applicantName} is now marked as ${nextStatus}.`,
+      title: t.performancePage.toastStatusUpdatedTitle,
+      description: t.performancePage.toastStatusUpdatedDesc
+        .replace('{name}', reg.applicantName)
+        .replace('{status}', localizedStatus),
     });
     if (selectedRejection?.id === reg.id) {
       setSelectedRejection(null);
     }
+  };
+
+  const handleBulkStatusUpdate = (nextStatus: RegistrationStatus) => {
+    if (!db || !user || selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    ids.forEach((id) => {
+      updateDocumentNonBlocking(doc(db, 'registrations', id), {
+        status: nextStatus,
+        ...(nextStatus === 'Processed' ? { rejectionReason: '' } : {}),
+      });
+    });
+    logAuditAction(
+      db,
+      user,
+      currentUserProfile?.fullName || 'Official',
+      'STATUS_UPDATE',
+      ids[0],
+      `Performance Audit Bulk Action: Updated ${ids.length} records to ${nextStatus}.`
+    );
+    const localizedStatus =
+      nextStatus === 'Processed'
+        ? t.common.statusProcessed
+        : nextStatus === 'Processing'
+        ? t.common.statusProcessing
+        : nextStatus === 'Rejected'
+        ? t.common.statusRejected
+        : t.common.statusFailed;
+    toast({
+      title: t.performancePage.toastBulkUpdatedTitle,
+      description: t.performancePage.toastBulkUpdatedDesc
+        .replace('{count}', String(ids.length))
+        .replace('{status}', localizedStatus),
+    });
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDelete = () => {
+    if (!db || !user || selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    ids.forEach((id) => {
+      deleteDocumentNonBlocking(doc(db, 'registrations', id));
+    });
+    logAuditAction(
+      db,
+      user,
+      currentUserProfile?.fullName || 'Official',
+      'RECORD_DELETED',
+      ids[0],
+      `Performance Audit Bulk Action: Deleted ${ids.length} records.`
+    );
+    toast({
+      title: t.performancePage.toastBulkDeletedTitle,
+      description: t.performancePage.toastBulkDeletedDesc.replace('{count}', String(ids.length)),
+      variant: 'destructive',
+    });
+    setSelectedIds(new Set());
   };
 
   const handleExportExcel = () => {
@@ -935,6 +1015,26 @@ function PerformanceContent() {
                   <span className="text-xs font-black uppercase tracking-wider text-foreground">
                     {t.performancePage.kpiSuccessTitle}: 85.00%
                   </span>
+                  <span
+                    className={cn(
+                      'px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider tabular-nums',
+                      stats.successRate >= 85
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                    )}
+                  >
+                    {stats.successRate >= 85
+                      ? t.performancePage.slaAchievedBadge
+                      : t.performancePage.slaNeededBadge.replace(
+                          '{count}',
+                          String(
+                            Math.max(
+                              1,
+                              Math.ceil((0.85 * stats.total - stats.processed) / 0.15)
+                            )
+                          )
+                        )}
+                  </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {t.performancePage.verifiedBadge
@@ -978,6 +1078,7 @@ function PerformanceContent() {
               trend={stats.trends.processed}
               description={t.performancePage.kpiSuccessDesc}
               inverseTrend={false}
+              isSuccessGauge={true}
               isActive={auditStatusFilter === 'Processed'}
               onClick={() =>
                 setAuditStatusFilter((prev) => (prev === 'Processed' ? 'ALL' : 'Processed'))
@@ -1390,12 +1491,60 @@ function PerformanceContent() {
                         {panel.metrics.failedRate.toFixed(2)}%
                       </span>
                       <span className="text-[10px] text-muted-foreground block tabular-nums">
-                        {panel.metrics.failed} {t.common.statusFailed}
+                        {panel.metrics.failed} {t.common.statusFailed} • {t.performancePage.dailyAvgLabel}: {panel.metrics.dailyAvg}
                       </span>
                     </div>
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Comparison Variance (Delta) Summary Strip */}
+            <div className="clay-well p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-border/50">
+              <span className="text-[11px] font-black uppercase tracking-wider text-muted-foreground">
+                {t.performancePage.deltaSummaryTitle}
+              </span>
+              <div className="flex flex-wrap items-center gap-4 text-xs font-bold tabular-nums">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">{t.performancePage.deltaSuccessLabel}:</span>
+                  <span
+                    className={cn(
+                      'font-black',
+                      sideBySideComparison.deltaSuccess > 0
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : sideBySideComparison.deltaSuccess < 0
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : 'text-foreground'
+                    )}
+                  >
+                    {sideBySideComparison.deltaSuccess > 0 ? '+' : ''}
+                    {sideBySideComparison.deltaSuccess}%
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">{t.performancePage.deltaRejectionLabel}:</span>
+                  <span
+                    className={cn(
+                      'font-black',
+                      sideBySideComparison.deltaRejection < 0
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : sideBySideComparison.deltaRejection > 0
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : 'text-foreground'
+                    )}
+                  >
+                    {sideBySideComparison.deltaRejection > 0 ? '+' : ''}
+                    {sideBySideComparison.deltaRejection}%
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">{t.performancePage.deltaVolumeLabel}:</span>
+                  <span className="font-black text-primary">
+                    {sideBySideComparison.deltaVolume > 0 ? '+' : ''}
+                    {sideBySideComparison.deltaVolume.toLocaleString()}
+                  </span>
+                </div>
+              </div>
             </div>
           </Card>
 
@@ -1608,6 +1757,68 @@ function PerformanceContent() {
               </div>
             </div>
 
+            {/* Interactive Bulk Action Toolbar when rows are selected */}
+            {selectedIds.size > 0 && (
+              <div className="clay-card px-5 py-3.5 rounded-2xl border border-primary/30 bg-primary/5 flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center gap-2.5">
+                  <span className="px-3 py-1 rounded-xl bg-primary text-primary-foreground text-xs font-black uppercase tracking-wider tabular-nums">
+                    {t.performancePage.bulkSelectedLabel.replace('{count}', String(selectedIds.size))}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedIds(new Set())}
+                    className="h-8 px-2.5 rounded-xl text-xs font-bold text-muted-foreground hover:text-foreground"
+                  >
+                    {t.performancePage.bulkClearBtn}
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => handleBulkStatusUpdate('Processed')}
+                    className="h-8 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                    {t.performancePage.bulkApproveBtn}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleBulkStatusUpdate('Processing')}
+                    className="h-8 px-3 rounded-xl border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 text-xs font-bold"
+                  >
+                    <Activity className="h-3.5 w-3.5 mr-1.5" />
+                    {t.performancePage.bulkProcessingBtn}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleExportExcel}
+                    className="h-8 px-3 rounded-xl text-xs font-bold"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
+                    XLS ({selectedIds.size})
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleBulkDelete}
+                    className="h-8 px-3 rounded-xl border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 text-xs font-bold"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                    {t.performancePage.bulkDeleteBtn}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <Card className="clay-card rounded-[28px] overflow-hidden">
               <div className="overflow-x-auto">
                 <Table>
@@ -1681,7 +1892,34 @@ function PerformanceContent() {
                               </span>
                             </TableCell>
                             <TableCell className="text-center">
-                              <StatusBadge status={reg.status} className="scale-90" />
+                              <div className="inline-flex items-center justify-center">
+                                <Select
+                                  value={
+                                    reg.status === 'Pending Review' ? 'Processing' : reg.status
+                                  }
+                                  onValueChange={(val: string) =>
+                                    handleQuickResolveRecord(reg, val as RegistrationStatus)
+                                  }
+                                >
+                                  <SelectTrigger className="h-8 w-auto min-w-[130px] border-none bg-transparent shadow-none p-0 focus:ring-0 justify-center gap-1">
+                                    <StatusBadge status={reg.status} className="scale-90" />
+                                  </SelectTrigger>
+                                  <SelectContent className="rounded-xl">
+                                    <SelectItem value="Processed" className="text-xs font-bold text-emerald-600">
+                                      {t.common.statusProcessed}
+                                    </SelectItem>
+                                    <SelectItem value="Processing" className="text-xs font-bold text-amber-600">
+                                      {t.common.statusProcessing}
+                                    </SelectItem>
+                                    <SelectItem value="Rejected" className="text-xs font-bold text-rose-600">
+                                      {t.common.statusRejected}
+                                    </SelectItem>
+                                    <SelectItem value="Failed" className="text-xs font-bold text-slate-600">
+                                      {t.common.statusFailed}
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
                             </TableCell>
                             <TableCell className="pr-6 text-right">
                               <div className="inline-flex items-center justify-end gap-1">

@@ -432,6 +432,61 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+          <div className="flex items-center gap-3 px-4 border-r border-white/60 dark:border-white/10">
+            <div
+              className={cn(
+                'p-2.5 rounded-xl transition-all backdrop-blur-md',
+                profile?.twoFactorEnabled !== false
+                  ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+              )}
+            >
+              <Smartphone className="h-5 w-5" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
+                {t.adminOfficers.col2fa}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!db || !user) return;
+                    const next2FA = !(profile?.twoFactorEnabled !== false);
+                    updateDocumentNonBlocking(doc(db, 'users', user.uid), {
+                      twoFactorEnabled: next2FA,
+                      updatedAt: new Date().toISOString(),
+                    });
+                    toast({
+                      title: next2FA
+                        ? t.profilePage.toast2faEnabledTitle
+                        : t.profilePage.toast2faDisabledTitle,
+                      description: next2FA
+                        ? t.profilePage.toast2faEnabledDesc
+                        : t.profilePage.toast2faDisabledDesc,
+                    });
+                  }}
+                  className={cn(
+                    'text-sm font-black uppercase tracking-tighter flex items-center gap-1 hover:opacity-80 transition-opacity cursor-pointer',
+                    profile?.twoFactorEnabled !== false
+                      ? 'text-blue-600 dark:text-blue-400'
+                      : 'text-amber-600 dark:text-amber-400'
+                  )}
+                >
+                  {profile?.twoFactorEnabled !== false
+                    ? t.adminOfficers.mfaOnBadge
+                    : t.adminOfficers.mfaOffBadge}
+                </button>
+                <Link
+                  href="/admin/officers"
+                  className="text-[10px] font-bold underline text-primary hover:opacity-80"
+                >
+                  ({t.header.personnel})
+                </Link>
+              </div>
+            </div>
+          </div>
+
           <div
             className="flex items-center gap-3 px-4 border-r border-white/60 dark:border-white/10 group cursor-pointer"
             onClick={handleRefresh}

@@ -296,3 +296,36 @@ export interface MeetingExamSubmission {
   submittedAt: string;
 }
 
+export interface WebSupportTicket {
+  id: string;
+  reporterId: string;
+  reporterName: string;
+  reporterEmail: string;
+  reporterRole?: string;
+  affectedPage: string;
+  category:
+    | 'PAGE_ERROR'
+    | 'SYNC_DATA'
+    | 'CALL_MEDIA'
+    | 'EXPORT_PRINT'
+    | 'UI_DISPLAY'
+    | 'ACCOUNT_AUTH'
+    | 'OTHER';
+  severity: 'normal' | 'high' | 'critical';
+  status: 'open' | 'investigating' | 'resolved';
+  subject: string;
+  description: string;
+  diagnostics: {
+    userAgent: string;
+    viewport: string;
+    language: string;
+    online: boolean;
+    pathname: string;
+  };
+  adminReply?: string;
+  resolvedByName?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+

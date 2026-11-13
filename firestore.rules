@@ -127,6 +127,13 @@ service cloud.firestore {
       allow update: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.officerId);
       allow delete: if isAdmin();
     }
+
+    match /web_support_tickets/{ticketId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.reporterId == request.auth.uid;
+      allow update: if isAdmin() || (isSignedIn() && resource.data.reporterId == request.auth.uid);
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.reporterId == request.auth.uid);
+    }
   }
 }
 

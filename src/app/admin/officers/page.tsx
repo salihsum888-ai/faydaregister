@@ -27,7 +27,8 @@ import {
   ShieldCheck,
   Zap,
   TrendingUp,
-  Eye
+  Eye,
+  Smartphone
 } from 'lucide-react';
 import { OfficerFormModal } from '@/components/admin/officer-form-modal';
 import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from '@/firebase';
@@ -37,7 +38,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { deleteDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { deleteDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { logAuditAction } from '@/lib/audit';
 import { format } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -167,6 +168,33 @@ export default function OfficerManagementPage() {
       onDuty: allOfficers.filter(o => o.isDutyActive).length,
     };
   }, [allOfficers]);
+
+  const handleToggleOfficer2FA = (officer: UserProfile) => {
+    if (!db || !currentUser) return;
+    const currentlyEnabled = officer.twoFactorEnabled !== false;
+    const nextState = !currentlyEnabled;
+    updateDocumentNonBlocking(doc(db, 'users', officer.id), {
+      twoFactorEnabled: nextState,
+      updatedAt: new Date().toISOString(),
+    });
+    logAuditAction(
+      db,
+      currentUser,
+      profile?.fullName || 'Admin',
+      'PERSONNEL_MODIFIED',
+      officer.id,
+      `${nextState ? 'Enabled' : 'Disabled'} Google Authenticator (2FA) for ${officer.fullName}.`
+    );
+    toast({
+      title: t.adminOfficers.toast2faToggledTitle,
+      description: t.adminOfficers.toast2faToggledDesc
+        .replace('{name}', officer.fullName)
+        .replace(
+          '{status}',
+          nextState ? t.adminOfficers.mfaOnBadge : t.adminOfficers.mfaOffBadge
+        ),
+    });
+  };
 
   const handleBulkPurge = async () => {
     if (!db || selectedIds.size === 0 || !currentUser || !profile) return;
@@ -460,6 +488,9 @@ export default function OfficerManagementPage() {
                       <TableHead className="h-11 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">
                         {t.adminOfficers.colDuty}
                       </TableHead>
+                      <TableHead className="h-11 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        {t.adminOfficers.col2fa}
+                      </TableHead>
                       <TableHead className="h-11 px-4 w-28 text-right">
                         {t.adminOfficers.colAction}
                       </TableHead>
@@ -522,6 +553,24 @@ export default function OfficerManagementPage() {
                             )}>
                               {officer.isDutyActive ? t.adminOfficers.statusActiveDuty : t.adminOfficers.statusOffline}
                             </span>
+                          </TableCell>
+                          <TableCell className="px-4 py-3 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleOfficer2FA(officer)}
+                              title={t.adminOfficers.toggle2faTooltip}
+                              className={cn(
+                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer",
+                                officer.twoFactorEnabled !== false
+                                  ? "bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-400"
+                                  : "bg-amber-50 text-amber-600 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-400"
+                              )}
+                            >
+                              <Smartphone className="h-3.5 w-3.5" />
+                              {officer.twoFactorEnabled !== false
+                                ? t.adminOfficers.mfaOnBadge
+                                : t.adminOfficers.mfaOffBadge}
+                            </button>
                           </TableCell>
                           <TableCell className="px-4 py-3 text-right whitespace-nowrap">
                             <div className="inline-flex items-center justify-end gap-1">

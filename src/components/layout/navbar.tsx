@@ -34,8 +34,12 @@ import {
   GraduationCap,
   PhoneIncoming,
   Video,
+  Volume2,
+  VolumeX,
   Menu,
-  ArrowRight
+  ArrowRight,
+  LifeBuoy,
+  Smartphone
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -49,6 +53,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { useAuth, useUser, useDoc, useMemoFirebase, useFirestore, useCollection } from '@/firebase';
+import { updateDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { signOut } from 'firebase/auth';
 import { doc, collection, query, where } from 'firebase/firestore';
 import { UserProfile, Notification, SystemSettings, Conversation } from '@/lib/types';
@@ -58,6 +63,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useTranslation } from '@/i18n/language-provider';
 import { LanguageSwitcher } from '@/components/layout/language-switcher';
+import {
+  ensureRingtoneAudioUnlocked,
+  playCallToneBurst,
+  showIncomingCallSystemNotification,
+  clearIncomingCallSystemNotification,
+} from '@/lib/call-ringtone';
 
 const DEFAULT_LOGO = "https://services.eaes.et/NID-Logos/Fayda%20For%20Ethiopia%20logo-%20english-2-01.png";
 
@@ -74,10 +85,12 @@ export function Navbar() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isPublicMenuOpen, setIsPublicMenuOpen] = useState(false);
   const [isNavVisible, setIsNavVisible] = useState(true);
+  const [isGlobalRingtoneMuted, setIsGlobalRingtoneMuted] = useState(false);
   const lastScrollY = useRef(0);
 
   useEffect(() => {
     setMounted(true);
+    ensureRingtoneAudioUnlocked();
     setIsOnline(navigator.onLine);
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -166,6 +179,47 @@ export function Navbar() {
     });
   }, [userConversations, user?.uid, pathname]);
 
+  const incomingCallId = incomingRingingConv?.activeCall?.id;
+
+  useEffect(() => {
+    const call = incomingRingingConv?.activeCall;
+    if (!call || !incomingCallId || pathname === '/communication') {
+      clearIncomingCallSystemNotification();
+      return;
+    }
+
+    const notifTitle =
+      call.callType === 'video' ? t('nav.incomingVideoCall') : t('nav.incomingVoiceCall');
+    const notifBody = [call.callerName, call.conversationName].filter(Boolean).join(' • ');
+
+    showIncomingCallSystemNotification({
+      callId: incomingCallId,
+      title: notifTitle,
+      body: notifBody,
+      onActivate: () => {
+        router.push('/communication');
+      },
+    });
+
+    if (isGlobalRingtoneMuted) {
+      return;
+    }
+
+    void playCallToneBurst('incoming');
+    const iv = setInterval(() => {
+      showIncomingCallSystemNotification({
+        callId: incomingCallId,
+        title: notifTitle,
+        body: notifBody,
+        onActivate: () => {
+          router.push('/communication');
+        },
+      });
+      void playCallToneBurst('incoming');
+    }, 2100);
+    return () => clearInterval(iv);
+  }, [incomingRingingConv, incomingCallId, isGlobalRingtoneMuted, pathname, router, t]);
+
   if (pathname === '/login') return null;
 
   const isAdmin = profile?.role === 'admin';
@@ -204,6 +258,7 @@ export function Navbar() {
     { name: t('nav.proxyEntry'), href: '/admin/reports-entry', icon: FilePenLine },
     { name: t('nav.broadcasts'), href: '/admin/announcements', icon: Megaphone },
     { name: t('nav.branding'), href: '/admin/settings', icon: Settings },
+    { name: t('nav.webSupport'), href: '/support', icon: LifeBuoy },
     { name: t('nav.chat'), href: '/communication', icon: MessageSquare },
   ] : [
     { name: t('nav.meetingsExams'), href: '/meetings', icon: GraduationCap },
@@ -216,6 +271,7 @@ export function Navbar() {
     { name: t('nav.history'), href: '/historical', icon: Database },
     { name: t('nav.analytics'), href: '/reports', icon: ClipboardList },
     { name: t('nav.ranks'), href: '/leaderboard', icon: Trophy },
+    { name: t('nav.webSupport'), href: '/support', icon: LifeBuoy },
     { name: t('nav.chat'), href: '/communication', icon: MessageSquare },
   ];
 
@@ -523,6 +579,51 @@ export function Navbar() {
                     <Settings className="mr-2.5 h-4 w-4 text-slate-400 shrink-0" />
                     <span className="truncate">{t('nav.profileSettings')}</span>
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (!db || !user?.uid) return;
+                      const next2FA = !(profile?.twoFactorEnabled !== false);
+                      updateDocumentNonBlocking(doc(db, 'users', user.uid), {
+                        twoFactorEnabled: next2FA,
+                        updatedAt: new Date().toISOString(),
+                      });
+                    }}
+                    className="rounded-xl text-[13px] font-medium cursor-pointer py-2.5 px-3 focus:bg-white/70 dark:focus:bg-white/10 flex items-center justify-between"
+                  >
+                    <span className="flex items-center truncate">
+                      <Smartphone className="mr-2.5 h-4 w-4 text-primary shrink-0" />
+                      <span className="truncate">{t.adminOfficers.col2fa}</span>
+                    </span>
+                    <span
+                      className={cn(
+                        'px-2 py-0.5 rounded-full text-[10px] font-black uppercase shrink-0 ml-2',
+                        profile?.twoFactorEnabled !== false
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                      )}
+                    >
+                      {profile?.twoFactorEnabled !== false
+                        ? t.adminOfficers.mfaOnBadge
+                        : t.adminOfficers.mfaOffBadge}
+                    </span>
+                  </DropdownMenuItem>
+                  {isAdmin && (
+                    <DropdownMenuItem
+                      onClick={() => router.push('/admin/officers')}
+                      className="rounded-xl text-[13px] font-medium cursor-pointer py-2.5 px-3 focus:bg-white/70 dark:focus:bg-white/10"
+                    >
+                      <Users className="mr-2.5 h-4 w-4 text-blue-500 shrink-0" />
+                      <span className="truncate">{t('nav.personnel')} (2FA)</span>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem
+                    onClick={() => router.push('/support')}
+                    className="rounded-xl text-[13px] font-medium cursor-pointer py-2.5 px-3 focus:bg-white/70 dark:focus:bg-white/10"
+                  >
+                    <LifeBuoy className="mr-2.5 h-4 w-4 text-primary shrink-0" />
+                    <span className="truncate">{t('nav.webSupport')}</span>
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-slate-200/60 dark:bg-white/10" />
                   <DropdownMenuItem
                     className="text-rose-600 dark:text-rose-400 focus:text-rose-600 focus:bg-rose-500/10 rounded-xl text-[13px] font-semibold cursor-pointer py-2.5 px-3"
@@ -675,13 +776,36 @@ export function Navbar() {
                 </p>
               </div>
             </div>
-            <Button
-              size="sm"
-              onClick={() => router.push('/communication')}
-              className="h-9 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[10px] uppercase tracking-wider shrink-0"
-            >
-              {t('nav.answerCall')}
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsGlobalRingtoneMuted((m) => !m)}
+                title={
+                  isGlobalRingtoneMuted
+                    ? t.liveCall.unmuteRingtoneTooltip
+                    : t.liveCall.silenceRingtoneTooltip
+                }
+                aria-label={
+                  isGlobalRingtoneMuted
+                    ? t.liveCall.unmuteRingtoneTooltip
+                    : t.liveCall.silenceRingtoneTooltip
+                }
+                className="h-9 w-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                {isGlobalRingtoneMuted ? (
+                  <VolumeX className="h-4 w-4 text-rose-400" />
+                ) : (
+                  <Volume2 className="h-4 w-4 text-emerald-400" />
+                )}
+              </button>
+              <Button
+                size="sm"
+                onClick={() => router.push('/communication')}
+                className="h-9 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[10px] uppercase tracking-wider shrink-0"
+              >
+                {t('nav.answerCall')}
+              </Button>
+            </div>
           </div>
         </div>
       )}

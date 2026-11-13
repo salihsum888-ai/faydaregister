@@ -37,8 +37,12 @@ import {
   Clock,
   RotateCcw,
   ExternalLink,
+  MapPin,
+  Users,
+  Target,
+  Calendar,
 } from 'lucide-react';
-import { Registration, DailyReport, UserProfile } from '@/lib/types';
+import { Registration, DailyReport, UserProfile, SystemSettings } from '@/lib/types';
 import {
   format,
   subDays,
@@ -88,7 +92,7 @@ const COLORS = {
   safaricom: '#f97316',
 };
 
-type TimeHorizon = '7d' | 'current' | 'last_month' | 'history';
+type TimeHorizon = '7d' | 'current' | 'last_month' | 'history' | 'custom';
 
 const getThresholdColor = (value: number) => {
   if (value >= 85) return '#10b981';
@@ -241,7 +245,16 @@ export default function FullPerformancePage() {
 
   const [mounted, setMounted] = useState(false);
   const [analysisScope, setAnalysisScope] = useState<TimeHorizon>('history');
+  const [customStartDate, setCustomStartDate] = useState<string>(() =>
+    format(subDays(new Date(), 14), 'yyyy-MM-dd')
+  );
+  const [customEndDate, setCustomEndDate] = useState<string>(() =>
+    format(new Date(), 'yyyy-MM-dd')
+  );
   const [institutionFilter, setInstitutionFilter] = useState<string>('ALL');
+  const [regionFilter, setRegionFilter] = useState<string>('ALL');
+  const [officerFilter, setOfficerFilter] = useState<string>('ALL');
+  const [breakdownMode, setBreakdownMode] = useState<'region' | 'officer'>('region');
   const [velocityView, setVelocityView] = useState<'combined' | 'network'>('network');
   const [isExporting, setIsExporting] = useState(false);
 
@@ -254,6 +267,13 @@ export default function FullPerformancePage() {
     return doc(db, 'users', user.uid);
   }, [db, user?.uid]);
   const { data: profile } = useDoc<UserProfile>(userProfileRef);
+
+  const brandingRef = useMemoFirebase(() => {
+    if (!db) return null;
+    return doc(db, 'system_settings', 'branding');
+  }, [db]);
+  const { data: branding } = useDoc<SystemSettings>(brandingRef);
+  const slaTargetPct = branding?.slaTargetPct || 85;
 
   const isAdmin = profile?.role === 'admin';
 
@@ -294,20 +314,54 @@ export default function FullPerformancePage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [registrations, reports]);
 
-  // Filter registrations & reports by Institution Filter
+  // Extract unique Regions and Officers across registrations
+  const regionNames = useMemo(() => {
+    const set = new Set<string>();
+    (registrations || []).forEach((r) => {
+      const loc = (r.location || '').trim();
+      if (loc) set.add(loc);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [registrations]);
+
+  const officerNames = useMemo(() => {
+    const set = new Set<string>();
+    (registrations || []).forEach((r) => {
+      const off = (r.officer || '').trim();
+      if (off) set.add(off);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [registrations]);
+
+  // Filter registrations & reports by Institution, Region, and Officer Filter
   const scopedRegistrationsByInst = useMemo(() => {
     if (!registrations) return [];
-    if (institutionFilter === 'ALL') return registrations;
-    if (institutionFilter === 'INSTITUTIONS_ONLY') {
-      return registrations.filter((r) => Boolean(getRecordInstitutionName(r)));
-    }
-    if (institutionFilter === 'INDIVIDUALS_ONLY') {
-      return registrations.filter((r) => !getRecordInstitutionName(r));
-    }
-    return registrations.filter(
-      (r) => getRecordInstitutionName(r).toLowerCase() === institutionFilter.trim().toLowerCase()
-    );
-  }, [registrations, institutionFilter]);
+    return registrations.filter((r) => {
+      if (institutionFilter === 'INSTITUTIONS_ONLY' && !getRecordInstitutionName(r)) return false;
+      if (institutionFilter === 'INDIVIDUALS_ONLY' && Boolean(getRecordInstitutionName(r))) return false;
+      if (
+        institutionFilter !== 'ALL' &&
+        institutionFilter !== 'INSTITUTIONS_ONLY' &&
+        institutionFilter !== 'INDIVIDUALS_ONLY' &&
+        getRecordInstitutionName(r).toLowerCase() !== institutionFilter.trim().toLowerCase()
+      ) {
+        return false;
+      }
+      if (
+        regionFilter !== 'ALL' &&
+        (r.location || '').trim().toLowerCase() !== regionFilter.trim().toLowerCase()
+      ) {
+        return false;
+      }
+      if (
+        officerFilter !== 'ALL' &&
+        (r.officer || '').trim().toLowerCase() !== officerFilter.trim().toLowerCase()
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [registrations, institutionFilter, regionFilter, officerFilter]);
 
   const scopedReportsByInst = useMemo(() => {
     if (!reports) return [];
@@ -387,12 +441,33 @@ export default function FullPerformancePage() {
         label: formatDate(prev, { month: 'long', year: 'numeric' }),
       };
     }
+    if (analysisScope === 'custom') {
+      const parsedStart = customStartDate ? new Date(`${customStartDate}T00:00:00`) : subDays(now, 14);
+      const parsedEnd = customEndDate ? new Date(`${customEndDate}T23:59:59`) : now;
+      const start = parsedStart <= parsedEnd ? startOfDay(parsedStart) : startOfDay(parsedEnd);
+      const end = parsedEnd >= parsedStart ? endOfDay(parsedEnd) : endOfDay(parsedStart);
+      const diffMs = Math.max(86400000, end.getTime() - start.getTime());
+      const prevEnd = new Date(start.getTime() - 1000);
+      const prevStart = new Date(prevEnd.getTime() - diffMs);
+      return {
+        current: { start, end },
+        previous: { start: startOfDay(prevStart), end: endOfDay(prevEnd) },
+        label: `${format(start, 'MMM dd, yyyy')} – ${format(end, 'MMM dd, yyyy')}`,
+      };
+    }
     return {
       current: null,
       previous: { start: startOfMonth(subMonths(now, 1)), end: endOfMonth(subMonths(now, 1)) },
       label: t.intelMatrix.horizonAllTimeLabel,
     };
-  }, [analysisScope, t.intelMatrix.horizon7dLabel, t.intelMatrix.horizonAllTimeLabel, formatDate]);
+  }, [
+    analysisScope,
+    customStartDate,
+    customEndDate,
+    t.intelMatrix.horizon7dLabel,
+    t.intelMatrix.horizonAllTimeLabel,
+    formatDate,
+  ]);
 
   const stats = useMemo(() => {
     if (!scopedRegistrationsByInst || !mounted) return null;
@@ -553,6 +628,91 @@ export default function FullPerformancePage() {
       { name: 'Failed', value: counts.failed, pct: rates.failed, color: COLORS.failed },
     ];
 
+    // Regional & Officer Breakdown within selected timeframe
+    const regMap = new Map<
+      string,
+      {
+        name: string;
+        total: number;
+        processed: number;
+        processing: number;
+        rejected: number;
+        failed: number;
+      }
+    >();
+    const offMap = new Map<
+      string,
+      {
+        name: string;
+        total: number;
+        processed: number;
+        processing: number;
+        rejected: number;
+        failed: number;
+      }
+    >();
+
+    scopeRegs.forEach((r) => {
+      const regionLabel = (r.location || 'Unspecified Region').trim() || 'Unspecified Region';
+      const regKey = regionLabel.toLowerCase();
+      let regEntry = regMap.get(regKey);
+      if (!regEntry) {
+        regEntry = { name: regionLabel, total: 0, processed: 0, processing: 0, rejected: 0, failed: 0 };
+        regMap.set(regKey, regEntry);
+      }
+      regEntry.total += 1;
+      if (r.status === 'Processed') regEntry.processed += 1;
+      else if (r.status === 'Processing' || r.status === 'Pending Review') regEntry.processing += 1;
+      else if (r.status === 'Rejected') regEntry.rejected += 1;
+      else if (r.status === 'Failed') regEntry.failed += 1;
+
+      const officerLabel = (r.officer || 'Assigned Officer').trim() || 'Assigned Officer';
+      const offKey = officerLabel.toLowerCase();
+      let offEntry = offMap.get(offKey);
+      if (!offEntry) {
+        offEntry = { name: officerLabel, total: 0, processed: 0, processing: 0, rejected: 0, failed: 0 };
+        offMap.set(offKey, offEntry);
+      }
+      offEntry.total += 1;
+      if (r.status === 'Processed') offEntry.processed += 1;
+      else if (r.status === 'Processing' || r.status === 'Pending Review') offEntry.processing += 1;
+      else if (r.status === 'Rejected') offEntry.rejected += 1;
+      else if (r.status === 'Failed') offEntry.failed += 1;
+    });
+
+    const regionBreakdown = Array.from(regMap.values())
+      .map((item) => ({
+        ...item,
+        completionRate: calculateExactRate(item.processed, item.total),
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const officerBreakdown = Array.from(offMap.values())
+      .map((item) => ({
+        ...item,
+        completionRate: calculateExactRate(item.processed, item.total),
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    // SLA Records Needed & Top Bottleneck
+    const targetFraction = Math.min(0.99, Math.max(0.01, slaTargetPct / 100));
+    const slaRecordsNeeded =
+      rates.processed >= slaTargetPct
+        ? 0
+        : Math.max(
+            1,
+            Math.ceil((targetFraction * exactTotal - counts.processed) / (1 - targetFraction))
+          );
+
+    const topInstBottleneck = [...topInstitutions].sort((a, b) => b.processing - a.processing)[0];
+    const topRegBottleneck = [...regionBreakdown].sort((a, b) => b.processing - a.processing)[0];
+    const topBottleneck =
+      topInstBottleneck && topInstBottleneck.processing > 0
+        ? { name: topInstBottleneck.name, count: topInstBottleneck.processing, type: 'institution' as const }
+        : topRegBottleneck && topRegBottleneck.processing > 0
+        ? { name: topRegBottleneck.name, count: topRegBottleneck.processing, type: 'region' as const }
+        : null;
+
     return {
       total: exactTotal,
       counts,
@@ -563,8 +723,12 @@ export default function FullPerformancePage() {
       reasonBreakdown,
       institutionBreakdown,
       topInstitutions,
+      regionBreakdown,
+      officerBreakdown,
+      slaRecordsNeeded,
+      topBottleneck,
     };
-  }, [scopedRegistrationsByInst, mounted, horizonIntervals, analysisScope]);
+  }, [scopedRegistrationsByInst, mounted, horizonIntervals, analysisScope, slaTargetPct]);
 
   const temporalTrends = useMemo(() => {
     if (!scopedReportsByInst || !mounted) return null;
@@ -578,6 +742,11 @@ export default function FullPerformancePage() {
     } else if (analysisScope === 'last_month') {
       const prev = subMonths(now, 1);
       days = eachDayOfInterval({ start: startOfMonth(prev), end: endOfMonth(prev) });
+    } else if (analysisScope === 'custom' && horizonIntervals.current) {
+      days = eachDayOfInterval({
+        start: horizonIntervals.current.start,
+        end: horizonIntervals.current.end,
+      });
     } else {
       days = eachDayOfInterval({ start: subDays(now, 29), end: now });
     }
@@ -626,7 +795,7 @@ export default function FullPerformancePage() {
       ethioPct,
       safaricomPct,
     };
-  }, [scopedReportsByInst, mounted, analysisScope]);
+  }, [scopedReportsByInst, mounted, analysisScope, horizonIntervals]);
 
   // Export Official Intel Excel Report
   const handleExportExcel = () => {
@@ -713,6 +882,21 @@ export default function FullPerformancePage() {
         XLSX.utils.json_to_sheet(velocitySheet),
         'Network_Velocity'
       );
+    }
+
+    // Sheet 5: Regional Breakdown
+    if (stats.regionBreakdown.length > 0) {
+      const regionSheet = stats.regionBreakdown.map((reg, idx) => ({
+        Rank: idx + 1,
+        Region: reg.name,
+        'Total Records': reg.total,
+        Processed: reg.processed,
+        Processing: reg.processing,
+        Rejected: reg.rejected,
+        Failed: reg.failed,
+        'Completion Rate (%)': `${reg.completionRate}%`,
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(regionSheet), 'Regions_Intel');
     }
 
     XLSX.writeFile(wb, `Fayda_Intel_Matrix_${format(new Date(), 'yyyyMMdd')}.xlsx`);
@@ -873,13 +1057,14 @@ export default function FullPerformancePage() {
 
         <div className="flex flex-wrap items-center gap-2.5 glass-card-surface p-3 rounded-2xl">
           {/* Time Horizon Filter */}
-          <div className="flex items-center gap-1 p-1 rounded-xl glass-subpanel">
+          <div className="flex flex-wrap items-center gap-1 p-1 rounded-xl glass-subpanel">
             {(
               [
                 { id: '7d', label: t.intelMatrix.tab7d },
                 { id: 'current', label: t.intelMatrix.tabCurrentMonth },
                 { id: 'last_month', label: t.intelMatrix.tabLastMonth },
                 { id: 'history', label: t.intelMatrix.tabAllTime },
+                { id: 'custom', label: t.intelMatrix.tabCustom },
               ] as { id: TimeHorizon; label: string }[]
             ).map((tab) => (
               <button
@@ -898,9 +1083,35 @@ export default function FullPerformancePage() {
             ))}
           </div>
 
+          {analysisScope === 'custom' && (
+            <div className="flex items-center gap-1.5 glass-subpanel px-2.5 py-1 rounded-xl">
+              <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span className="text-[10px] font-bold uppercase text-slate-500">
+                {t.intelMatrix.fromLabel}
+              </span>
+              <input
+                type="date"
+                value={customStartDate}
+                max={customEndDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
+              />
+              <span className="text-[10px] font-bold uppercase text-slate-500">
+                {t.intelMatrix.toLabel}
+              </span>
+              <input
+                type="date"
+                value={customEndDate}
+                min={customStartDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
+              />
+            </div>
+          )}
+
           {/* Institution Scope Dropdown */}
           <Select value={institutionFilter} onValueChange={setInstitutionFilter}>
-            <SelectTrigger className="glass-subpanel w-auto min-w-[175px] h-9 rounded-xl px-3 text-xs font-bold text-slate-700 dark:text-slate-200">
+            <SelectTrigger className="glass-subpanel w-auto min-w-[165px] h-9 rounded-xl px-3 text-xs font-bold text-slate-700 dark:text-slate-200">
               <div className="flex items-center gap-1.5">
                 <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
                 <SelectValue placeholder={t.intelMatrix.allRecordsScope} />
@@ -924,12 +1135,58 @@ export default function FullPerformancePage() {
             </SelectContent>
           </Select>
 
-          {institutionFilter !== 'ALL' && (
+          {/* Region Filter Dropdown */}
+          <Select value={regionFilter} onValueChange={setRegionFilter}>
+            <SelectTrigger className="glass-subpanel w-auto min-w-[145px] h-9 rounded-xl px-3 text-xs font-bold text-slate-700 dark:text-slate-200">
+              <div className="flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                <SelectValue placeholder={t.intelMatrix.allRegionsScope} />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL" className="text-xs font-bold">
+                {t.intelMatrix.allRegionsScope}
+              </SelectItem>
+              {regionNames.map((loc) => (
+                <SelectItem key={loc} value={loc} className="text-xs font-medium">
+                  {loc}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Officer Filter Dropdown (Admins or multi-officer records) */}
+          {(isAdmin || officerNames.length > 1) && (
+            <Select value={officerFilter} onValueChange={setOfficerFilter}>
+              <SelectTrigger className="glass-subpanel w-auto min-w-[145px] h-9 rounded-xl px-3 text-xs font-bold text-slate-700 dark:text-slate-200">
+                <div className="flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <SelectValue placeholder={t.intelMatrix.allOfficersScope} />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL" className="text-xs font-bold">
+                  {t.intelMatrix.allOfficersScope}
+                </SelectItem>
+                {officerNames.map((off) => (
+                  <SelectItem key={off} value={off} className="text-xs font-medium">
+                    {off}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {(institutionFilter !== 'ALL' || regionFilter !== 'ALL' || officerFilter !== 'ALL') && (
             <Button
               type="button"
               variant="outline"
               size="icon"
-              onClick={() => setInstitutionFilter('ALL')}
+              onClick={() => {
+                setInstitutionFilter('ALL');
+                setRegionFilter('ALL');
+                setOfficerFilter('ALL');
+              }}
               className="glass-subpanel h-9 w-9 rounded-xl text-primary"
               title={t.intelMatrix.resetFilterTooltip}
             >
@@ -977,6 +1234,8 @@ export default function FullPerformancePage() {
             onClick={() => {
               setAnalysisScope('history');
               setInstitutionFilter('ALL');
+              setRegionFilter('ALL');
+              setOfficerFilter('ALL');
             }}
             className="mt-4 rounded-xl text-xs font-bold"
           >
@@ -985,6 +1244,87 @@ export default function FullPerformancePage() {
         </div>
       ) : (
         <div className="space-y-8">
+          {/* Live SLA Target Gap & Bottleneck Diagnostic Strip */}
+          <Card className="clay-card rounded-[24px] p-4 sm:p-5 border border-slate-200/70 dark:border-slate-800/80">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div
+                  className={cn(
+                    'clay-badge h-11 w-11 rounded-2xl flex items-center justify-center shrink-0',
+                    stats.slaRecordsNeeded === 0
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                      : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                  )}
+                >
+                  <Target className="h-5 w-5" />
+                </div>
+                <div className="space-y-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                      {t.intelMatrix.slaDiagnosticTitle}
+                    </p>
+                    <span
+                      className={cn(
+                        'px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider tabular-nums',
+                        stats.slaRecordsNeeded === 0
+                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                      )}
+                    >
+                      {stats.slaRecordsNeeded === 0
+                        ? t.intelMatrix.slaTargetReachedBadge.replace('{target}', String(slaTargetPct))
+                        : `${stats.rates.processed}% / ${slaTargetPct}% SLA`}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                    {stats.slaRecordsNeeded === 0
+                      ? t.intelMatrix.slaOnTrackText
+                          .replace('{rate}', String(stats.rates.processed))
+                          .replace('{target}', String(slaTargetPct))
+                      : t.intelMatrix.slaRecordsNeededText
+                          .replace('{count}', formatNumber(stats.slaRecordsNeeded))
+                          .replace('{target}', String(slaTargetPct))}
+                  </p>
+                </div>
+              </div>
+
+              {stats.topBottleneck && (
+                <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3 clay-well px-3.5 py-2.5 rounded-2xl">
+                  <div className="text-xs">
+                    <span className="text-slate-500 dark:text-slate-400 font-semibold mr-1.5">
+                      {t.intelMatrix.topBottleneckLabel}
+                    </span>
+                    <span className="font-extrabold text-slate-900 dark:text-white">
+                      {stats.topBottleneck.name}
+                    </span>
+                    <span className="ml-2 text-amber-600 dark:text-amber-400 font-black tabular-nums">
+                      ({formatNumber(stats.topBottleneck.count)} {t.common.statusProcessing})
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() =>
+                      router.push(
+                        stats.topBottleneck?.type === 'institution'
+                          ? `/status-check?institution=${encodeURIComponent(
+                              stats.topBottleneck.name
+                            )}&status=Processing`
+                          : `/status-check?status=Processing`
+                      )
+                    }
+                    className="h-8 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold cursor-pointer"
+                  >
+                    {t.intelMatrix.verifyShortBtn.replace(
+                      '{count}',
+                      formatNumber(stats.topBottleneck.count)
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </Card>
+
           {/* Row 1: 4 Standardized & Clickable Rate Gauges */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             <MetricGauge
@@ -1716,6 +2056,141 @@ export default function FullPerformancePage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Row 5: Regional & Officer Performance Breakdown Matrix */}
+          {(stats.regionBreakdown.length > 0 || stats.officerBreakdown.length > 0) && (
+            <Card className="clay-card rounded-[28px] overflow-hidden">
+              <CardHeader className="border-b border-slate-200/70 dark:border-slate-700/60 py-5 px-6 md:px-8 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-primary" /> {t.intelMatrix.regionalMatrixTitle}
+                  </CardTitle>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {t.intelMatrix.regionalMatrixSubtitle.replace(
+                      '{horizon}',
+                      horizonIntervals.label
+                    )}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1 p-1 rounded-xl glass-subpanel self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setBreakdownMode('region')}
+                    className={cn(
+                      'px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                      breakdownMode === 'region'
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-primary'
+                    )}
+                  >
+                    <MapPin className="h-3.5 w-3.5" />
+                    {t.intelMatrix.tabByRegion}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBreakdownMode('officer')}
+                    className={cn(
+                      'px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                      breakdownMode === 'officer'
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-primary'
+                    )}
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    {t.intelMatrix.tabByOfficer}
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {(breakdownMode === 'region'
+                    ? stats.regionBreakdown
+                    : stats.officerBreakdown
+                  )
+                    .slice(0, 9)
+                    .map((item, idx) => {
+                      const isElite = item.completionRate >= slaTargetPct;
+                      const isWarning =
+                        !isElite && item.completionRate >= Math.max(75, slaTargetPct - 5);
+                      return (
+                        <div
+                          key={item.name}
+                          onClick={() => {
+                            if (breakdownMode === 'region') {
+                              setRegionFilter(regionFilter === item.name ? 'ALL' : item.name);
+                            } else {
+                              setOfficerFilter(officerFilter === item.name ? 'ALL' : item.name);
+                            }
+                          }}
+                          className="clay-well p-4 rounded-2xl space-y-3 hover:ring-1 hover:ring-primary/40 transition-all cursor-pointer"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className="h-7 w-7 rounded-lg bg-primary/15 text-primary text-xs font-black flex items-center justify-center shrink-0 tabular-nums">
+                                #{idx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                  {item.name}
+                                </p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                                  {t.intelMatrix.instRecordsAndPct
+                                    .replace('{total}', formatNumber(item.total))
+                                    .replace('{pct}', String(item.completionRate))}
+                                </p>
+                              </div>
+                            </div>
+                            <span
+                              className={cn(
+                                'px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider shrink-0',
+                                isElite
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                  : isWarning
+                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                                  : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                              )}
+                            >
+                              {isElite
+                                ? t.intelMatrix.statusElite
+                                : isWarning
+                                ? t.intelMatrix.statusWarning
+                                : t.intelMatrix.statusCritical}
+                            </span>
+                          </div>
+
+                          <div className="h-1.5 w-full rounded-full bg-slate-200/70 dark:bg-slate-800 overflow-hidden">
+                            <div
+                              className={cn(
+                                'h-full rounded-full transition-all',
+                                isElite
+                                  ? 'bg-emerald-500'
+                                  : isWarning
+                                  ? 'bg-amber-500'
+                                  : 'bg-rose-500'
+                              )}
+                              style={{ width: `${Math.max(4, item.completionRate)}%` }}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px] font-bold tabular-nums text-slate-500 dark:text-slate-400">
+                            <span className="text-emerald-600 dark:text-emerald-400">
+                              {formatNumber(item.processed)} {t.common.statusProcessed}
+                            </span>
+                            <span className="text-amber-600 dark:text-amber-400">
+                              {formatNumber(item.processing)} {t.common.statusProcessing}
+                            </span>
+                            <span className="text-rose-600 dark:text-rose-400">
+                              {formatNumber(item.rejected)} {t.common.statusRejected}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               </CardContent>
             </Card>

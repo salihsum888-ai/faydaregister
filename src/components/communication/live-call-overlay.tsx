@@ -25,6 +25,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { CallSession, CallParticipantState, Conversation, UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n/language-provider';
+import {
+  ensureRingtoneAudioUnlocked,
+  playCallToneBurst,
+  showIncomingCallSystemNotification,
+  clearIncomingCallSystemNotification,
+} from '@/lib/call-ringtone';
 
 interface LiveCallOverlayProps {
   currentUserId: string;
@@ -243,6 +249,11 @@ export function LiveCallOverlay({
 
   const incomingCall = incomingCallConv?.activeCall || null;
 
+  // Unlock shared Web Audio context on mount/interaction
+  useEffect(() => {
+    ensureRingtoneAudioUnlocked();
+  }, []);
+
   // Play synthesized telephone ringback tone (for Caller waiting for answer) or incoming ringtone (for Recipient)
   useEffect(() => {
     if (ringtoneIntervalRef.current) {
@@ -258,59 +269,54 @@ export function LiveCallOverlay({
 
     const shouldPlayIncomingRingtone = Boolean(incomingCall) && !isRingtoneMuted;
 
+    if (incomingCall) {
+      const notifTitle =
+        incomingCall.callType === 'video'
+          ? t('nav.incomingVideoCall')
+          : t('nav.incomingVoiceCall');
+      const notifBody = [incomingCall.callerName, incomingCall.conversationName]
+        .filter(Boolean)
+        .join(' • ');
+      showIncomingCallSystemNotification({
+        callId: incomingCall.id,
+        title: notifTitle,
+        body: notifBody,
+        onActivate: () => {
+          setIsMinimized(false);
+        },
+      });
+    } else {
+      clearIncomingCallSystemNotification();
+    }
+
     if (!shouldPlayOutgoingRingback && !shouldPlayIncomingRingtone) {
       return;
     }
 
-    const playToneBurst = (type: 'outgoing' | 'incoming') => {
-      try {
-        const AudioCtx =
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        if (!AudioCtx) return;
-        const ctx = new AudioCtx();
-        const gain = ctx.createGain();
-        gain.gain.value = 0.08;
-        gain.connect(ctx.destination);
-
-        if (type === 'outgoing') {
-          // Standard North American / European 440Hz + 480Hz ringback tone
-          const osc1 = ctx.createOscillator();
-          const osc2 = ctx.createOscillator();
-          osc1.frequency.value = 440;
-          osc2.frequency.value = 480;
-          osc1.connect(gain);
-          osc2.connect(gain);
-          osc1.start();
-          osc2.start();
-          setTimeout(() => {
-            osc1.stop();
-            osc2.stop();
-            ctx.close().catch(() => {});
-          }, 900);
-        } else {
-          // Pleasant Telegram-style dual-note incoming call chime
-          const osc = ctx.createOscillator();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.22); // A5
-          osc.connect(gain);
-          osc.start();
-          setTimeout(() => {
-            osc.stop();
-            ctx.close().catch(() => {});
-          }, 480);
-        }
-      } catch {
-        // Ignore autoplay restriction before user interaction
-      }
-    };
-
-    const mode = shouldPlayOutgoingRingback ? 'outgoing' : 'incoming';
-    playToneBurst(mode);
+    const mode: 'outgoing' | 'incoming' = shouldPlayOutgoingRingback ? 'outgoing' : 'incoming';
+    void playCallToneBurst(mode);
     ringtoneIntervalRef.current = setInterval(
-      () => playToneBurst(mode),
-      mode === 'outgoing' ? 3000 : 1800
+      () => {
+        if (incomingCall) {
+          const notifTitle =
+            incomingCall.callType === 'video'
+              ? t('nav.incomingVideoCall')
+              : t('nav.incomingVoiceCall');
+          const notifBody = [incomingCall.callerName, incomingCall.conversationName]
+            .filter(Boolean)
+            .join(' • ');
+          showIncomingCallSystemNotification({
+            callId: incomingCall.id,
+            title: notifTitle,
+            body: notifBody,
+            onActivate: () => {
+              setIsMinimized(false);
+            },
+          });
+        }
+        void playCallToneBurst(mode);
+      },
+      mode === 'outgoing' ? 2800 : 2100
     );
 
     return () => {
@@ -319,7 +325,14 @@ export function LiveCallOverlay({
         ringtoneIntervalRef.current = null;
       }
     };
-  }, [activeCall?.id, activeCall?.status, isAnsweredAndConnected, incomingCall?.id, isRingtoneMuted]);
+  }, [
+    activeCall?.id,
+    activeCall?.status,
+    isAnsweredAndConnected,
+    incomingCall,
+    isRingtoneMuted,
+    t,
+  ]);
 
   // Handle "Call Declined" feedback when recipient declines
   useEffect(() => {

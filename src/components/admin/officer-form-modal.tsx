@@ -29,7 +29,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useState, useEffect } from 'react';
-import { UserPlus, ShieldCheck, UserCircle, MapPin, Layers, ImageIcon, Loader2, Mail, Edit2 } from 'lucide-react';
+import { UserPlus, ShieldCheck, UserCircle, MapPin, Layers, ImageIcon, Loader2, Mail, Edit2, Smartphone } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { initializeApp, deleteApp, getApps } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -73,6 +74,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
         region: z.string().min(1, t.officerModal.valRegionReq),
         cluster: z.string().min(1, t.officerModal.valClusterReq),
         profilePhoto: z.string().optional(),
+        twoFactorEnabled: z.boolean(),
       }),
     [t]
   );
@@ -95,6 +97,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
       region: officer?.region || '',
       cluster: officer?.cluster || '',
       profilePhoto: officer?.profilePhoto || '',
+      twoFactorEnabled: officer?.twoFactorEnabled !== false,
     },
   });
 
@@ -111,6 +114,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
         region: officer.region,
         cluster: officer.cluster,
         profilePhoto: officer.profilePhoto,
+        twoFactorEnabled: officer.twoFactorEnabled !== false,
       });
     } else if (open && mode === 'add') {
       form.reset({
@@ -121,6 +125,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
         region: '',
         cluster: '',
         profilePhoto: '',
+        twoFactorEnabled: true,
       });
     }
   }, [open, mode, officer, form]);
@@ -154,7 +159,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
             cluster: values.cluster,
             profilePhoto: values.profilePhoto || `https://api.dicebear.com/7.x/initials/svg?seed=${values.fullName}`,
             updatedAt: new Date().toISOString(),
-            twoFactorEnabled: true, // Mandatory MFA for everyone
+            twoFactorEnabled: values.twoFactorEnabled,
             twoFactorSecret: '', 
           };
 
@@ -170,7 +175,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
             currentProfile.fullName,
             'PERSONNEL_MODIFIED',
             uid,
-            `Registered new official: ${values.fullName} with ${values.role} clearance. MFA Initialized.`
+            `Registered new official: ${values.fullName} with ${values.role} clearance. 2FA: ${values.twoFactorEnabled ? 'Enabled' : 'Disabled'}.`
           );
 
           toast({
@@ -187,6 +192,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
           region: values.region,
           cluster: values.cluster,
           profilePhoto: values.profilePhoto,
+          twoFactorEnabled: values.twoFactorEnabled,
           updatedAt: new Date().toISOString(),
         };
 
@@ -204,7 +210,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
           currentProfile.fullName,
           'PERSONNEL_MODIFIED',
           officer.id,
-          `Modified profile for official: ${values.fullName}.`
+          `Modified profile for official: ${values.fullName} (2FA: ${values.twoFactorEnabled ? 'Enabled' : 'Disabled'}).`
         );
 
         toast({
@@ -391,6 +397,31 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
                     </div>
                   </FormControl>
                   <FormMessage className="text-[10px]" />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="twoFactorEnabled"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-2xl border border-border bg-muted/30 p-4">
+                  <div className="space-y-0.5 pr-4">
+                    <FormLabel className="text-xs font-black uppercase tracking-tight flex items-center gap-2 text-foreground">
+                      <Smartphone className="h-4 w-4 text-primary" />
+                      {t.profilePage.twoFactorTitle}
+                    </FormLabel>
+                    <p className="text-[11px] text-muted-foreground">
+                      {t.profilePage.twoFactorToggleLabel}
+                    </p>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
                 </FormItem>
               )}
             />
