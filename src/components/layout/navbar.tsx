@@ -128,6 +128,55 @@ export function Navbar() {
   }, [db, user?.uid]);
   const { data: profile } = useDoc<UserProfile>(userProfileRef);
 
+  // Real-Time Internet Presence Heartbeat & Last Seen Sync
+  useEffect(() => {
+    if (!db || !user?.uid) return;
+    const uid = user.uid;
+    const userRef = doc(db, 'users', uid);
+
+    const markOnline = () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      updateDocumentNonBlocking(userRef, {
+        isOnline: true,
+        lastSeenAt: new Date().toISOString(),
+      });
+    };
+
+    const markOffline = () => {
+      updateDocumentNonBlocking(userRef, {
+        isOnline: false,
+        lastSeenAt: new Date().toISOString(),
+      });
+    };
+
+    markOnline();
+
+    const heartbeatTimer = setInterval(() => {
+      markOnline();
+    }, 35_000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        markOnline();
+      }
+    };
+
+    window.addEventListener('online', markOnline);
+    window.addEventListener('offline', markOffline);
+    window.addEventListener('pagehide', markOffline);
+    window.addEventListener('beforeunload', markOffline);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(heartbeatTimer);
+      window.removeEventListener('online', markOnline);
+      window.removeEventListener('offline', markOffline);
+      window.removeEventListener('pagehide', markOffline);
+      window.removeEventListener('beforeunload', markOffline);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [db, user?.uid]);
+
   const unreadNotificationsQuery = useMemoFirebase(() => {
     if (!db || !user?.uid) return null;
     return query(
@@ -280,6 +329,12 @@ export function Navbar() {
   const isSecondaryActive = SECONDARY_NAV.some((item) => pathname === item.href);
 
   const handleLogout = async () => {
+    if (db && user?.uid) {
+      updateDocumentNonBlocking(doc(db, 'users', user.uid), {
+        isOnline: false,
+        lastSeenAt: new Date().toISOString(),
+      });
+    }
     sessionStorage.removeItem('fayda_mfa_verified');
     sessionStorage.removeItem('fayda_mfa_verified_uid');
     await signOut(auth);

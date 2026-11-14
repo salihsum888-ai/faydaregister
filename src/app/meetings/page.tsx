@@ -79,6 +79,8 @@ import {
   Printer,
   Download,
   BarChart3,
+  ImageIcon,
+  X,
 } from 'lucide-react';
 import {
   Conversation,
@@ -92,6 +94,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/i18n/language-provider';
 import { cn } from '@/lib/utils';
+import { acquireDisplayMediaStream, compressImageFileForScreenShare } from '@/lib/screen-share';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -188,11 +191,14 @@ export default function MeetingsAndExamsPage() {
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
   const [hasLocalVideoTrack, setHasLocalVideoTrack] = useState(false);
   const [hasLocalAudioTrack, setHasLocalAudioTrack] = useState(false);
+  const [hasLocalScreenTrack, setHasLocalScreenTrack] = useState(false);
   const [localMediaTick, setLocalMediaTick] = useState(0);
   const [micLevel, setMicLevel] = useState(0);
   const [liveNotesInput, setLiveNotesInput] = useState('');
   const [meetingElapsedSec, setMeetingElapsedSec] = useState(0);
   const [mediaNotice, setMediaNotice] = useState<string | null>(null);
+  const [screenShareNotice, setScreenShareNotice] = useState<string | null>(null);
+  const [isUploadingScreenPhoto, setIsUploadingScreenPhoto] = useState(false);
   const [pollQuestionInput, setPollQuestionInput] = useState(
     'Are all field units clear on the 29-digit RID verification protocol?'
   );
@@ -201,6 +207,7 @@ export default function MeetingsAndExamsPage() {
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
+  const screenPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -210,6 +217,8 @@ export default function MeetingsAndExamsPage() {
     (el: HTMLVideoElement | null) => {
       localVideoRef.current = el;
       if (el && localStreamRef.current) {
+        el.setAttribute('playsinline', 'true');
+        el.setAttribute('webkit-playsinline', 'true');
         if (el.srcObject !== localStreamRef.current) {
           el.srcObject = localStreamRef.current;
         }
@@ -218,6 +227,22 @@ export default function MeetingsAndExamsPage() {
       }
     },
     [localMediaTick]
+  );
+
+  const setScreenVideoEl = useCallback(
+    (el: HTMLVideoElement | null) => {
+      screenVideoRef.current = el;
+      if (el && screenStreamRef.current) {
+        el.setAttribute('playsinline', 'true');
+        el.setAttribute('webkit-playsinline', 'true');
+        if (el.srcObject !== screenStreamRef.current) {
+          el.srcObject = screenStreamRef.current;
+        }
+        el.muted = true;
+        el.play().catch(() => {});
+      }
+    },
+    [isScreenSharing, hasLocalScreenTrack]
   );
 
   // Post-Meeting Exam Portal & Certificate state
@@ -522,8 +547,10 @@ export default function MeetingsAndExamsPage() {
     }
     setHasLocalVideoTrack(false);
     setHasLocalAudioTrack(false);
+    setHasLocalScreenTrack(false);
     setMicLevel(0);
     setIsScreenSharing(false);
+    setScreenShareNotice(null);
   };
 
   // Exact KPI Statistics
@@ -765,54 +792,115 @@ export default function MeetingsAndExamsPage() {
     await startMeetingCamera(true, isMuted, nextFacing);
   };
 
+  const stopMeetingScreenShare = () => {
+    if (!activeMeeting) return;
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((t) => t.stop());
+      screenStreamRef.current = null;
+    }
+    setHasLocalScreenTrack(false);
+    setIsScreenSharing(false);
+    setScreenShareNotice(null);
+    syncMyMeetingParticipant(
+      { isScreenSharing: false },
+      {
+        screenSharerId:
+          activeMeeting.screenSharerId === user?.uid ? '' : activeMeeting.screenSharerId,
+        screenSharerName:
+          activeMeeting.screenSharerId === user?.uid ? '' : activeMeeting.screenSharerName,
+        sharedScreenImage:
+          activeMeeting.screenSharerId === user?.uid ? '' : activeMeeting.sharedScreenImage || '',
+        sharedScreenLabel:
+          activeMeeting.screenSharerId === user?.uid ? '' : activeMeeting.sharedScreenLabel || '',
+      }
+    );
+  };
+
   const handleToggleMeetingScreenShare = async () => {
     if (!activeMeeting) return;
-    if (isScreenSharing) {
-      if (screenStreamRef.current) {
-        screenStreamRef.current.getTracks().forEach((t) => t.stop());
-        screenStreamRef.current = null;
+    if (isScreenSharing || activeMeeting.screenSharerId === user?.uid) {
+      stopMeetingScreenShare();
+      return;
+    }
+
+    setScreenShareNotice(null);
+    const result = await acquireDisplayMediaStream();
+    if (!result.ok) {
+      if (result.reason !== 'cancelled') {
+        setScreenShareNotice(result.message);
       }
-      setIsScreenSharing(false);
-      syncMyMeetingParticipant(
-        { isScreenSharing: false },
-        {
-          screenSharerId:
-            activeMeeting.screenSharerId === user?.uid ? '' : activeMeeting.screenSharerId,
-          screenSharerName:
-            activeMeeting.screenSharerId === user?.uid ? '' : activeMeeting.screenSharerName,
-        }
-      );
       return;
     }
 
     const myName = currentUserProfile?.fullName || user?.email?.split('@')[0] || 'Official';
-    try {
-      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getDisplayMedia) {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: false,
-        });
-        screenStreamRef.current = stream;
-        if (screenVideoRef.current) {
-          screenVideoRef.current.srcObject = stream;
-        }
-        stream.getVideoTracks()[0].onended = () => {
-          setIsScreenSharing(false);
-          screenStreamRef.current = null;
-          syncMyMeetingParticipant(
-            { isScreenSharing: false },
-            { screenSharerId: '', screenSharerName: '' }
-          );
-        };
-      }
-    } catch {
-      // Fallback to simulated bureau screen presentation if native dialog is cancelled
-    }
+    const stream = result.stream;
+    screenStreamRef.current = stream;
+    setHasLocalScreenTrack(true);
     setIsScreenSharing(true);
+
+    if (screenVideoRef.current) {
+      screenVideoRef.current.muted = true;
+      screenVideoRef.current.srcObject = stream;
+      screenVideoRef.current.play().catch(() => {});
+    }
+
+    const vidTrack = stream.getVideoTracks()[0];
+    if (vidTrack) {
+      vidTrack.onended = () => {
+        stopMeetingScreenShare();
+      };
+    }
+
     syncMyMeetingParticipant(
       { isScreenSharing: true },
-      { screenSharerId: user?.uid || '', screenSharerName: myName }
+      {
+        screenSharerId: user?.uid || '',
+        screenSharerName: myName,
+        sharedScreenImage: '',
+        sharedScreenLabel: '',
+      }
     );
+  };
+
+  const handleShareMeetingPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !activeMeeting) return;
+
+    setIsUploadingScreenPhoto(true);
+    try {
+      const dataUrl = await compressImageFileForScreenShare(file);
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach((t) => t.stop());
+        screenStreamRef.current = null;
+      }
+      setHasLocalScreenTrack(false);
+      setIsScreenSharing(true);
+      setScreenShareNotice(null);
+
+      const myName = currentUserProfile?.fullName || user?.email?.split('@')[0] || 'Official';
+      syncMyMeetingParticipant(
+        { isScreenSharing: true },
+        {
+          screenSharerId: user?.uid || '',
+          screenSharerName: myName,
+          sharedScreenImage: dataUrl,
+          sharedScreenLabel: file.name || 'Shared Screenshot',
+        }
+      );
+    } catch (err: any) {
+      setScreenShareNotice(err?.message || 'Could not load that image. Please select a JPG or PNG.');
+    } finally {
+      setIsUploadingScreenPhoto(false);
+    }
+  };
+
+  const handleUseMeetingRearCamera = async () => {
+    setScreenShareNotice(null);
+    setCameraFacingMode('environment');
+    setIsCameraOn(true);
+    await startMeetingCamera(true, isMuted, 'environment');
+    syncMyMeetingParticipant({ isCameraOn: true });
   };
 
   const handleToggleRaiseHand = () => {
@@ -979,6 +1067,10 @@ export default function MeetingsAndExamsPage() {
           activeMeeting.screenSharerId === user.uid ? '' : activeMeeting.screenSharerId,
         screenSharerName:
           activeMeeting.screenSharerId === user.uid ? '' : activeMeeting.screenSharerName,
+        sharedScreenImage:
+          activeMeeting.screenSharerId === user.uid ? '' : activeMeeting.sharedScreenImage || '',
+        sharedScreenLabel:
+          activeMeeting.screenSharerId === user.uid ? '' : activeMeeting.sharedScreenLabel || '',
       },
     });
     setActiveMeetingConvId(null);
@@ -995,6 +1087,8 @@ export default function MeetingsAndExamsPage() {
       activeParticipantIds: [],
       screenSharerId: '',
       screenSharerName: '',
+      sharedScreenImage: '',
+      sharedScreenLabel: '',
       examUnlocked: true,
     };
 
@@ -1410,20 +1504,45 @@ export default function MeetingsAndExamsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left 2 Columns: Screen Share Stage + Group Video Grid */}
               <div className="lg:col-span-2 space-y-4">
-                {(isScreenSharing || activeMeeting.screenSharerId) && (
+                <input
+                  ref={screenPhotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleShareMeetingPhoto}
+                />
+
+                {(isScreenSharing || activeMeeting.screenSharerId || activeMeeting.sharedScreenImage) && (
                   <div className="rounded-2xl bg-slate-900 border border-indigo-500/40 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-wider text-indigo-300">
                         <MonitorUp className="h-4 w-4 text-indigo-400 animate-pulse" />
-                        {isScreenSharing
+                        {isScreenSharing || activeMeeting.screenSharerId === user?.uid
                           ? t.meetingsPage.presentingYourScreen
                           : `${activeMeeting.screenSharerName || t.meetingsPage.hostLabel} ${t.meetingsPage.isPresentingSuffix}`}
                       </span>
+                      {(isScreenSharing || activeMeeting.screenSharerId === user?.uid) && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleToggleMeetingScreenShare}
+                          className="h-7 px-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-wider"
+                        >
+                          <MonitorOff className="h-3 w-3 mr-1" />
+                          {t.meetingsPage.stopShareBtn}
+                        </Button>
+                      )}
                     </div>
                     <div className="h-[260px] rounded-xl bg-slate-950 flex items-center justify-center overflow-hidden border border-white/10">
-                      {isScreenSharing && screenStreamRef.current ? (
+                      {activeMeeting.sharedScreenImage ? (
+                        <img
+                          src={activeMeeting.sharedScreenImage}
+                          alt={activeMeeting.sharedScreenLabel || 'Shared Screenshot'}
+                          className="w-full h-full object-contain"
+                        />
+                      ) : isScreenSharing && hasLocalScreenTrack && screenStreamRef.current ? (
                         <video
-                          ref={screenVideoRef}
+                          ref={setScreenVideoEl}
                           autoPlay
                           playsInline
                           muted
@@ -1532,6 +1651,44 @@ export default function MeetingsAndExamsPage() {
                     );
                   })}
                 </div>
+
+                {screenShareNotice && (
+                  <div className="rounded-xl bg-slate-900 border border-indigo-500/40 p-3 text-[11px] text-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                    <div className="flex items-start gap-2 text-left">
+                      <MonitorUp className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" />
+                      <span>{screenShareNotice}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isUploadingScreenPhoto}
+                        onClick={() => screenPhotoInputRef.current?.click()}
+                        className="h-7 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white"
+                      >
+                        <ImageIcon className="h-3 w-3 mr-1" />
+                        {t.meetingsPage.sharePhotoBtn}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleUseMeetingRearCamera}
+                        className="h-7 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        <SwitchCamera className="h-3 w-3 mr-1" />
+                        {t.meetingsPage.useRearCamBtn}
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => setScreenShareNotice(null)}
+                        className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300"
+                        aria-label="Close"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {mediaNotice && (
                   <div className="flex items-center justify-center gap-2 text-[11px] text-slate-300 text-center">

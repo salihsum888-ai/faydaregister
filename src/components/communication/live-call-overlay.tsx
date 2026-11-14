@@ -19,6 +19,8 @@ import {
   SwitchCamera,
   RefreshCw,
   Camera,
+  ImageIcon,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -31,6 +33,10 @@ import {
   showIncomingCallSystemNotification,
   clearIncomingCallSystemNotification,
 } from '@/lib/call-ringtone';
+import {
+  acquireDisplayMediaStream,
+  compressImageFileForScreenShare,
+} from '@/lib/screen-share';
 
 interface LiveCallOverlayProps {
   currentUserId: string;
@@ -121,11 +127,14 @@ export function LiveCallOverlay({
   const [declinedCallIds, setDeclinedCallIds] = useState<Set<string>>(new Set());
   const [callStatusBanner, setCallStatusBanner] = useState<string | null>(null);
   const [cameraPermissionNote, setCameraPermissionNote] = useState<string | null>(null);
+  const [screenShareNotice, setScreenShareNotice] = useState<string | null>(null);
+  const [isUploadingScreenPhoto, setIsUploadingScreenPhoto] = useState(false);
 
   // Reactive flags so React immediately mounts <video> and <audio> when hardware streams arrive
   const [localMediaReady, setLocalMediaReady] = useState(false);
   const [hasLocalVideoTrack, setHasLocalVideoTrack] = useState(false);
   const [hasLocalAudioTrack, setHasLocalAudioTrack] = useState(false);
+  const [hasLocalScreenTrack, setHasLocalScreenTrack] = useState(false);
   const [hasRemoteVideoTrack, setHasRemoteVideoTrack] = useState(false);
   const [hasRemoteAudioTrack, setHasRemoteAudioTrack] = useState(false);
   const [localMediaTick, setLocalMediaTick] = useState(0);
@@ -135,13 +144,16 @@ export function LiveCallOverlay({
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteScreenVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const screenPhotoInputRef = useRef<HTMLInputElement | null>(null);
 
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const videoSenderRef = useRef<RTCRtpSender | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const micIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ringtoneIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -172,6 +184,23 @@ export function LiveCallOverlay({
       if (el && remoteStreamRef.current) {
         el.setAttribute('playsinline', 'true');
         el.setAttribute('webkit-playsinline', 'true');
+        el.muted = true;
+        if (el.srcObject !== remoteStreamRef.current) {
+          el.srcObject = remoteStreamRef.current;
+        }
+        el.play().catch(() => {});
+      }
+    },
+    [remoteMediaTick]
+  );
+
+  const setRemoteScreenVideoEl = useCallback(
+    (el: HTMLVideoElement | null) => {
+      remoteScreenVideoRef.current = el;
+      if (el && remoteStreamRef.current) {
+        el.setAttribute('playsinline', 'true');
+        el.setAttribute('webkit-playsinline', 'true');
+        el.muted = true;
         if (el.srcObject !== remoteStreamRef.current) {
           el.srcObject = remoteStreamRef.current;
         }
@@ -199,13 +228,15 @@ export function LiveCallOverlay({
       screenVideoRef.current = el;
       if (el && screenStreamRef.current) {
         el.setAttribute('playsinline', 'true');
+        el.setAttribute('webkit-playsinline', 'true');
+        el.muted = true;
         if (el.srcObject !== screenStreamRef.current) {
           el.srcObject = screenStreamRef.current;
         }
         el.play().catch(() => {});
       }
     },
-    [isScreenSharing]
+    [isScreenSharing, hasLocalScreenTrack]
   );
 
   // Find if current user is in a call (or if the call they started was just declined)
@@ -472,10 +503,20 @@ export function LiveCallOverlay({
     if (remoteVideoRef.current && remoteStreamRef.current) {
       remoteVideoRef.current.setAttribute('playsinline', 'true');
       remoteVideoRef.current.setAttribute('webkit-playsinline', 'true');
+      remoteVideoRef.current.muted = true;
       if (remoteVideoRef.current.srcObject !== remoteStreamRef.current) {
         remoteVideoRef.current.srcObject = remoteStreamRef.current;
       }
       remoteVideoRef.current.play().catch(() => {});
+    }
+    if (remoteScreenVideoRef.current && remoteStreamRef.current) {
+      remoteScreenVideoRef.current.setAttribute('playsinline', 'true');
+      remoteScreenVideoRef.current.setAttribute('webkit-playsinline', 'true');
+      remoteScreenVideoRef.current.muted = true;
+      if (remoteScreenVideoRef.current.srcObject !== remoteStreamRef.current) {
+        remoteScreenVideoRef.current.srcObject = remoteStreamRef.current;
+      }
+      remoteScreenVideoRef.current.play().catch(() => {});
     }
     if (remoteAudioRef.current && remoteStreamRef.current) {
       if (remoteAudioRef.current.srcObject !== remoteStreamRef.current) {
@@ -483,7 +524,7 @@ export function LiveCallOverlay({
       }
       remoteAudioRef.current.play().catch(() => {});
     }
-  }, [isCameraOn, isMinimized, isAnsweredAndConnected, localMediaTick, remoteMediaTick, activeCall?.id]);
+  }, [isCameraOn, isScreenSharing, isMinimized, isAnsweredAndConnected, localMediaTick, remoteMediaTick, activeCall?.id, activeCall?.screenSharerId]);
 
   // WebRTC PeerConnection & Full ICE-bundled SDP signaling synchronization via Firestore
   useEffect(() => {
@@ -498,36 +539,70 @@ export function LiveCallOverlay({
       const pc = new RTCPeerConnection(RTC_CONFIG);
       peerConnectionRef.current = pc;
 
+      const activeScreenTrack = screenStreamRef.current?.getVideoTracks()[0];
+
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => {
-          pc.addTrack(track, localStreamRef.current!);
+          if (track.kind === 'video') {
+            if (activeScreenTrack && screenStreamRef.current) {
+              videoSenderRef.current = pc.addTrack(activeScreenTrack, screenStreamRef.current);
+            } else {
+              videoSenderRef.current = pc.addTrack(track, localStreamRef.current!);
+            }
+          } else {
+            pc.addTrack(track, localStreamRef.current!);
+          }
         });
+      }
+
+      if (activeScreenTrack && screenStreamRef.current && !videoSenderRef.current) {
+        videoSenderRef.current = pc.addTrack(activeScreenTrack, screenStreamRef.current);
       }
 
       const inboundStream = new MediaStream();
       remoteStreamRef.current = inboundStream;
 
+      const syncInboundFlags = () => {
+        const hasLiveVid = inboundStream.getVideoTracks().some((t) => t.readyState === 'live');
+        const hasLiveAud = inboundStream.getAudioTracks().some((t) => t.readyState === 'live');
+        setHasRemoteVideoTrack(hasLiveVid);
+        setHasRemoteAudioTrack(hasLiveAud);
+        setRemoteMediaTick((t) => t + 1);
+      };
+
       pc.ontrack = (event) => {
+        const addedTracks: MediaStreamTrack[] = [];
         if (event.streams && event.streams[0]) {
           event.streams[0].getTracks().forEach((t) => {
             if (!inboundStream.getTracks().some((existing) => existing.id === t.id)) {
               inboundStream.addTrack(t);
+              addedTracks.push(t);
             }
           });
         } else if (event.track) {
           if (!inboundStream.getTracks().some((existing) => existing.id === event.track.id)) {
             inboundStream.addTrack(event.track);
+            addedTracks.push(event.track);
           }
         }
 
+        addedTracks.forEach((t) => {
+          t.onunmute = syncInboundFlags;
+          t.onended = syncInboundFlags;
+        });
+
         remoteStreamRef.current = inboundStream;
-        setHasRemoteVideoTrack(inboundStream.getVideoTracks().length > 0);
-        setHasRemoteAudioTrack(inboundStream.getAudioTracks().length > 0);
-        setRemoteMediaTick((t) => t + 1);
+        syncInboundFlags();
 
         if (remoteVideoRef.current) {
+          remoteVideoRef.current.muted = true;
           remoteVideoRef.current.srcObject = inboundStream;
           remoteVideoRef.current.play().catch(() => {});
+        }
+        if (remoteScreenVideoRef.current) {
+          remoteScreenVideoRef.current.muted = true;
+          remoteScreenVideoRef.current.srcObject = inboundStream;
+          remoteScreenVideoRef.current.play().catch(() => {});
         }
         if (remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = inboundStream;
@@ -548,6 +623,7 @@ export function LiveCallOverlay({
         if (!pc) return;
 
         const currentVersion = activeCall.sdpVersion || 1;
+        const offererId = activeCall.sdpOffererId || activeCall.callerId;
 
         // 1. Caller creates initial Offer SDP (with bundled ICE candidates)
         if (activeCall.callerId === currentUserId && !activeCall.offerSdp) {
@@ -567,21 +643,32 @@ export function LiveCallOverlay({
             {},
             {
               offerSdp: JSON.stringify(finalOffer),
+              sdpOffererId: currentUserId,
               sdpVersion: currentVersion,
             }
           );
           return;
         }
 
-        // 2. Callee receives Offer SDP and creates Answer SDP once they have accepted the call
+        // 2. Non-offerer receives Offer SDP and creates Answer SDP
         if (
-          activeCall.callerId !== currentUserId &&
+          currentUserId !== offererId &&
           activeCall.offerSdp &&
           appliedOfferVersionRef.current < currentVersion
         ) {
           appliedOfferVersionRef.current = currentVersion;
           const offerDesc = JSON.parse(activeCall.offerSdp);
           await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
+
+          // Capture video transceiver sender if remote side opened a video m-line
+          if (!videoSenderRef.current) {
+            const vidTransceiver = pc
+              .getTransceivers()
+              .find((tr) => tr.receiver?.track?.kind === 'video' || tr.sender?.track?.kind === 'video');
+            if (vidTransceiver?.sender) {
+              videoSenderRef.current = vidTransceiver.sender;
+            }
+          }
 
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
@@ -602,9 +689,9 @@ export function LiveCallOverlay({
           return;
         }
 
-        // 3. Caller applies Answer SDP from Callee
+        // 3. Offerer applies Answer SDP from peer
         if (
-          activeCall.callerId === currentUserId &&
+          currentUserId === offererId &&
           activeCall.answerSdp &&
           appliedAnswerVersionRef.current < currentVersion &&
           pc.signalingState === 'have-local-offer'
@@ -625,6 +712,7 @@ export function LiveCallOverlay({
     activeCall?.offerSdp,
     activeCall?.answerSdp,
     activeCall?.sdpVersion,
+    activeCall?.sdpOffererId,
     activeCall?.status,
   ]);
 
@@ -756,18 +844,38 @@ export function LiveCallOverlay({
         setCameraPermissionNote(null);
       }
 
-      // Update active RTCPeerConnection senders
+      // Update active RTCPeerConnection senders without clobbering an active screen share
       if (peerConnectionRef.current) {
         const pc = peerConnectionRef.current;
         const senders = pc.getSenders();
-        combinedStream.getTracks().forEach((track) => {
-          const existingSender = senders.find((s) => s.track?.kind === track.kind);
-          if (existingSender) {
-            existingSender.replaceTrack(track).catch(() => {});
+        for (const track of combinedStream.getTracks()) {
+          if (track.kind === 'video') {
+            // If user is currently sharing screen, keep the screen track on the wire
+            if (isScreenSharing && screenStreamRef.current?.getVideoTracks()[0]) {
+              continue;
+            }
+            const existingVidSender =
+              videoSenderRef.current ||
+              pc
+                .getTransceivers()
+                .find((tr) => tr.receiver?.track?.kind === 'video' || tr.sender?.track?.kind === 'video')
+                ?.sender ||
+              senders.find((s) => s.track?.kind === 'video');
+            if (existingVidSender) {
+              videoSenderRef.current = existingVidSender;
+              await existingVidSender.replaceTrack(track).catch(() => {});
+            } else {
+              videoSenderRef.current = pc.addTrack(track, combinedStream);
+            }
           } else {
-            pc.addTrack(track, combinedStream);
+            const existingAudSender = senders.find((s) => s.track?.kind === 'audio');
+            if (existingAudSender) {
+              await existingAudSender.replaceTrack(track).catch(() => {});
+            } else {
+              pc.addTrack(track, combinedStream);
+            }
           }
-        });
+        }
       }
     } else {
       setHasLocalVideoTrack(false);
@@ -806,21 +914,24 @@ export function LiveCallOverlay({
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
+    videoSenderRef.current = null;
     remoteStreamRef.current = null;
     setHasLocalVideoTrack(false);
     setHasLocalAudioTrack(false);
+    setHasLocalScreenTrack(false);
     setHasRemoteVideoTrack(false);
     setHasRemoteAudioTrack(false);
     setLocalMediaReady(false);
     setRtcConnected(false);
     setMicLevel(0);
     setIsScreenSharing(false);
+    setScreenShareNotice(null);
   };
 
-  const renegotiateIfCaller = async () => {
+  const renegotiatePeerConnection = async () => {
     if (!activeCallConv || !activeCall || !peerConnectionRef.current) return;
     const pc = peerConnectionRef.current;
-    if (activeCall.callerId !== currentUserId) return;
+    if (pc.signalingState !== 'stable') return;
     try {
       const nextVersion = (activeCall.sdpVersion || 1) + 1;
       const offer = await pc.createOffer({
@@ -837,6 +948,7 @@ export function LiveCallOverlay({
         {
           offerSdp: JSON.stringify(pc.localDescription || offer),
           answerSdp: '',
+          sdpOffererId: currentUserId,
           sdpVersion: nextVersion,
         }
       );
@@ -872,13 +984,16 @@ export function LiveCallOverlay({
 
     if (nextCamera) {
       await startLocalMedia(true, isMuted, cameraFacingMode);
-      await renegotiateIfCaller();
+      await renegotiatePeerConnection();
     } else {
       if (localStreamRef.current) {
         localStreamRef.current.getVideoTracks().forEach((t) => {
           t.stop();
           localStreamRef.current?.removeTrack(t);
         });
+      }
+      if (!isScreenSharing && videoSenderRef.current) {
+        await videoSenderRef.current.replaceTrack(null).catch(() => {});
       }
       setHasLocalVideoTrack(false);
       setIsCameraOn(false);
@@ -903,56 +1018,130 @@ export function LiveCallOverlay({
     } else {
       await startLocalMedia(true, isMuted, nextFacing);
     }
-    await renegotiateIfCaller();
+    await renegotiatePeerConnection();
+  };
+
+  const stopLocalScreenShare = async () => {
+    if (!activeCallConv || !activeCall) return;
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((t) => t.stop());
+      screenStreamRef.current = null;
+    }
+    setHasLocalScreenTrack(false);
+    setIsScreenSharing(false);
+    setScreenShareNotice(null);
+
+    // Restore camera video track (or null) on the active WebRTC video sender
+    if (videoSenderRef.current) {
+      const camTrack = isCameraOn ? localStreamRef.current?.getVideoTracks()[0] || null : null;
+      await videoSenderRef.current.replaceTrack(camTrack).catch(() => {});
+    }
+
+    onUpdateParticipantState(
+      activeCallConv.id,
+      activeCall,
+      { isScreenSharing: false },
+      {
+        screenSharerId:
+          activeCall.screenSharerId === currentUserId ? '' : activeCall.screenSharerId,
+        screenSharerName:
+          activeCall.screenSharerId === currentUserId ? '' : activeCall.screenSharerName,
+        sharedScreenImage:
+          activeCall.screenSharerId === currentUserId ? '' : activeCall.sharedScreenImage || '',
+        sharedScreenLabel:
+          activeCall.screenSharerId === currentUserId ? '' : activeCall.sharedScreenLabel || '',
+      }
+    );
   };
 
   const handleToggleScreenShare = async () => {
     if (!activeCallConv || !activeCall) return;
 
-    if (isScreenSharing) {
+    if (isScreenSharing || activeCall.screenSharerId === currentUserId) {
+      await stopLocalScreenShare();
+      return;
+    }
+
+    setScreenShareNotice(null);
+    const result = await acquireDisplayMediaStream();
+
+    if (!result.ok) {
+      if (result.reason !== 'cancelled') {
+        setScreenShareNotice(result.message);
+      }
+      return;
+    }
+
+    const displayStream = result.stream;
+    const screenTrack = displayStream.getVideoTracks()[0];
+    screenStreamRef.current = displayStream;
+    setHasLocalScreenTrack(true);
+    setIsScreenSharing(true);
+
+    if (screenVideoRef.current) {
+      screenVideoRef.current.muted = true;
+      screenVideoRef.current.srcObject = displayStream;
+      screenVideoRef.current.play().catch(() => {});
+    }
+
+    // Transmit screen track over WebRTC PeerConnection to the other person
+    if (peerConnectionRef.current && screenTrack) {
+      const pc = peerConnectionRef.current;
+      const vidTransceiver = pc
+        .getTransceivers()
+        .find((tr) => tr.receiver?.track?.kind === 'video' || tr.sender?.track?.kind === 'video');
+      const existingSender =
+        videoSenderRef.current ||
+        vidTransceiver?.sender ||
+        pc.getSenders().find((s) => s.track?.kind === 'video');
+
+      if (existingSender) {
+        videoSenderRef.current = existingSender;
+        await existingSender.replaceTrack(screenTrack).catch(() => {});
+        const tr = pc.getTransceivers().find((t) => t.sender === existingSender);
+        if (tr && tr.direction !== 'sendrecv' && tr.direction !== 'sendonly') {
+          tr.direction = 'sendrecv';
+          await renegotiatePeerConnection();
+        }
+      } else {
+        videoSenderRef.current = pc.addTrack(screenTrack, displayStream);
+        await renegotiatePeerConnection();
+      }
+    }
+
+    screenTrack.onended = () => {
+      void stopLocalScreenShare();
+    };
+
+    onUpdateParticipantState(
+      activeCallConv.id,
+      activeCall,
+      { isScreenSharing: true },
+      {
+        screenSharerId: currentUserId,
+        screenSharerName: currentUserName,
+        sharedScreenImage: '',
+        sharedScreenLabel: '',
+      }
+    );
+  };
+
+  const handleShareScreenPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !activeCallConv || !activeCall) return;
+
+    setIsUploadingScreenPhoto(true);
+    try {
+      const dataUrl = await compressImageFileForScreenShare(file);
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach((t) => t.stop());
         screenStreamRef.current = null;
       }
-      setIsScreenSharing(false);
-      onUpdateParticipantState(
-        activeCallConv.id,
-        activeCall,
-        { isScreenSharing: false },
-        {
-          screenSharerId:
-            activeCall.screenSharerId === currentUserId ? '' : activeCall.screenSharerId,
-          screenSharerName:
-            activeCall.screenSharerId === currentUserId ? '' : activeCall.screenSharerName,
-        }
-      );
-      return;
-    }
-
-    try {
-      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getDisplayMedia) {
-        const displayStream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: false,
-        });
-        screenStreamRef.current = displayStream;
-        if (screenVideoRef.current) {
-          screenVideoRef.current.srcObject = displayStream;
-          screenVideoRef.current.play().catch(() => {});
-        }
-
-        displayStream.getVideoTracks()[0].onended = () => {
-          setIsScreenSharing(false);
-          screenStreamRef.current = null;
-          onUpdateParticipantState(
-            activeCallConv.id,
-            activeCall,
-            { isScreenSharing: false },
-            { screenSharerId: '', screenSharerName: '' }
-          );
-        };
-      }
+      setHasLocalScreenTrack(false);
       setIsScreenSharing(true);
+      setScreenShareNotice(null);
+
       onUpdateParticipantState(
         activeCallConv.id,
         activeCall,
@@ -960,20 +1149,26 @@ export function LiveCallOverlay({
         {
           screenSharerId: currentUserId,
           screenSharerName: currentUserName,
+          sharedScreenImage: dataUrl,
+          sharedScreenLabel: file.name || 'Shared Screenshot',
         }
       );
-    } catch {
-      setIsScreenSharing(true);
-      onUpdateParticipantState(
-        activeCallConv.id,
-        activeCall,
-        { isScreenSharing: true },
-        {
-          screenSharerId: currentUserId,
-          screenSharerName: currentUserName,
-        }
-      );
+    } catch (err: any) {
+      setScreenShareNotice(err?.message || 'Could not load that image. Please select a JPG or PNG.');
+    } finally {
+      setIsUploadingScreenPhoto(false);
     }
+  };
+
+  const handleUseRearCameraFallback = async () => {
+    if (!activeCallConv || !activeCall) return;
+    setScreenShareNotice(null);
+    setCameraFacingMode('environment');
+    await startLocalMedia(true, isMuted, 'environment');
+    await renegotiatePeerConnection();
+    onUpdateParticipantState(activeCallConv.id, activeCall, {
+      isCameraOn: true,
+    });
   };
 
   const handleHangUp = () => {
@@ -1397,24 +1592,64 @@ export function LiveCallOverlay({
         </div>
       </div>
 
+      {/* Hidden Screenshot / Photo Input for Mobile Screen Share Fallback */}
+      <input
+        ref={screenPhotoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleShareScreenPhoto}
+      />
+
       {/* Center Stage: Screen Share Presentation + Participant Video/Avatar Grid */}
       <div className="flex-1 max-w-6xl w-full mx-auto my-2 sm:my-4 flex flex-col lg:flex-row gap-2.5 sm:gap-4 overflow-y-auto min-h-0">
         {/* Screen Share Stage (if active) */}
-        {(isScreenSharing || activeCall.screenSharerId) && (
-          <div className="flex-1 lg:flex-[2] min-h-[200px] sm:min-h-[260px] rounded-2xl sm:rounded-3xl bg-slate-900 border border-indigo-500/40 overflow-hidden relative flex flex-col justify-between p-3 sm:p-4 shadow-2xl shrink-0">
-            <div className="flex items-center justify-between z-10 bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 w-fit">
-              <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-wider text-indigo-300">
-                <MonitorUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-indigo-400 animate-pulse" />
-                {isScreenSharing
-                  ? t.liveCall.youSharingScreen
-                  : t.liveCall.otherSharingScreen.replace('{name}', activeCall.screenSharerName || t.header.officer)}
-              </span>
+        {(isScreenSharing || activeCall.screenSharerId || activeCall.sharedScreenImage) && (
+          <div className="flex-1 lg:flex-[2] min-h-[220px] sm:min-h-[280px] rounded-2xl sm:rounded-3xl bg-slate-900 border border-indigo-500/40 overflow-hidden relative flex flex-col justify-between p-3 sm:p-4 shadow-2xl shrink-0">
+            <div className="flex items-center justify-between gap-2 z-10">
+              <div className="bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 w-fit">
+                <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-black uppercase tracking-wider text-indigo-300">
+                  <MonitorUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-indigo-400 animate-pulse" />
+                  {isScreenSharing || activeCall.screenSharerId === currentUserId
+                    ? t.liveCall.youSharingScreen
+                    : t.liveCall.otherSharingScreen.replace('{name}', activeCall.screenSharerName || t.header.officer)}
+                </span>
+              </div>
+              {(isScreenSharing || activeCall.screenSharerId === currentUserId) && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleToggleScreenShare}
+                  className="h-7 px-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-wider"
+                >
+                  <MonitorOff className="h-3 w-3 mr-1" />
+                  {t.liveCall.stopScreenBtn}
+                </Button>
+              )}
             </div>
 
-            <div className="flex-1 flex items-center justify-center relative my-2 rounded-xl sm:rounded-2xl overflow-hidden bg-slate-950 border border-white/5 min-h-[140px]">
-              {isScreenSharing && screenStreamRef.current ? (
+            <div className="flex-1 flex items-center justify-center relative my-2 rounded-xl sm:rounded-2xl overflow-hidden bg-slate-950 border border-white/5 min-h-[160px]">
+              {activeCall.sharedScreenImage ? (
+                <img
+                  src={activeCall.sharedScreenImage}
+                  alt={activeCall.sharedScreenLabel || 'Shared Screenshot'}
+                  className="w-full h-full max-h-[60vh] object-contain"
+                />
+              ) : isScreenSharing && hasLocalScreenTrack && screenStreamRef.current ? (
                 <video
                   ref={setScreenVideoEl}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-contain"
+                />
+              ) : activeCall.screenSharerId &&
+                activeCall.screenSharerId !== currentUserId &&
+                hasRemoteVideoTrack &&
+                remoteStreamRef.current ? (
+                <video
+                  key={`remote-screen-${remoteMediaTick}`}
+                  ref={setRemoteScreenVideoEl}
                   autoPlay
                   playsInline
                   muted
@@ -1423,15 +1658,15 @@ export function LiveCallOverlay({
               ) : (
                 <div className="p-4 sm:p-8 text-center space-y-2 max-w-md">
                   <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mx-auto">
-                    <MonitorUp className="h-6 w-6 sm:h-8 sm:w-8" />
+                    <MonitorUp className="h-6 w-6 sm:h-8 sm:w-8 animate-pulse" />
                   </div>
                   <p className="text-xs sm:text-sm font-black text-white uppercase tracking-wider">
                     {t.liveCall.liveWorkspaceStreamTitle}
                   </p>
                   <p className="text-[11px] sm:text-xs text-slate-400 leading-relaxed">
-                    {isScreenSharing
+                    {isScreenSharing || activeCall.screenSharerId === currentUserId
                       ? t.liveCall.youSharingDesc
-                      : t.liveCall.otherSharingDesc.replace('{name}', activeCall.screenSharerName || t.header.officer)}
+                      : t.liveCall.connectingScreenStream}
                   </p>
                 </div>
               )}
@@ -1455,13 +1690,17 @@ export function LiveCallOverlay({
             const userProfile = allUsers?.find((u) => u.id === participant.uid);
             const showCamera = isMe ? isCameraOn : participant.isCameraOn;
             const mutedState = isMe ? isMuted : participant.isMuted;
+            const isRemoteSharingLiveScreen =
+              !isMe &&
+              activeCall.screenSharerId === participant.uid &&
+              !activeCall.sharedScreenImage;
 
             return (
               <div
                 key={participant.uid}
                 className="relative rounded-2xl sm:rounded-3xl bg-slate-900 border border-white/10 overflow-hidden flex flex-col items-center justify-center min-h-[180px] sm:min-h-[240px] shadow-xl group"
               >
-                {showCamera ? (
+                {showCamera && !isRemoteSharingLiveScreen ? (
                   isMe && hasLocalVideoTrack ? (
                     <video
                       key={`local-vid-${localMediaTick}`}
@@ -1480,6 +1719,7 @@ export function LiveCallOverlay({
                       ref={setRemoteVideoEl}
                       autoPlay
                       playsInline
+                      muted
                       className="absolute inset-0 w-full h-full object-cover"
                     />
                   ) : (
@@ -1587,6 +1827,45 @@ export function LiveCallOverlay({
           })}
         </div>
       </div>
+
+      {/* Screen Share Mobile/Browser Notice + Instant Screenshot & Rear Camera Fallbacks */}
+      {screenShareNotice && (
+        <div className="max-w-2xl w-full mx-auto mb-1.5 px-3.5 py-2.5 rounded-2xl bg-slate-900 border border-indigo-500/40 text-indigo-100 text-[11px] font-medium flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-xl shrink-0">
+          <div className="flex items-start gap-2 text-left">
+            <MonitorUp className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" />
+            <span className="leading-snug">{screenShareNotice}</span>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-1.5 shrink-0">
+            <Button
+              type="button"
+              size="sm"
+              disabled={isUploadingScreenPhoto}
+              onClick={() => screenPhotoInputRef.current?.click()}
+              className="h-7 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white"
+            >
+              <ImageIcon className="h-3 w-3 mr-1" />
+              {t.liveCall.sharePhotoBtn}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleUseRearCameraFallback}
+              className="h-7 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <SwitchCamera className="h-3 w-3 mr-1" />
+              {t.liveCall.useRearCamBtn}
+            </Button>
+            <button
+              type="button"
+              onClick={() => setScreenShareNotice(null)}
+              className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300"
+              aria-label="Close"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Camera / Permission Notice + Direct User-Gesture Enable Button */}
       {cameraPermissionNote && (

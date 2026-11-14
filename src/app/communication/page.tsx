@@ -104,6 +104,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/i18n/language-provider';
+import { isUserTrulyOnline, formatRealTimePresence, PresenceLabels } from '@/lib/presence';
 
 const getTs = (d: any): number => {
   if (!d) return 0;
@@ -268,10 +269,39 @@ export default function CommunicationPage() {
     return allUsers?.find((u) => u.id === otherId);
   };
 
+  const presenceLabels: PresenceLabels = useMemo(
+    () => ({
+      onlineNow: t.communication.onlineNow,
+      offlineStatus: t.communication.offlineStatus,
+      lastSeenJustNow: t.communication.lastSeenJustNow,
+      lastSeenMinsAgo: t.communication.lastSeenMinsAgo,
+      lastSeenTodayAt: t.communication.lastSeenTodayAt,
+      lastSeenYesterdayAt: t.communication.lastSeenYesterdayAt,
+      lastSeenDate: t.communication.lastSeenDate,
+    }),
+    [t]
+  );
+
   const getOtherUserStatus = (conv: Conversation) => {
+    void typingTick;
     if (conv.type !== 'dm') return null;
     const otherUser = getOtherUser(conv);
-    return otherUser?.isDutyActive;
+    return isUserTrulyOnline(otherUser);
+  };
+
+  const getOtherUserPresenceLabel = (conv: Conversation) => {
+    void typingTick;
+    const otherUser = getOtherUser(conv);
+    return formatRealTimePresence(otherUser, presenceLabels);
+  };
+
+  const getGroupOnlineCount = (conv: Conversation) => {
+    void typingTick;
+    if (!conv.members || !allUsers) return 0;
+    return conv.members.filter((mId) => {
+      const u = allUsers.find((usr) => usr.id === mId);
+      return isUserTrulyOnline(u);
+    }).length;
   };
 
   const isConvUnread = (conv: Conversation): boolean => {
@@ -1237,6 +1267,8 @@ export default function CommunicationPage() {
           activeParticipantIds: [],
           screenSharerId: '',
           screenSharerName: '',
+          sharedScreenImage: '',
+          sharedScreenLabel: '',
           endedAt: new Date().toISOString(),
           endedBy: user.uid,
         },
@@ -1265,6 +1297,8 @@ export default function CommunicationPage() {
           participants: nextParticipants,
           screenSharerId: call.screenSharerId === user.uid ? '' : call.screenSharerId,
           screenSharerName: call.screenSharerId === user.uid ? '' : call.screenSharerName,
+          sharedScreenImage: call.screenSharerId === user.uid ? '' : call.sharedScreenImage || '',
+          sharedScreenLabel: call.screenSharerId === user.uid ? '' : call.sharedScreenLabel || '',
         },
       });
       toast({
@@ -1714,6 +1748,18 @@ export default function CommunicationPage() {
                                 <span className="h-2.5 w-2.5 rounded-full bg-[#FF6B4A] shrink-0 shadow-[0_0_8px_rgba(255,107,74,0.7)]" />
                               )}
                             </div>
+                            {conv.type === 'dm' && (
+                              <p
+                                className={cn(
+                                  'text-[9px] font-bold truncate mt-0.5',
+                                  isActive
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-muted-foreground/60'
+                                )}
+                              >
+                                {getOtherUserPresenceLabel(conv)}
+                              </p>
+                            )}
                           </div>
                         </button>
                       );
@@ -1853,6 +1899,7 @@ export default function CommunicationPage() {
                         <DirectoryRow
                           key={u.id}
                           user={u}
+                          presenceLabels={presenceLabels}
                           commandBadgeLabel={t.communication.commandBadge}
                           onOpen={handleOpenDirectMessage}
                         />
@@ -1869,6 +1916,7 @@ export default function CommunicationPage() {
                         <DirectoryRow
                           key={u.id}
                           user={u}
+                          presenceLabels={presenceLabels}
                           commandBadgeLabel={t.communication.commandBadge}
                           onOpen={handleOpenDirectMessage}
                         />
@@ -1951,20 +1999,27 @@ export default function CommunicationPage() {
                               <span
                                 className={cn(
                                   'h-1.5 w-1.5 rounded-full shrink-0',
-                                  activeConv.type === 'group' || getOtherUserStatus(activeConv)
+                                  activeConv.type === 'group'
+                                    ? getGroupOnlineCount(activeConv) > 0
+                                      ? 'bg-green-500 animate-pulse'
+                                      : 'bg-muted-foreground/30'
+                                    : getOtherUserStatus(activeConv)
                                     ? 'bg-green-500 animate-pulse'
                                     : 'bg-muted-foreground/30'
                                 )}
                               />
                               <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.1em] truncate">
                                 {activeConv.type === 'group'
-                                  ? t.communication.membersCountLabel.replace(
-                                      '{count}',
-                                      formatNumber(activeConv.members?.length || 0)
-                                    )
-                                  : getOtherUserStatus(activeConv)
-                                  ? t.communication.activeDutyStatus
-                                  : t.communication.offlineStatus}
+                                  ? t.communication.membersWithOnlineLabel
+                                      .replace(
+                                        '{count}',
+                                        formatNumber(activeConv.members?.length || 0)
+                                      )
+                                      .replace(
+                                        '{online}',
+                                        formatNumber(getGroupOnlineCount(activeConv))
+                                      )
+                                  : getOtherUserPresenceLabel(activeConv)}
                               </p>
                             </>
                           )}
@@ -3103,7 +3158,17 @@ export default function CommunicationPage() {
                                   </p>
                                   <p className="text-[10px] text-muted-foreground uppercase">
                                     {memberProfile?.role || 'Official'} •{' '}
-                                    {memberProfile?.region || 'HQ'}
+                                    {memberProfile?.region || 'HQ'} •{' '}
+                                    <span
+                                      className={cn(
+                                        'font-bold',
+                                        isUserTrulyOnline(memberProfile)
+                                          ? 'text-emerald-600 dark:text-emerald-400'
+                                          : 'text-muted-foreground'
+                                      )}
+                                    >
+                                      {formatRealTimePresence(memberProfile, presenceLabels)}
+                                    </span>
                                   </p>
                                 </div>
                               </div>
@@ -3236,10 +3301,15 @@ export default function CommunicationPage() {
                               <span className="text-[10px] font-black uppercase text-muted-foreground block">
                                 {t.communication.dutyStatusLabel}
                               </span>
-                              <span className="font-bold">
-                                {other?.isDutyActive
-                                  ? t.communication.activeDutyStatus
-                                  : t.communication.offlineStatus}
+                              <span
+                                className={cn(
+                                  'font-bold',
+                                  isUserTrulyOnline(other)
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-muted-foreground'
+                                )}
+                              >
+                                {formatRealTimePresence(other, presenceLabels)}
                               </span>
                             </div>
                           </div>
@@ -3336,13 +3406,16 @@ export default function CommunicationPage() {
 
 function DirectoryRow({
   user,
+  presenceLabels,
   commandBadgeLabel,
   onOpen,
 }: {
   user: UserProfile;
+  presenceLabels: PresenceLabels;
   commandBadgeLabel?: string;
   onOpen: (id: string) => void;
 }) {
+  const trulyOnline = isUserTrulyOnline(user);
   return (
     <button
       onClick={() => onOpen(user.id)}
@@ -3363,7 +3436,7 @@ function DirectoryRow({
         <span
           className={cn(
             'absolute bottom-0.5 right-0.5 h-3 w-3 rounded-full border-2 border-background',
-            user.isDutyActive ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground/30'
+            trulyOnline ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground/30'
           )}
         />
       </div>
@@ -3381,6 +3454,14 @@ function DirectoryRow({
         </div>
         <p className="text-[9px] text-muted-foreground font-bold uppercase truncate">
           {user.role} • {user.region || 'HQ'}
+        </p>
+        <p
+          className={cn(
+            'text-[9px] font-bold truncate mt-0.5',
+            trulyOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/70'
+          )}
+        >
+          {formatRealTimePresence(user, presenceLabels)}
         </p>
       </div>
     </button>

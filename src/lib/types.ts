@@ -163,6 +163,8 @@ export interface UserProfile {
   lastCallsViewedAt?: string;
   updatedAt?: string;
   isDutyActive?: boolean;
+  isOnline?: boolean;
+  lastSeenAt?: string;
   twoFactorEnabled?: boolean;
   twoFactorSecret?: string;
 }
@@ -221,8 +223,11 @@ export interface CallSession {
   participants?: Record<string, CallParticipantState>;
   screenSharerId?: string;
   screenSharerName?: string;
+  sharedScreenImage?: string;
+  sharedScreenLabel?: string;
   offerSdp?: string;
   answerSdp?: string;
+  sdpOffererId?: string;
   callerCandidates?: string[];
   calleeCandidates?: string[];
   sdpVersion?: number;
@@ -266,6 +271,8 @@ export interface MeetingSession {
   participants?: Record<string, CallParticipantState>;
   screenSharerId?: string;
   screenSharerName?: string;
+  sharedScreenImage?: string;
+  sharedScreenLabel?: string;
   offerSdp?: string;
   answerSdp?: string;
   meetingNotes?: string;

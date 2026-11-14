@@ -481,7 +481,7 @@ export default function AdminDashboard() {
                   href="/admin/officers"
                   className="text-[10px] font-bold underline text-primary hover:opacity-80"
                 >
-                  ({t.header.personnel})
+                  ({t.nav.personnel})
                 </Link>
               </div>
             </div>

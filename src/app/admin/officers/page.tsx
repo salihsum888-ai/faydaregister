@@ -72,6 +72,7 @@ import {
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n/language-provider';
+import { isUserTrulyOnline, formatRealTimePresence, PresenceLabels } from '@/lib/presence';
 
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -82,6 +83,25 @@ export default function OfficerManagementPage() {
   const { user: currentUser } = useUser();
   const db = useFirestore();
   const { toast } = useToast();
+  const [presenceTick, setPresenceTick] = useState(0);
+
+  useEffect(() => {
+    const iv = setInterval(() => setPresenceTick((n) => n + 1), 15_000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const presenceLabels: PresenceLabels = useMemo(
+    () => ({
+      onlineNow: t.communication.onlineNow,
+      offlineStatus: t.communication.offlineStatus,
+      lastSeenJustNow: t.communication.lastSeenJustNow,
+      lastSeenMinsAgo: t.communication.lastSeenMinsAgo,
+      lastSeenTodayAt: t.communication.lastSeenTodayAt,
+      lastSeenYesterdayAt: t.communication.lastSeenYesterdayAt,
+      lastSeenDate: t.communication.lastSeenDate,
+    }),
+    [t]
+  );
   
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -498,7 +518,9 @@ export default function OfficerManagementPage() {
                   </TableHeader>
                   <TableBody>
                     {paginatedOfficers.map((officer) => {
+                      void presenceTick;
                       const isMe = officer.id === currentUser?.uid;
+                      const trulyOnline = isUserTrulyOnline(officer);
                       return (
                         <TableRow key={officer.id} className={cn(
                           "hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors group border-b border-slate-100 dark:border-slate-800/60 h-14",
@@ -514,12 +536,22 @@ export default function OfficerManagementPage() {
                               ) : (
                                 <span className="w-4" />
                               )}
-                              <Avatar className="h-8 w-8 border border-slate-200 dark:border-slate-700">
-                                <AvatarImage src={officer.profilePhoto} />
-                                <AvatarFallback className="font-semibold text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
-                                  {officer.fullName.substring(0, 2).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
+                              <div className="relative">
+                                <Avatar className="h-8 w-8 border border-slate-200 dark:border-slate-700">
+                                  <AvatarImage src={officer.profilePhoto} />
+                                  <AvatarFallback className="font-semibold text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                                    {officer.fullName.substring(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span
+                                  className={cn(
+                                    'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-slate-900',
+                                    trulyOnline
+                                      ? 'bg-emerald-500 animate-pulse'
+                                      : 'bg-slate-300 dark:bg-slate-600'
+                                  )}
+                                />
+                              </div>
                               <div>
                                 <p className="text-[13px] font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap flex items-center gap-1.5">
                                   {officer.fullName}
@@ -530,9 +562,36 @@ export default function OfficerManagementPage() {
                             </div>
                           </TableCell>
                           <TableCell className="px-4 py-3 whitespace-nowrap">
-                            <span className="text-[13px] text-slate-600 dark:text-slate-300">
-                              {officer.updatedAt ? formatDate(officer.updatedAt, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : t.adminOfficers.notSynced}
-                            </span>
+                            <div className="flex flex-col">
+                              <span
+                                className={cn(
+                                  'inline-flex items-center gap-1.5 text-[12px] font-bold',
+                                  trulyOnline
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-slate-600 dark:text-slate-300'
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    'h-2 w-2 rounded-full shrink-0',
+                                    trulyOnline
+                                      ? 'bg-emerald-500 animate-pulse'
+                                      : 'bg-slate-300 dark:bg-slate-600'
+                                  )}
+                                />
+                                {formatRealTimePresence(officer, presenceLabels)}
+                              </span>
+                              {(officer.lastSeenAt || officer.updatedAt) && (
+                                <span className="text-[10px] text-slate-400">
+                                  {formatDate((officer.lastSeenAt || officer.updatedAt)!, {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">
                             <span className="text-[13px] text-slate-600 dark:text-slate-300 capitalize">
