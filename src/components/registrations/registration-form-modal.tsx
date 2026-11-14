@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Registration, UserProfile } from '@/lib/types';
 import { Edit2, Plus, Building2, Sparkles, Check, AlertTriangle, ClipboardPaste } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -39,6 +39,16 @@ import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { logAuditAction } from '@/lib/audit';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n/language-provider';
+
+function toDateInputValue(raw?: string): string {
+  if (raw) {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0];
+    }
+  }
+  return new Date().toISOString().split('T')[0];
+}
 
 interface RegistrationFormModalProps {
   registration?: Registration;
@@ -67,14 +77,26 @@ export function RegistrationFormModal({
     () =>
       z
         .object({
-          applicantName: z.string().min(2, t.registrationModal.valNameMin),
-          id: z.string().regex(/^\d{29}$/, t.registrationModal.valRidExact),
+          applicantName: z.string().trim().min(2, t.registrationModal.valNameMin),
+          id: z
+            .string()
+            .trim()
+            .refine(
+              (val) => (mode === 'edit' ? val.length > 0 : /^\d{29}$/.test(val.replace(/\s+/g, ''))),
+              t.registrationModal.valRidExact
+            ),
           submissionDate: z.string().min(1, t.registrationModal.valDateReq),
-          phone: z.string().regex(/^\d+$/, t.registrationModal.valPhoneDigits),
+          phone: z
+            .string()
+            .trim()
+            .refine(
+              (val) => /^\+?[\d\s\-()]{6,20}$/.test(val) && val.replace(/\D/g, '').length >= 6,
+              t.registrationModal.valPhoneDigits
+            ),
           status: z.enum(['Processed', 'Pending Review', 'Rejected', 'Processing', 'Failed']),
           rejectionReason: z.string().optional(),
           officer: z.string().optional(),
-          location: z.string().min(1, t.registrationModal.valLocationReq),
+          location: z.string().trim().min(1, t.registrationModal.valLocationReq),
           remarks: z.string().optional(),
           isSchoolRegistration: z.boolean().default(false),
           schoolName: z.string().optional(),
@@ -91,7 +113,7 @@ export function RegistrationFormModal({
             path: ['schoolName'],
           }
         ),
-    [t]
+    [t, mode]
   );
 
   type FormValues = z.infer<typeof formSchema>;
@@ -152,7 +174,7 @@ export function RegistrationFormModal({
     defaultValues: {
       applicantName: registration?.applicantName || '',
       id: registration?.id || '',
-      submissionDate: registration?.submissionDate ? new Date(registration.submissionDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      submissionDate: toDateInputValue(registration?.submissionDate),
       phone: registration?.phone || '',
       status: registration?.status || 'Pending Review',
       rejectionReason: registration?.rejectionReason || '',
@@ -219,8 +241,18 @@ export function RegistrationFormModal({
       .slice(0, 8);
   }, [availableSchools, currentSchoolName]);
 
+  const wasOpenRef = useRef(false);
+  const lastRegIdRef = useRef<string | undefined>(undefined);
+
   useEffect(() => {
+    const justOpened = open && !wasOpenRef.current;
+    const regChangedWhileOpen = open && registration?.id !== lastRegIdRef.current;
+    wasOpenRef.current = open;
     if (open) {
+      lastRegIdRef.current = registration?.id;
+    }
+
+    if (justOpened || regChangedWhileOpen) {
       const resetIsSchool = Boolean(
         registration?.isInstitutionRegistration ||
         registration?.isSchoolRegistration ||
@@ -234,7 +266,7 @@ export function RegistrationFormModal({
       form.reset({
         applicantName: registration?.applicantName || '',
         id: registration?.id || '',
-        submissionDate: registration?.submissionDate ? new Date(registration.submissionDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        submissionDate: toDateInputValue(registration?.submissionDate),
         phone: registration?.phone || '',
         status: registration?.status || 'Pending Review',
         rejectionReason: registration?.rejectionReason || '',
@@ -245,24 +277,49 @@ export function RegistrationFormModal({
         schoolName: resetSchoolName,
       });
     }
-  }, [open, registration, form, profile, mode, defaultIsSchool, defaultSchoolName]);
+  }, [open, registration, form, profile?.fullName, mode, defaultIsSchool, defaultSchoolName]);
+
+  // Populate default officer name if profile arrives after modal opens, without wiping typed fields
+  useEffect(() => {
+    if (open && mode === 'add' && profile?.fullName && !form.getValues('officer') && !form.getFieldState('officer').isDirty) {
+      form.setValue('officer', profile.fullName);
+    }
+  }, [open, mode, profile?.fullName, form]);
 
   function onSubmit(values: FormValues) {
-    if (!db || !user || !profile) return;
+    if (!db || !user) {
+      toast({
+        variant: 'destructive',
+        title: mode === 'add' ? t.registrationModal.newModalTitle : t.registrationModal.editModalTitle,
+      });
+      return;
+    }
 
-    const finalRejectionReason = values.status === 'Rejected' ? values.rejectionReason : '';
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Official';
+    const finalRejectionReason = values.status === 'Rejected' ? (values.rejectionReason || '').trim() : '';
     const cleanedSchoolName = values.isSchoolRegistration && values.schoolName
       ? values.schoolName.trim()
       : '';
+    const normalizedId = values.id.replace(/\s+/g, '').trim();
+    const parsedSubDate = new Date(values.submissionDate);
+    const isoSubDate = !Number.isNaN(parsedSubDate.getTime())
+      ? parsedSubDate.toISOString()
+      : new Date().toISOString();
 
     const data = {
-      ...values,
+      id: mode === 'edit' && registration ? registration.id : normalizedId,
+      applicantName: values.applicantName.trim(),
+      phone: values.phone.trim(),
+      status: values.status,
+      officer: (values.officer || '').trim(),
+      location: values.location.trim(),
+      remarks: (values.remarks || '').trim(),
       isSchoolRegistration: Boolean(values.isSchoolRegistration && cleanedSchoolName.length > 0),
       schoolName: cleanedSchoolName,
       isInstitutionRegistration: Boolean(values.isSchoolRegistration && cleanedSchoolName.length > 0),
       institutionName: cleanedSchoolName,
       rejectionReason: finalRejectionReason,
-      submissionDate: new Date(values.submissionDate).toISOString(),
+      submissionDate: isoSubDate,
       updatedAt: new Date().toISOString(),
       assignedReviewerId: mode === 'add' ? user.uid : (registration?.assignedReviewerId || user.uid),
       requiredFieldsFilled: true,
@@ -274,33 +331,32 @@ export function RegistrationFormModal({
       logAuditAction(
         db, 
         user, 
-        profile.fullName,
+        actorName,
         'STATUS_UPDATE', 
         registration.id, 
-        `Registry: Modified record for ${values.applicantName}${cleanedSchoolName ? ` (Institution: ${cleanedSchoolName})` : ''}. New Status: ${values.status}.`
+        `Registry: Modified record for ${data.applicantName}${cleanedSchoolName ? ` (Institution: ${cleanedSchoolName})` : ''}. New Status: ${values.status}.`
       );
       toast({
         title: t.registrationModal.toastUpdatedTitle,
-        description: t.registrationModal.toastUpdatedDesc.replace('{name}', values.applicantName),
+        description: t.registrationModal.toastUpdatedDesc.replace('{name}', data.applicantName),
       });
     } else {
-      setDocumentNonBlocking(doc(db, 'registrations', values.id), data, { merge: true });
+      setDocumentNonBlocking(doc(db, 'registrations', normalizedId), data, { merge: true });
       logAuditAction(
         db, 
         user, 
-        profile.fullName,
+        actorName,
         'RECORD_CREATED', 
-        values.id, 
-        `Registry: Created new registration for ${values.applicantName}${cleanedSchoolName ? ` (Institution: ${cleanedSchoolName})` : ''}.`
+        normalizedId, 
+        `Registry: Created new registration for ${data.applicantName}${cleanedSchoolName ? ` (Institution: ${cleanedSchoolName})` : ''}.`
       );
       toast({
         title: t.registrationModal.toastCreatedTitle,
-        description: t.registrationModal.toastCreatedDesc.replace('{name}', values.applicantName),
+        description: t.registrationModal.toastCreatedDesc.replace('{name}', data.applicantName),
       });
     }
 
     setOpen(false);
-    form.reset();
   }
 
   return (
@@ -462,7 +518,20 @@ export function RegistrationFormModal({
                       )}
                     </div>
                     <FormControl>
-                      <Input placeholder={t.registrationModal.ridPlaceholder} {...field} className="h-11 bg-background border-border font-mono text-xs" maxLength={29} disabled={mode === 'edit'} />
+                      <Input
+                        placeholder={t.registrationModal.ridPlaceholder}
+                        {...field}
+                        onChange={(e) => {
+                          if (mode === 'add') {
+                            field.onChange(e.target.value.replace(/\D/g, '').slice(0, 29));
+                          } else {
+                            field.onChange(e.target.value);
+                          }
+                        }}
+                        className="h-11 bg-background border-border font-mono text-xs"
+                        maxLength={29}
+                        disabled={mode === 'edit'}
+                      />
                     </FormControl>
                     {duplicateRidMatch && (
                       <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
@@ -555,7 +624,7 @@ export function RegistrationFormModal({
                 render={({ field }) => (
                   <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
                     <FormLabel className="text-[10px] font-bold uppercase text-rose-500 tracking-wider">{t.registrationModal.rejectionReasonLabel}</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || undefined}>
                       <FormControl>
                         <SelectTrigger className="h-11 border-rose-200 bg-rose-500/10 text-rose-600">
                           <SelectValue placeholder={t.registrationModal.selectReasonPlaceholder} />

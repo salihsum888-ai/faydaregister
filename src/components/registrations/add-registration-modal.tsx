@@ -40,13 +40,19 @@ export function AddRegistrationModal() {
   const formSchema = useMemo(
     () =>
       z.object({
-        applicantName: z.string().min(2, t.registrationModal.valNameMin),
-        id: z.string().regex(/^\d{29}$/, t.registrationModal.valRidExact),
+        applicantName: z.string().trim().min(2, t.registrationModal.valNameMin),
+        id: z.string().trim().regex(/^\d{29}$/, t.registrationModal.valRidExact),
         submissionDate: z.string().min(1, t.registrationModal.valDateReq),
-        phone: z.string().regex(/^\d+$/, t.registrationModal.valPhoneDigits),
+        phone: z
+          .string()
+          .trim()
+          .refine(
+            (val) => /^\+?[\d\s\-()]{6,20}$/.test(val) && val.replace(/\D/g, '').length >= 6,
+            t.registrationModal.valPhoneDigits
+          ),
         status: z.enum(['Processed', 'Pending Review', 'Rejected', 'Processing', 'Failed']),
         officer: z.string().optional(),
-        location: z.string().min(1, t.registrationModal.valLocationReq),
+        location: z.string().trim().min(1, t.registrationModal.valLocationReq),
         remarks: z.string().optional(),
       }),
     [t]
@@ -155,7 +161,7 @@ export function AddRegistrationModal() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-[10px] font-bold uppercase text-slate-500">{t.registrationModal.statusLabel}</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="h-9 text-sm">
                           <SelectValue placeholder={t.registrationModal.selectStatusPlaceholder} />

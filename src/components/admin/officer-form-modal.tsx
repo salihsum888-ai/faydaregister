@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { UserPlus, ShieldCheck, UserCircle, MapPin, Layers, ImageIcon, Loader2, Mail, Edit2, Smartphone } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
@@ -101,22 +101,37 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
     },
   });
 
+  const wasOpenRef = useRef(false);
+  const lastOfficerIdRef = useRef<string | undefined>(undefined);
+
   useEffect(() => {
     if (!open) {
       setVerifiedData(null);
+      wasOpenRef.current = false;
+      return;
     }
-    if (open && mode === 'edit' && officer) {
+
+    const justOpened = !wasOpenRef.current;
+    const officerChanged = officer?.id !== lastOfficerIdRef.current;
+    wasOpenRef.current = true;
+    lastOfficerIdRef.current = officer?.id;
+
+    if (!justOpened && !officerChanged) {
+      return;
+    }
+
+    if (mode === 'edit' && officer) {
       form.reset({
-        fullName: officer.fullName,
-        email: officer.email,
-        role: officer.role as any,
+        fullName: officer.fullName || '',
+        email: officer.email || '',
+        role: (officer.role as 'reviewer' | 'admin') || 'reviewer',
         password: '',
-        region: officer.region,
-        cluster: officer.cluster,
-        profilePhoto: officer.profilePhoto,
+        region: officer.region || '',
+        cluster: officer.cluster || '',
+        profilePhoto: officer.profilePhoto || '',
         twoFactorEnabled: officer.twoFactorEnabled !== false,
       });
-    } else if (open && mode === 'add') {
+    } else if (mode === 'add') {
       form.reset({
         fullName: '',
         email: '',
@@ -131,12 +146,21 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
   }, [open, mode, officer, form]);
 
   async function onSubmit(values: FormValues) {
-    if (!db || !currentUser || !currentProfile) return;
+    if (!db || !currentUser) {
+      toast({
+        title: t.officerModal.toastErrorTitle,
+        description: t.officerModal.toastErrorDesc,
+        variant: "destructive",
+      });
+      return;
+    }
+    const actorName = currentProfile?.fullName || currentUser.displayName || currentUser.email?.split('@')[0] || 'Administrator';
     setIsSubmitting(true);
 
     try {
       if (mode === 'add') {
-        if (!values.password) {
+        if (!values.password || values.password.length < 8) {
+          form.setError('password', { type: 'manual', message: t.officerModal.valPassMin });
           toast({ title: t.officerModal.toastPassReqTitle, description: t.officerModal.toastPassReqDesc, variant: "destructive" });
           setIsSubmitting(false);
           return;
@@ -152,12 +176,12 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
 
           const profileData = {
             id: uid,
-            fullName: values.fullName,
-            email: values.email,
+            fullName: values.fullName.trim(),
+            email: values.email.trim(),
             role: values.role,
-            region: values.region,
-            cluster: values.cluster,
-            profilePhoto: values.profilePhoto || `https://api.dicebear.com/7.x/initials/svg?seed=${values.fullName}`,
+            region: values.region.trim(),
+            cluster: values.cluster.trim(),
+            profilePhoto: (values.profilePhoto || '').trim() || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(values.fullName.trim())}`,
             updatedAt: new Date().toISOString(),
             twoFactorEnabled: values.twoFactorEnabled,
             twoFactorSecret: '', 
@@ -172,26 +196,26 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
           logAuditAction(
             db,
             currentUser,
-            currentProfile.fullName,
+            actorName,
             'PERSONNEL_MODIFIED',
             uid,
-            `Registered new official: ${values.fullName} with ${values.role} clearance. 2FA: ${values.twoFactorEnabled ? 'Enabled' : 'Disabled'}.`
+            `Registered new official: ${values.fullName.trim()} with ${values.role} clearance. 2FA: ${values.twoFactorEnabled ? 'Enabled' : 'Disabled'}.`
           );
 
           toast({
             title: t.officerModal.toastAddedTitle,
-            description: t.officerModal.toastAddedDesc.replace('{name}', values.fullName),
+            description: t.officerModal.toastAddedDesc.replace('{name}', values.fullName.trim()),
           });
         } finally {
           await deleteApp(secondaryApp).catch(() => {});
         }
       } else if (mode === 'edit' && officer) {
         const profileData = {
-          fullName: values.fullName,
+          fullName: values.fullName.trim(),
           role: values.role,
-          region: values.region,
-          cluster: values.cluster,
-          profilePhoto: values.profilePhoto,
+          region: values.region.trim(),
+          cluster: values.cluster.trim(),
+          profilePhoto: (values.profilePhoto || '').trim(),
           twoFactorEnabled: values.twoFactorEnabled,
           updatedAt: new Date().toISOString(),
         };
@@ -207,15 +231,15 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
         logAuditAction(
           db,
           currentUser,
-          currentProfile.fullName,
+          actorName,
           'PERSONNEL_MODIFIED',
           officer.id,
-          `Modified profile for official: ${values.fullName} (2FA: ${values.twoFactorEnabled ? 'Enabled' : 'Disabled'}).`
+          `Modified profile for official: ${values.fullName.trim()} (2FA: ${values.twoFactorEnabled ? 'Enabled' : 'Disabled'}).`
         );
 
         toast({
           title: t.officerModal.toastUpdatedTitle,
-          description: t.officerModal.toastUpdatedDesc.replace('{name}', values.fullName),
+          description: t.officerModal.toastUpdatedDesc.replace('{name}', values.fullName.trim()),
         });
       }
 
@@ -352,7 +376,7 @@ export function OfficerFormModal({ mode = 'add', officer, trigger }: OfficerForm
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.officerModal.roleLabel}</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
                       <FormControl>
                         <SelectTrigger className="h-12 bg-background border-border rounded-xl font-bold text-xs">
                           <SelectValue placeholder={t.officerModal.rolePlaceholder} />

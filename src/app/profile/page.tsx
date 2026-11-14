@@ -114,12 +114,16 @@ export default function ProfilePage() {
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
 
-  const profileSchema = z.object({
-    fullName: z.string().min(2, t.profilePage.valNameMin),
-    region: z.string().min(1, t.profilePage.valRegionReq),
-    cluster: z.string().min(1, t.profilePage.valClusterReq),
-    profilePhoto: z.string().optional().or(z.literal('')),
-  });
+  const profileSchema = useMemo(
+    () =>
+      z.object({
+        fullName: z.string().trim().min(2, t.profilePage.valNameMin),
+        region: z.string().trim().min(1, t.profilePage.valRegionReq),
+        cluster: z.string().trim().min(1, t.profilePage.valClusterReq),
+        profilePhoto: z.string().optional().or(z.literal('')),
+      }),
+    [t]
+  );
 
   type ProfileFormValues = z.infer<typeof profileSchema>;
 
@@ -187,8 +191,21 @@ export default function ProfilePage() {
     },
   });
 
+  const hasHydratedProfileRef = useRef(false);
+  const lastSyncedIdentityRef = useRef('');
+
   useEffect(() => {
-    if (profile) {
+    if (!profile) return;
+    const identitySignature = JSON.stringify([
+      profile.fullName || '',
+      profile.region || '',
+      profile.cluster || '',
+      profile.profilePhoto || '',
+    ]);
+
+    if (!hasHydratedProfileRef.current || (!form.formState.isDirty && identitySignature !== lastSyncedIdentityRef.current)) {
+      hasHydratedProfileRef.current = true;
+      lastSyncedIdentityRef.current = identitySignature;
       form.reset({
         fullName: profile.fullName || '',
         region: profile.region || '',
@@ -248,14 +265,36 @@ export default function ProfilePage() {
   };
 
   async function onSubmit(values: ProfileFormValues) {
-    if (!db || !user) return;
+    if (!db || !user) {
+      toast({
+        variant: 'destructive',
+        title: t.profilePage.toastErrorTitle,
+        description: t.profilePage.toastErrorDesc,
+      });
+      return;
+    }
     setIsSaving(true);
+
+    const cleanedValues = {
+      fullName: values.fullName.trim(),
+      region: values.region.trim(),
+      cluster: values.cluster.trim(),
+      profilePhoto: (values.profilePhoto || '').trim(),
+    };
 
     try {
       updateDocumentNonBlocking(doc(db, 'users', user.uid), {
-        ...values,
+        ...cleanedValues,
         updatedAt: new Date().toISOString(),
       });
+
+      lastSyncedIdentityRef.current = JSON.stringify([
+        cleanedValues.fullName,
+        cleanedValues.region,
+        cleanedValues.cluster,
+        cleanedValues.profilePhoto,
+      ]);
+      form.reset(cleanedValues);
 
       toast({
         title: t.profilePage.toastSavedTitle,
@@ -371,7 +410,14 @@ export default function ProfilePage() {
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !user.email || !currentPassword || newPassword.length < 8) return;
+    if (!user || !user.email || !currentPassword || newPassword.length < 8) {
+      toast({
+        variant: 'destructive',
+        title: t.profilePage.toastErrorTitle,
+        description: t.profilePage.passwordCardSub,
+      });
+      return;
+    }
     setIsUpdatingPassword(true);
     try {
       const credential = EmailAuthProvider.credential(user.email, currentPassword);

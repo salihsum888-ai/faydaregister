@@ -185,7 +185,8 @@ export default function HistoricalDataPage() {
   };
 
   const handleBulkPurge = async () => {
-    if (!db || selectedIds.size === 0 || !user || !profile) return;
+    if (!db || selectedIds.size === 0 || !user) return;
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Official';
     
     setIsBulkProcessing(true);
     const batch = writeBatch(db);
@@ -201,7 +202,7 @@ export default function HistoricalDataPage() {
       logAuditAction(
         db,
         user,
-        profile.fullName,
+        actorName,
         'RECORD_DELETED',
         'bulk_archival_purge',
         `Archival Purge: Permanently deleted ${count} monthly summaries from history ledger.`
@@ -227,10 +228,18 @@ export default function HistoricalDataPage() {
 
   const handleAddData = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!db || !user || !profile) return;
+    if (!db || !user) {
+      toast({
+        variant: 'destructive',
+        title: t.historicalPage.toastOpFailedTitle,
+        description: t.historicalPage.toastOpFailedDesc,
+      });
+      return;
+    }
 
-    const eVal = parseInt(ethio) || 0;
-    const sVal = parseInt(safaricom) || 0;
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Official';
+    const eVal = Math.max(0, parseInt(ethio, 10) || 0);
+    const sVal = Math.max(0, parseInt(safaricom, 10) || 0);
 
     const summaryData = {
       officerId: user.uid,
@@ -239,11 +248,11 @@ export default function HistoricalDataPage() {
       ethio: eVal,
       safaricom: sVal,
       total: eVal + sVal,
-      processed: parseInt(processed) || 0,
-      processing: parseInt(processing) || 0,
-      rejected: parseInt(rejected) || 0,
-      failed: parseInt(failed) || 0,
-      pendingReview: parseInt(pendingReview) || 0,
+      processed: Math.max(0, parseInt(processed, 10) || 0),
+      processing: Math.max(0, parseInt(processing, 10) || 0),
+      rejected: Math.max(0, parseInt(rejected, 10) || 0),
+      failed: Math.max(0, parseInt(failed, 10) || 0),
+      pendingReview: Math.max(0, parseInt(pendingReview, 10) || 0),
       timestamp: serverTimestamp(),
     };
 
@@ -254,7 +263,7 @@ export default function HistoricalDataPage() {
     logAuditAction(
       db,
       user,
-      profile.fullName,
+      actorName,
       editingId ? 'STATUS_UPDATE' : 'RECORD_CREATED',
       summaryId,
       `${editingId ? 'Modified' : 'Created'} historical summary for ${month} ${year}. Total: ${eVal + sVal}`
@@ -289,7 +298,8 @@ export default function HistoricalDataPage() {
   };
 
   const confirmDelete = async () => {
-    if (!db || !summaryToDelete || !user || !profile) return;
+    if (!db || !summaryToDelete || !user) return;
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Official';
     
     setIsDeleting(true);
     try {
@@ -298,7 +308,7 @@ export default function HistoricalDataPage() {
       logAuditAction(
         db,
         user,
-        profile.fullName,
+        actorName,
         'RECORD_DELETED',
         summaryToDelete.id,
         `Purged historical summary for ${summaryToDelete.label} from the ledger.`
@@ -336,7 +346,8 @@ export default function HistoricalDataPage() {
   };
 
   const handleExportExcel = () => {
-    if (history.length === 0 || !profile) return;
+    if (history.length === 0 || !user) return;
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Official';
     setIsExporting(true);
     
     const exportData = history.map(h => ({
@@ -355,20 +366,21 @@ export default function HistoricalDataPage() {
     XLSX.utils.book_append_sheet(wb, ws, "Bureau_Historical");
     XLSX.writeFile(wb, `Bureau_Historical_Ledger_${format(new Date(), 'yyyyMMdd')}.xlsx`);
 
-    logAuditAction(db, user!, profile.fullName, 'PERFORMANCE_REVIEW', 'historical_ledger', `Exported XLSX historical ledger archive for ${history.length} months.`);
+    logAuditAction(db, user, actorName, 'PERFORMANCE_REVIEW', 'historical_ledger', `Exported XLSX historical ledger archive for ${history.length} months.`);
     
     toast({ title: t.historicalPage.toastExcelTitle, description: t.historicalPage.toastExcelDesc });
     setTimeout(() => setIsExporting(false), 800);
   };
 
   const handleExportPDF = () => {
-    if (history.length === 0 || !profile) return;
+    if (history.length === 0 || !user) return;
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Official';
     setIsExporting(true);
 
     const doc = new jsPDF('l', 'mm', 'a4');
     doc.text(t.historicalPage.pageTitle, 14, 15);
     doc.setFontSize(10);
-    doc.text(`${profile.fullName} | ${history.length} | ${format(new Date(), 'yyyy-MM-dd HH:mm')}`, 14, 22);
+    doc.text(`${actorName} | ${history.length} | ${format(new Date(), 'yyyy-MM-dd HH:mm')}`, 14, 22);
 
     const rows = history.map(h => [
       `${h.month} ${h.year}`,
@@ -390,7 +402,7 @@ export default function HistoricalDataPage() {
 
     doc.save(`Bureau_Historical_Archive_${format(new Date(), 'yyyyMMdd')}.pdf`);
     
-    logAuditAction(db, user!, profile.fullName, 'PERFORMANCE_REVIEW', 'historical_ledger', `Exported PDF historical ledger archive for ${history.length} months.`);
+    logAuditAction(db, user, actorName, 'PERFORMANCE_REVIEW', 'historical_ledger', `Exported PDF historical ledger archive for ${history.length} months.`);
     
     toast({ title: t.historicalPage.toastPdfTitle, description: t.historicalPage.toastPdfDesc });
     setTimeout(() => setIsExporting(false), 800);
@@ -460,7 +472,9 @@ export default function HistoricalDataPage() {
                     <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.historicalPage.ethioIntakeLabel}</Label>
                     <Input 
                       type="number" 
+                      min={0}
                       value={ethio} 
+                      onFocus={e => e.currentTarget.select()}
                       onChange={e => setEthio(e.target.value)}
                       className="h-12 bg-background border-border rounded-xl font-bold"
                     />
@@ -469,7 +483,9 @@ export default function HistoricalDataPage() {
                     <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">{t.historicalPage.safaricomIntakeLabel}</Label>
                     <Input 
                       type="number" 
+                      min={0}
                       value={safaricom} 
+                      onFocus={e => e.currentTarget.select()}
                       onChange={e => setSafaricom(e.target.value)}
                       className="h-12 bg-background border-border rounded-xl font-bold"
                     />
@@ -839,7 +855,9 @@ function StatusField({ label, value, onChange, color }: any) {
       <Label className="text-[9px] font-black uppercase text-muted-foreground tracking-tighter">{label}</Label>
       <Input 
         type="number" 
+        min={0}
         value={value} 
+        onFocus={e => e.currentTarget.select()}
         onChange={e => onChange(e.target.value)} 
         className="h-8 border-none bg-transparent p-0 text-sm font-black focus-visible:ring-0" 
       />

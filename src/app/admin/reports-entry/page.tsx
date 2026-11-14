@@ -102,10 +102,18 @@ export default function AdminReportsEntryPage() {
 
   const handleDailySubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!dailyOfficerId || !db || !user || !profile) return;
+    if (!dailyOfficerId || !dailyDate || !db || !user) {
+      toast({
+        variant: 'destructive',
+        title: t.adminReportsEntry.selectOfficerLabel,
+        description: t.adminReportsEntry.selectOfficerPlaceholder,
+      });
+      return;
+    }
 
-    const ethio = parseInt(dailyEthio) || 0;
-    const safaricom = parseInt(dailySafaricom) || 0;
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Administrator';
+    const ethio = Math.max(0, parseInt(dailyEthio, 10) || 0);
+    const safaricom = Math.max(0, parseInt(dailySafaricom, 10) || 0);
     const total = ethio + safaricom;
     const targetOfficer = officers?.find(o => o.id === dailyOfficerId);
 
@@ -115,7 +123,7 @@ export default function AdminReportsEntryPage() {
       ethioCount: ethio,
       safaricomCount: safaricom,
       total,
-      remarks: `ADMIN PROXY: ${dailyRemarks}`,
+      remarks: `ADMIN PROXY: ${dailyRemarks.trim()}`,
       timestamp: serverTimestamp(),
     };
 
@@ -124,15 +132,15 @@ export default function AdminReportsEntryPage() {
     logAuditAction(
       db, 
       user, 
-      profile.fullName,
+      actorName,
       'STATUS_UPDATE', 
       dailyOfficerId, 
-      `Logged proxy daily report for ${targetOfficer?.fullName} on ${dailyDate}. Total: ${total}.`
+      `Logged proxy daily report for ${targetOfficer?.fullName || dailyOfficerId} on ${dailyDate}. Total: ${total}.`
     );
 
     setSessionEntries(prev => [{
       id: Date.now(),
-      officer: targetOfficer?.fullName,
+      officer: targetOfficer?.fullName || dailyOfficerId,
       type: 'Daily',
       date: dailyDate,
       total
@@ -150,10 +158,18 @@ export default function AdminReportsEntryPage() {
 
   const handleHistSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!histOfficerId || !db || !user || !profile) return;
+    if (!histOfficerId || !histMonth || !histYear || !db || !user) {
+      toast({
+        variant: 'destructive',
+        title: t.adminReportsEntry.selectOfficerLabel,
+        description: t.adminReportsEntry.selectOfficerPlaceholder,
+      });
+      return;
+    }
 
-    const ethio = parseInt(histEthio) || 0;
-    const safaricom = parseInt(histSafaricom) || 0;
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Administrator';
+    const ethio = Math.max(0, parseInt(histEthio, 10) || 0);
+    const safaricom = Math.max(0, parseInt(histSafaricom, 10) || 0);
     const total = ethio + safaricom;
     const targetOfficer = officers?.find(o => o.id === histOfficerId);
 
@@ -164,8 +180,8 @@ export default function AdminReportsEntryPage() {
       ethio,
       safaricom,
       total,
-      processed: parseInt(histProcessed) || 0,
-      rejected: parseInt(histRejected) || 0,
+      processed: Math.max(0, parseInt(histProcessed, 10) || 0),
+      rejected: Math.max(0, parseInt(histRejected, 10) || 0),
       timestamp: serverTimestamp(),
     };
 
@@ -175,15 +191,15 @@ export default function AdminReportsEntryPage() {
     logAuditAction(
       db, 
       user, 
-      profile.fullName,
+      actorName,
       'STATUS_UPDATE', 
       summaryId, 
-      `Archived historical proxy data for ${targetOfficer?.fullName} (${histMonth} ${histYear}). Total Intake: ${total}.`
+      `Archived historical proxy data for ${targetOfficer?.fullName || histOfficerId} (${histMonth} ${histYear}). Total Intake: ${total}.`
     );
 
     setSessionEntries(prev => [{
       id: Date.now(),
-      officer: targetOfficer?.fullName,
+      officer: targetOfficer?.fullName || histOfficerId,
       type: 'Historical',
       date: `${histMonth} ${histYear}`,
       total
@@ -301,11 +317,11 @@ export default function AdminReportsEntryPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider ml-1">{t.adminReportsEntry.ethioLabel}</Label>
-                        <Input type="number" value={dailyEthio} onChange={e => setDailyEthio(e.target.value)} className="h-12 bg-background border-border rounded-xl font-black text-emerald-600" />
+                        <Input type="number" min={0} value={dailyEthio} onFocus={e => e.currentTarget.select()} onChange={e => setDailyEthio(e.target.value)} className="h-12 bg-background border-border rounded-xl font-black text-emerald-600" />
                       </div>
                       <div className="space-y-2">
                         <Label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider ml-1">{t.adminReportsEntry.safaricomLabel}</Label>
-                        <Input type="number" value={dailySafaricom} onChange={e => setDailySafaricom(e.target.value)} className="h-12 bg-background border-border rounded-xl font-black text-orange-600" />
+                        <Input type="number" min={0} value={dailySafaricom} onFocus={e => e.currentTarget.select()} onChange={e => setDailySafaricom(e.target.value)} className="h-12 bg-background border-border rounded-xl font-black text-orange-600" />
                       </div>
                     </div>
                   </div>
@@ -320,7 +336,7 @@ export default function AdminReportsEntryPage() {
                     <div className="p-6 bg-muted/50 rounded-[28px] border border-border text-center shadow-inner">
                       <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">{t.adminReportsEntry.calculatedIntakeLabel}</p>
                       <p className="text-5xl font-black text-foreground tracking-tighter">
-                        {(parseInt(dailyEthio) || 0) + (parseInt(dailySafaricom) || 0)}
+                        {Math.max(0, parseInt(dailyEthio, 10) || 0) + Math.max(0, parseInt(dailySafaricom, 10) || 0)}
                       </p>
                     </div>
                     <Button type="submit" disabled={isDailyDuplicate || !dailyOfficerId} className="w-full h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-primary/10 transition-all active:scale-[0.98]">
@@ -391,7 +407,7 @@ export default function AdminReportsEntryPage() {
                    <div className="space-y-0.5">
                      <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">{t.adminReportsEntry.calculatedAggregateLabel}</p>
                      <p className="text-3xl font-black text-amber-700">
-                        {(parseInt(histEthio) || 0) + (parseInt(histSafaricom) || 0)}
+                        {Math.max(0, parseInt(histEthio, 10) || 0) + Math.max(0, parseInt(histSafaricom, 10) || 0)}
                      </p>
                    </div>
                    <Button type="submit" disabled={!histOfficerId} className="h-14 px-10 bg-amber-600 hover:bg-amber-700 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-amber-600/10 transition-all active:scale-[0.98]">
@@ -478,7 +494,9 @@ function ProxyField({ label, value, onChange, color }: any) {
       <Label className="text-[8px] font-black uppercase tracking-tighter text-muted-foreground mb-1 block">{label}</Label>
       <Input 
         type="number" 
+        min={0}
         value={value} 
+        onFocus={e => e.currentTarget.select()}
         onChange={e => onChange(e.target.value)} 
         className="h-8 border-none bg-transparent p-0 text-lg font-black focus-visible:ring-0 tabular-nums" 
       />

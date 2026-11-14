@@ -84,18 +84,34 @@ export default function AdminAnnouncementsPage() {
   }, [rawAnnouncements]);
 
   const regions = useMemo(() => {
-    if (!announcements) return ['Global'];
-    const dynamic = Array.from(new Set(announcements.map(a => a.targetRegion).filter((r): r is string => Boolean(r))));
-    return ['Global', ...dynamic, 'Headquarters', 'Regional North', 'Regional South'];
+    const set = new Set<string>(['Global', 'Headquarters', 'Regional North', 'Regional South']);
+    if (announcements) {
+      announcements.forEach((a) => {
+        if (a.targetRegion && a.targetRegion.trim()) {
+          set.add(a.targetRegion.trim());
+        }
+      });
+    }
+    return Array.from(set);
   }, [announcements]);
 
   const handleCreateAnnouncement = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !content || !db || !user || !profile) return;
+    const trimmedTitle = title.trim();
+    const trimmedContent = content.trim();
+    if (!trimmedTitle || !trimmedContent || !db || !user) {
+      toast({
+        variant: 'destructive',
+        title: t.adminAnnouncements.draftTitle,
+        description: t.adminAnnouncements.draftDesc,
+      });
+      return;
+    }
 
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Administrator';
     const payload = {
-      title,
-      content,
+      title: trimmedTitle,
+      content: trimmedContent,
       type,
       targetRegion: targetRegion === 'Global' ? '' : targetRegion,
       targetRole,
@@ -105,11 +121,11 @@ export default function AdminAnnouncementsPage() {
 
     if (editingId) {
       setDocumentNonBlocking(doc(db, 'announcements', editingId), payload, { merge: true });
-      logAuditAction(db, user, profile.fullName, 'STATUS_UPDATE', editingId, `Modified broadcast: "${title}" [Target: ${targetRegion}/${targetRole}]`);
+      logAuditAction(db, user, actorName, 'STATUS_UPDATE', editingId, `Modified broadcast: "${trimmedTitle}" [Target: ${targetRegion}/${targetRole}]`);
       toast({ title: t.adminAnnouncements.toastModifiedTitle, description: t.adminAnnouncements.toastModifiedDesc });
     } else {
       addDocumentNonBlocking(collection(db, 'announcements'), payload);
-      logAuditAction(db, user, profile.fullName, 'RECORD_CREATED', 'broadcast', `Issued new bureau broadcast: "${title}" [Target: ${targetRegion}/${targetRole}]`);
+      logAuditAction(db, user, actorName, 'RECORD_CREATED', 'broadcast', `Issued new bureau broadcast: "${trimmedTitle}" [Target: ${targetRegion}/${targetRole}]`);
       toast({ title: t.adminAnnouncements.toastPublishedTitle, description: t.adminAnnouncements.toastPublishedDesc });
     }
     
@@ -127,9 +143,10 @@ export default function AdminAnnouncementsPage() {
   };
 
   const confirmDelete = () => {
-    if (!db || !annToDelete || !user || !profile) return;
+    if (!db || !annToDelete || !user) return;
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Administrator';
     deleteDocumentNonBlocking(doc(db, 'announcements', annToDelete.id));
-    logAuditAction(db, user, profile.fullName, 'RECORD_DELETED', annToDelete.id, `Purged bureau broadcast: "${annToDelete.title}"`);
+    logAuditAction(db, user, actorName, 'RECORD_DELETED', annToDelete.id, `Purged bureau broadcast: "${annToDelete.title}"`);
     
     toast({ title: t.adminAnnouncements.toastRemovedTitle, description: t.adminAnnouncements.toastRemovedDesc });
     setIsDeleteDialogOpen(false);

@@ -113,6 +113,7 @@ export default function DailyRegistrationsPage() {
   
   // State Matrix
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [emptyNumericFields, setEmptyNumericFields] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -352,7 +353,15 @@ export default function DailyRegistrationsPage() {
   };
 
   async function onSubmit(values: DailyReportValues) {
-    if (!db || !user || !profile) return;
+    if (!db || !user) {
+      toast({
+        variant: 'destructive',
+        title: t.dailyReport.toastSyncFailureTitle,
+        description: t.dailyReport.toastSyncFailureDesc,
+      });
+      return;
+    }
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Official';
     setIsSubmitting(true);
 
     const cleanedSchoolName = values.isSchoolRegistration && values.schoolName
@@ -367,7 +376,10 @@ export default function DailyRegistrationsPage() {
       : dailyTotal;
 
     const reportData = {
-      ...values,
+      date: values.date,
+      ethioCount: Math.max(0, Number(values.ethioCount) || 0),
+      safaricomCount: Math.max(0, Number(values.safaricomCount) || 0),
+      remarks: (values.remarks || '').trim(),
       isSchoolRegistration: Boolean(values.isSchoolRegistration && cleanedSchoolName.length > 0),
       schoolName: cleanedSchoolName,
       isInstitutionRegistration: Boolean(values.isSchoolRegistration && cleanedSchoolName.length > 0),
@@ -390,7 +402,7 @@ export default function DailyRegistrationsPage() {
         logAuditAction(
           db,
           user,
-          profile.fullName,
+          actorName,
           'STATUS_UPDATE',
           editingId,
           `Modified daily report for ${values.date}${splitSummaryText}. Total: ${dailyTotal} (E: ${values.ethioCount}, S: ${values.safaricomCount})`
@@ -411,7 +423,7 @@ export default function DailyRegistrationsPage() {
         logAuditAction(
           db,
           user,
-          profile.fullName,
+          actorName,
           'RECORD_CREATED',
           values.date,
           `Logged new daily report for ${values.date}${splitSummaryText}. Total Intake: ${dailyTotal}`
@@ -427,6 +439,7 @@ export default function DailyRegistrationsPage() {
         });
       }
 
+      setEmptyNumericFields({});
       form.reset({
         date: new Date().toISOString().split('T')[0],
         ethioCount: 0,
@@ -450,6 +463,7 @@ export default function DailyRegistrationsPage() {
 
   const handleEdit = (entry: DailyReport) => {
     setEditingId(entry.id);
+    setEmptyNumericFields({});
     const split = getReportSplit(entry);
     form.reset({
       date: entry.date,
@@ -465,7 +479,8 @@ export default function DailyRegistrationsPage() {
   };
 
   const confirmDelete = async () => {
-    if (!db || !reportToDelete || !user || !profile) return;
+    if (!db || !reportToDelete || !user) return;
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Official';
     
     setIsDeleting(true);
     try {
@@ -474,7 +489,7 @@ export default function DailyRegistrationsPage() {
       logAuditAction(
         db,
         user,
-        profile.fullName,
+        actorName,
         'RECORD_DELETED',
         reportToDelete.id,
         `Purged daily report record for ${reportToDelete.date} from the ledger.`
@@ -482,6 +497,7 @@ export default function DailyRegistrationsPage() {
 
       if (editingId === reportToDelete.id) {
         setEditingId(null);
+        setEmptyNumericFields({});
         form.reset({
           date: new Date().toISOString().split('T')[0],
           ethioCount: 0,
@@ -517,6 +533,7 @@ export default function DailyRegistrationsPage() {
 
   const cancelEdit = () => {
     setEditingId(null);
+    setEmptyNumericFields({});
     form.reset({
       date: new Date().toISOString().split('T')[0],
       ethioCount: 0,
@@ -530,7 +547,8 @@ export default function DailyRegistrationsPage() {
   };
 
   const handleExportExcel = () => {
-    if (history.length === 0 || !user || !profile) return;
+    if (history.length === 0 || !user) return;
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Official';
     setIsExporting(true);
 
     const exportData = history.map(h => {
@@ -555,7 +573,7 @@ export default function DailyRegistrationsPage() {
     logAuditAction(
       db,
       user,
-      profile.fullName,
+      actorName,
       'PERFORMANCE_REVIEW',
       'daily_reporting_ledger',
       `Exported XLSX Daily Throughput Ledger for ${history.length} records.`
@@ -569,11 +587,12 @@ export default function DailyRegistrationsPage() {
   };
 
   const handleExportPDF = () => {
-    if (history.length === 0 || !user || !profile) return;
+    if (history.length === 0 || !user) return;
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Official';
     setIsExporting(true);
 
     const docPdf = new jsPDF('l', 'mm', 'a4');
-    docPdf.text(`Official Bureau Daily Registration Ledger: ${profile.fullName}`, 14, 15);
+    docPdf.text(`Official Bureau Daily Registration Ledger: ${actorName}`, 14, 15);
     docPdf.setFontSize(9);
     docPdf.text(
       `Total Registered: ${summaryStats.totalPeople} | Institution Intake: ${summaryStats.totalStudents} | Non-Institution: ${summaryStats.totalNonStudents}`,
@@ -605,7 +624,7 @@ export default function DailyRegistrationsPage() {
     logAuditAction(
       db,
       user,
-      profile.fullName,
+      actorName,
       'PERFORMANCE_REVIEW',
       'daily_reporting_ledger',
       `Exported PDF Daily Throughput Archive for ${history.length} records.`
@@ -803,10 +822,20 @@ export default function DailyRegistrationsPage() {
                             <Input 
                               type="number" 
                               min={0}
-                              {...field} 
+                              {...field}
+                              value={emptyNumericFields.ethioCount ? '' : field.value}
                               disabled={isSubmitting}
                               className="h-11 bg-background border-border tabular-nums" 
-                              onChange={(e) => handleNetworkCountChange('ethioCount', e.target.value === '' ? 0 : Number(e.target.value))}
+                              onFocus={(e) => e.currentTarget.select()}
+                              onBlur={() => {
+                                field.onBlur();
+                                setEmptyNumericFields((prev) => ({ ...prev, ethioCount: false }));
+                              }}
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                setEmptyNumericFields((prev) => ({ ...prev, ethioCount: raw === '' }));
+                                handleNetworkCountChange('ethioCount', raw === '' ? 0 : Math.max(0, Number(raw) || 0));
+                              }}
                             />
                           </FormControl>
                           <FormMessage />
@@ -825,10 +854,20 @@ export default function DailyRegistrationsPage() {
                             <Input 
                               type="number" 
                               min={0}
-                              {...field} 
+                              {...field}
+                              value={emptyNumericFields.safaricomCount ? '' : field.value}
                               disabled={isSubmitting}
                               className="h-11 bg-background border-border tabular-nums" 
-                              onChange={(e) => handleNetworkCountChange('safaricomCount', e.target.value === '' ? 0 : Number(e.target.value))}
+                              onFocus={(e) => e.currentTarget.select()}
+                              onBlur={() => {
+                                field.onBlur();
+                                setEmptyNumericFields((prev) => ({ ...prev, safaricomCount: false }));
+                              }}
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                setEmptyNumericFields((prev) => ({ ...prev, safaricomCount: raw === '' }));
+                                handleNetworkCountChange('safaricomCount', raw === '' ? 0 : Math.max(0, Number(raw) || 0));
+                              }}
                             />
                           </FormControl>
                           <FormMessage />
@@ -963,13 +1002,21 @@ export default function DailyRegistrationsPage() {
                                       min={0}
                                       max={dailyTotal}
                                       {...field}
+                                      value={emptyNumericFields.studentCount ? '' : field.value}
                                       disabled={isSubmitting}
                                       className="h-10 bg-background border-primary/30 font-bold tabular-nums"
-                                      onChange={(e) =>
+                                      onFocus={(e) => e.currentTarget.select()}
+                                      onBlur={() => {
+                                        field.onBlur();
+                                        setEmptyNumericFields((prev) => ({ ...prev, studentCount: false }));
+                                      }}
+                                      onChange={(e) => {
+                                        const raw = e.target.value;
+                                        setEmptyNumericFields((prev) => ({ ...prev, studentCount: raw === '' }));
                                         handleStudentCountChange(
-                                          e.target.value === '' ? 0 : Number(e.target.value)
-                                        )
-                                      }
+                                          raw === '' ? 0 : Math.max(0, Number(raw) || 0)
+                                        );
+                                      }}
                                     />
                                   </FormControl>
                                   <FormMessage className="text-[10px]" />
@@ -991,13 +1038,21 @@ export default function DailyRegistrationsPage() {
                                       min={0}
                                       max={dailyTotal}
                                       {...field}
+                                      value={emptyNumericFields.nonStudentCount ? '' : field.value}
                                       disabled={isSubmitting}
                                       className="h-10 bg-background border-emerald-500/30 font-bold tabular-nums"
-                                      onChange={(e) =>
+                                      onFocus={(e) => e.currentTarget.select()}
+                                      onBlur={() => {
+                                        field.onBlur();
+                                        setEmptyNumericFields((prev) => ({ ...prev, nonStudentCount: false }));
+                                      }}
+                                      onChange={(e) => {
+                                        const raw = e.target.value;
+                                        setEmptyNumericFields((prev) => ({ ...prev, nonStudentCount: raw === '' }));
                                         handleNonStudentCountChange(
-                                          e.target.value === '' ? 0 : Number(e.target.value)
-                                        )
-                                      }
+                                          raw === '' ? 0 : Math.max(0, Number(raw) || 0)
+                                        );
+                                      }}
                                     />
                                   </FormControl>
                                   <FormMessage className="text-[10px]" />

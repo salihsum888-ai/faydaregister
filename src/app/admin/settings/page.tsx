@@ -208,7 +208,7 @@ export default function AdminSettingsPage() {
   };
 
   useEffect(() => {
-    if (branding) {
+    if (branding && !isEditing) {
       setFormData({
         bureauName: branding.bureauName || 'FaydaTrack',
         logoUrl: branding.logoUrl || DEFAULT_LOGO,
@@ -223,7 +223,7 @@ export default function AdminSettingsPage() {
         dateFormat: branding.dateFormat || 'MMM dd, yyyy',
       });
     }
-  }, [branding]);
+  }, [branding, isEditing]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -259,24 +259,45 @@ export default function AdminSettingsPage() {
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!db || !user || !profile) return;
+    if (!db || !user) {
+      toast({
+        variant: "destructive",
+        title: t.adminSettings.toastSaveFailedTitle,
+        description: t.adminSettings.toastSaveFailedDesc,
+      });
+      return;
+    }
+
+    const actorName = profile?.fullName || user.displayName || user.email?.split('@')[0] || 'Administrator';
+    const sanitizedData = {
+      ...formData,
+      bureauName: formData.bureauName.trim() || 'FaydaTrack',
+      logoUrl: formData.logoUrl.trim() || DEFAULT_LOGO,
+      contactEmail: formData.contactEmail.trim(),
+      contactPhone: formData.contactPhone.trim(),
+      officeAddress: formData.officeAddress.trim(),
+      operationalHours: formData.operationalHours.trim(),
+      systemProtocol: formData.systemProtocol.trim() || 'Protocol v4.2',
+      dateFormat: formData.dateFormat.trim() || 'MMM dd, yyyy',
+    };
 
     setIsSaving(true);
     try {
       await setDocumentNonBlocking(doc(db, 'system_settings', 'branding'), {
-        ...formData,
+        ...sanitizedData,
         updatedAt: serverTimestamp(),
       }, { merge: true });
 
       logAuditAction(
         db, 
         user, 
-        profile.fullName,
+        actorName,
         'BRANDING_UPDATE', 
         'branding', 
-        `Global Protocol Update: Synchronized branding and institutional gates. Maintenance: ${formData.maintenanceMode ? 'ACTIVE' : 'OFF'}.`
+        `Global Protocol Update: Synchronized branding and institutional gates. Maintenance: ${sanitizedData.maintenanceMode ? 'ACTIVE' : 'OFF'}.`
       );
 
+      setFormData(sanitizedData);
       toast({
         title: t.adminSettings.toastSavedTitle,
         description: t.adminSettings.toastSavedDesc,
